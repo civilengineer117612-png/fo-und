@@ -110,7 +110,7 @@ export function suggestPlan(input) {
 
   const lines = new Map();   // name (lower case) -> {name, kind, amounts: [first, second], reason, source}
   const put = (name, kind, amounts, reason, source, category_id) => lines.set(name.trim().toLowerCase(), { name, kind, first: amounts[0], second: amounts[1], reason, source, ...(category_id ? { category_id } : {}) });
-  const fixedAt = (name, kind, total, day, reason, source, category_id) => put(name, kind, payOfDay(day) === 0 ? [total, 0] : [0, total], reason, source, category_id);
+  const fixedAt = (name, kind, total, day, reason, source, category_id) => { put(name, kind, payOfDay(day) === 0 ? [total, 0] : [0, total], reason, source, category_id); lines.get(name.trim().toLowerCase()).tier = "fixed"; };
 
   // 2. What history can teach: usable months, and each category's amount in each of them.
   const months = usableMonths(state, { month, today, settings: S });
@@ -165,7 +165,7 @@ export function suggestPlan(input) {
     // A step toward your targets: the median copies your habits, so when spending is over the needs + wants targets, the want lines are lowered by a share of
     // the amount over (nudge_bps), shared by their size. Needs, rent, fixed payments and anything you typed are never lowered here.
     if (S.nudge_bps > 0) {
-      const bk = input.buckets, isWant = (c) => (bk ? bk.get(c.id) === "want" : !NEEDS.has(typeOf(c)) && typeOf(c) !== "rent");
+      const bk = input.buckets, isWant = (c) => typeOf(c) !== "subscription" && (bk ? bk.get(c.id) === "want" : !NEEDS.has(typeOf(c)) && typeOf(c) !== "rent");   // a subscription is a fixed commitment: never nudged
       const spent = [...lines.values()].filter((l) => l.kind === "expense").reduce((n, l) => n + l.first + l.second, 0);
       const over = spent - Math.floor((monthIncome * (S.starter.needs + S.starter.wants)) / 10000);
       const wants = [...lines.values()].filter((l) => l.kind === "expense" && l.category_id && isWant(cats.find((c) => c.id === l.category_id) ?? {}) && l.first + l.second > 0);
@@ -211,7 +211,7 @@ export function suggestPlan(input) {
       ["wants", wantsList, wantsPool, loggedAny ? (c) => logged.get(c.id) ?? 0 : () => 1, loggedAny ? "shared by what you have logged so far" : "shared evenly because nothing is logged yet"]];
     for (const [group, list, pool, weightOf, how] of groups) {
       const reason = `Starter share, a common rule of thumb and not advice: ${pct(S.starter[group])} of pay for ${group}, ${how}, and by days covered.`;
-      if (!list.length) { if (pool > 0) split(pool, group === "needs" ? "Needs" : "Wants", "expense", reason, "starter"); continue; }
+      if (!list.length) { if (pool > 0) { split(pool, group === "needs" ? "Needs" : "Wants", "expense", reason, "starter"); lines.get((group === "needs" ? "needs" : "wants")).tier = group === "needs" ? "need" : "want"; } continue; }
       shareOut(pool, list, weightOf).forEach((amount, i) => split(amount, list[i].name, "expense", reason, "starter", list[i].id));
     }
   }
@@ -229,21 +229,59 @@ export function suggestPlan(input) {
   };
   applyPins();
 
-  // 6. The overrun buffer (a setting; the starter share of pay when none is set), then savings.
+  // 6. THE ORDER OF FUNDING (owner, Oct 29), over the whole month on the base income:
+  //    (1) fixed commitments: rent and subscriptions (categories with that role), and anything that carries a schedule (scheduled payments, installments,
+  //        loan repayments, family sends); (2) needs at their usual level; (3) the savings floor (the ratchet's amount when one owns the savings);
+  //    (4) the overrun buffer; (5) wants from what is left, at most `wants_cap_bps` of the base income (30%). A category with no fixed role and no need
+  //    (the bucket Other included) is a want, funded last. Steps (1) to (3) are NEVER lowered: when they do not fit the income the answer says how much it is
+  //    short, and the buffer and the wants get nothing. Only the wants (not the owner's pinned ones) are ever lowered, shared by their size.
   const total = (k) => [...lines.values()].reduce((n, l) => n + l[k], 0);
-  const spentSoFar = () => total("first") + total("second");
+  const bk = input.buckets;
+  const catOf = (l) => (l.category_id ? cats.find((c) => c.id === l.category_id) : null);
+  const tierOf = (l) => {
+    if (l.tier) return l.tier;
+    const c = catOf(l);
+    if (!c) return "want";
+    const t = typeOf(c);
+    if (t === "subscription") return "fixed";   // rent and scheduled lines were already marked fixed when they were made
+    return (bk ? bk.get(c.id) === "need" : NEEDS.has(t)) ? "need" : "want";
+  };
+  const spend = () => [...lines.values()].filter((l) => l.kind === "expense");
+  for (const l of spend()) l.tier = tierOf(l);
+  const sumTier = (tier, pick = () => true) => spend().filter((l) => l.tier === tier && pick(l)).reduce((n, l) => n + l.first + l.second, 0);
+  const fixedTotal = sumTier("fixed"), needTotal = sumTier("need");
+  const floorAmt = input.ratchet ? input.ratchet.amount : S.savings_floor;
+  const core = fixedTotal + needTotal + floorAmt;
+  const shortBy = Math.max(0, core - monthIncome);
+  let room = Math.max(0, monthIncome - core);
+  const bufferName = "Overrun buffer", bufferKey = bufferName.toLowerCase();
   const bufferMonthly = S.buffer_amount ?? Math.floor((monthIncome * S.starter.buffer) / 10000);
-  const bufferName = "Overrun buffer";
-  if (!lines.has(bufferName.toLowerCase())) { const [a, b] = splitBy(bufferMonthly, income[0], inc1); put(bufferName, "buffer", [a, b], S.buffer_amount !== null ? "Your overrun buffer setting, split by what each payday brings in." : `Starter share, a common rule of thumb and not advice: ${pct(S.starter.buffer)} of pay, split by what each payday brings in.`, S.buffer_amount !== null ? "history" : "starter"); }
-  const bufferNow = lines.get(bufferName.toLowerCase());
-  const costs = spentSoFar();   // everything but savings, with the pins in
+  if (!lines.has(bufferKey)) {
+    const amount = Math.min(bufferMonthly, room), [a, b] = splitBy(amount, income[0], inc1);
+    put(bufferName, "buffer", [a, b], S.buffer_amount !== null ? "Your overrun buffer setting, split by what each payday brings in." : `Starter share, a common rule of thumb and not advice: ${pct(S.starter.buffer)} of pay, split by what each payday brings in.`, S.buffer_amount !== null ? "history" : "starter");
+    if (amount < bufferMonthly) lines.get(bufferKey).reason += " Lowered: it comes after fixed payments, needs and your savings floor.";
+  }
+  const bufferAmt = lines.get(bufferKey).first + lines.get(bufferKey).second;
+  room = Math.max(0, room - bufferAmt);
+  const pinnedWants = sumTier("want", (l) => l.pinned), loose = spend().filter((l) => l.tier === "want" && !l.pinned && l.first + l.second > 0), looseTotal = loose.reduce((n, l) => n + l.first + l.second, 0);
+  const wantsCap = Math.floor((monthIncome * S.wants_cap_bps) / 10000), allowed = Math.max(0, Math.min(room, wantsCap) - pinnedWants);
+  if (looseTotal > allowed) {
+    const why = looseTotal > 0 && allowed >= Math.min(room, wantsCap) - pinnedWants && room >= wantsCap ? `Lowered to the wants cap: ${pct(S.wants_cap_bps)} of your base income.` : "Lowered to fit: wants come after fixed payments, needs, your savings floor and the buffer.";
+    const cuts = loose.map((l) => Math.floor((allowed * (l.first + l.second)) / looseTotal));
+    const big = loose.reduce((m, l, i) => (l.first + l.second > loose[m].first + loose[m].second ? i : m), 0);
+    cuts[big] += allowed - cuts.reduce((x, y) => x + y, 0);
+    loose.forEach((l, i) => { const [a, b] = splitBy(cuts[i], days1, days2); l.was = l.first + l.second; l.first = a; l.second = b; l.reason += " " + why; });
+  }
+  const wantsTotal = sumTier("want");
+  const costs = fixedTotal + needTotal + bufferAmt + wantsTotal;   // everything but savings, with the pins in
   let saving, why;
   if (input.ratchet) { saving = input.ratchet.amount; why = "From your savings ratchet, which owns this amount."; }
   else {
-    const room = monthIncome - costs, want = Math.floor((monthIncome * S.starter.savings) / 10000);
-    saving = Math.max(S.savings_floor, Math.min(want, room));
-    why = saving === S.savings_floor && S.savings_floor > Math.min(want, room) ? "Your savings floor; there is not enough room for more." : `A cautious start: what is left after your costs, up to ${pct(S.starter.savings)} of pay (a rule of thumb), never below your savings floor.`;
+    const want = Math.floor((monthIncome * S.starter.savings) / 10000), left = Math.max(0, monthIncome - costs - floorAmt);
+    saving = floorAmt + Math.min(Math.max(0, want - floorAmt), left);
+    why = saving === floorAmt && floorAmt > 0 && left === 0 ? "Your savings floor; there is not enough room for more." : `A cautious start: what is left after your costs, up to ${pct(S.starter.savings)} of pay (a rule of thumb), never below your savings floor.`;
   }
+  const funding = { income: monthIncome, fixed: fixedTotal, needs: needTotal, floor: floorAmt, buffer: bufferAmt, wants: wantsTotal, wantsCap, saving, shortBy };
   // The money set aside is shared between the goals by one rule (savings.js): typed amounts first, finish dates, the emergency fund until its target, then percentages.
   const goals = state.goals ?? [], progress = new Map(goals.map((g) => [g.id, goalProgress(state, g)]));
   const shared = splitSavings({ goals, progress, month, total: saving, pins: input.goalPins ?? {}, shares: input.goalShares ?? {} });
@@ -263,5 +301,5 @@ export function suggestPlan(input) {
     const sum = list.reduce((n, l) => n + l.amount, 0);
     return { id: p.id ?? (i === 0 ? "first" : "second"), label: p.label ?? (i === 0 ? "1st payday" : "2nd payday"), day: p.day, income: income[i], incomeReason: incomeOf(i), lines: list, total: sum, unallocated: Math.max(0, income[i] - sum), short: Math.max(0, sum - income[i]) };
   });
-  return { ok: true, month, paydays: out, differences, history: { usableMonths: months.length, used: learn ? "history" : "starter" }, daysCovered: [days1, days2], settings: S };
+  return { ok: true, month, paydays: out, funding, differences, history: { usableMonths: months.length, used: learn ? "history" : "starter" }, daysCovered: [days1, days2], settings: S };
 }

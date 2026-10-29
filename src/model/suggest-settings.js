@@ -17,6 +17,7 @@ export const SUGGEST_DEFAULTS = {
   nudge_bps: 1000,
   min_entries: 10,         // a month needs at least this many verified spending entries to count as logged properly
   max_unlogged_bps: 1000,  // ...and Unlogged must be below this share of the month's spending (1000 = 10%)
+  wants_cap_bps: 3000,     // wants (and every category that is not rent, a subscription, a schedule or a need) never take more than this share of the base income (3000 = 30%); the owner approved it
   savings_floor: 0,        // the least to set aside each month when no ratchet owns the amount (centavos)
   buffer_amount: null,     // the overrun buffer each month (centavos); null means the starter share of pay
 };
@@ -34,6 +35,7 @@ export function resolveSettings(given = {}) {
   if (!whole(s.nudge_bps) || s.nudge_bps > 10000) return { ok: false, message: "The step toward your targets must be a whole number of basis points, 0 to 10000." };
   if (!whole(s.min_entries)) return { ok: false, message: "The minimum number of entries must be a whole number." };
   if (!whole(s.max_unlogged_bps) || s.max_unlogged_bps > 10000) return { ok: false, message: "The Unlogged limit must be a whole number of basis points, 0 to 10000." };
+  if (!whole(s.wants_cap_bps) || s.wants_cap_bps > 10000) return { ok: false, message: "The wants cap must be a whole number of basis points, 0 to 10000." };
   if (!whole(s.savings_floor)) return { ok: false, message: "The savings floor must be whole centavos." };
   if (s.buffer_amount !== null && !whole(s.buffer_amount)) return { ok: false, message: "The buffer must be whole centavos." };
   return { ok: true, settings: s };
