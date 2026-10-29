@@ -243,8 +243,8 @@ async function commit(state, settings = ledger.settings, { quiet = false } = {})
   if (ui.upgrade?.failed) return false;   // the update of the saved data failed: nothing is written until the owner restores the copy or updates the app, so old data is never overwritten
   const next = M.nextLedger(ledger, state, settings);
   const text = JSON.stringify(next);
+  ledger = next;   // at once, before the save finishes: a second tap during the save must see this change (it used to see the old data and could repeat it). Kept in memory even if the main store fails; the banner says so
   const r = await writeBoth(text);
-  ledger = next;   // keep working in memory even if the main store failed; the banner says so
   const out = M.saveOutcome(r);   // IndexedDB is the main store; a full localStorage mirror is not an error
   ui.error = out.error; ui.mirror = out.mirror; ui.ledgerBytes = M.ledgerBytes(text);
   const failed = out.ok ? [] : ["x"];
@@ -3508,6 +3508,7 @@ async function onClick(el) {
     case "do-correct": {
       const plan = M.planCorrection(S(), { id, redo_id: newId("fix"), reserve_source_id: ledger.settings.reserve_source_id, today: today() }, new Date());
       if (!plan.ok) { showToast("Could not correct: " + plan.violations[0].message); break; }
+      if (M.alreadyCancelled(S(), plan)) { showToast("That entry is already cancelled."); break; }
       ui.sheet = null; renderSheet();
       await commit(M.applyCorrection(S(), plan));
       if (M.correctable(S(), today()).length) { ui.sheet = { type: "correct" }; ui.form = {}; renderSheet(); const box = document.querySelector("#sheet .sheet"); if (box) box.scrollTop = ui.correctAt ?? 0; }   // more to put right: stay in the list, at the same place

@@ -152,3 +152,45 @@ test("a Weekly review count's gap can be cancelled (cancel only, no new draft); 
   m = { ...m, transactions: [...m.transactions, c2.transaction], entries: [...m.entries, ...c2.entries] };
   assert.equal(planCorrection(m, { id: "cnt2", redo_id: "r2", today: TODAY }, NOW).redo, null);
 });
+
+// An entry can be cancelled ONCE (owner, Oct 29: one check-in entry showed two "Cancels" lines of the same amount and date). The plan is made from the
+// state at the tap; a second tap that was planned from the same state (a save still in flight) must add nothing.
+test("cancelling the same entry twice from the same state adds nothing the second time", () => {
+  const s = ledger(), p1 = planCorrection(s, { id: "lunch", redo_id: "fix1", today: TODAY }, NOW), p2 = planCorrection(s, { id: "lunch", redo_id: "fix2", today: TODAY }, NOW);
+  assert.ok(p1.ok && p2.ok, "both were planned from the same state, so both look fine");
+  const once = applyCorrection(s, p1), twice = applyCorrection(once, p2);
+  assert.equal(twice, once, "the second one changes nothing: the very same state comes back");
+  assert.equal(twice.transactions.filter((t) => t.reverses === "lunch").length, 1, "one cancelling entry");
+  assert.ok(!twice.transactions.some((t) => t.id === "fix2"), "and no second fresh draft");
+  assert.equal(chk(twice), chk(once), "the balance did not move again");
+});
+test("the same plan applied twice adds nothing the second time", () => {
+  const s = ledger(), p = planCorrection(s, { id: "lunch", redo_id: "fix1", today: TODAY }, NOW);
+  const once = applyCorrection(s, p);
+  assert.equal(applyCorrection(once, p), once);
+  assert.equal(once.transactions.filter((t) => t.id === "rev:lunch").length, 1);
+});
+test("a count gap is cancelled only once, and spending is the same after every repeat", () => {
+  const s = ledger({}), unl = { ...s, categories: [...s.categories, { id: "unl", name: "Unlogged", kind: "expense" }] };
+  const c = planCheckIn(unl, { id: "ci", transaction_id: "cnt", date: "2026-10-09", account_id: "chk", counted_balance: 80000, unlogged_category_id: "unl" }, NOW);
+  const counted = { ...unl, transactions: [...unl.transactions, c.transaction], entries: [...unl.entries, ...c.entries] };
+  const p1 = planCorrection(counted, { id: "cnt", redo_id: "r1", today: TODAY }, NOW), p2 = planCorrection(counted, { id: "cnt", redo_id: "r2", today: TODAY }, NOW);
+  const once = applyCorrection(counted, p1), twice = applyCorrection(applyCorrection(once, p2), p1);
+  assert.equal(twice.transactions.length, once.transactions.length);
+  assert.equal(spendingByCategory(twice, { month: "2026-10" }).total, spendingByCategory(once, { month: "2026-10" }).total);
+  assert.equal(planCorrection(once, { id: "cnt", redo_id: "r3", today: TODAY }, NOW).ok, false, "a fresh plan is refused as before");
+});
+test("the guard also holds when only the target or only the id repeats", () => {
+  const s = ledger(), p = planCorrection(s, { id: "lunch", redo_id: "fix1", today: TODAY }, NOW), once = applyCorrection(s, p);
+  const renamed = { ...p, transactions: p.transactions.map((t) => ({ ...t, id: "other-id" })), entries: p.entries.map((e) => ({ ...e, transaction_id: "other-id" })), redo: null };
+  assert.equal(applyCorrection(once, renamed), once, "the same entry cancelled under another id is still refused");
+  const clash = { ...p, transactions: p.transactions.map((t) => ({ ...t, reverses: "something-else" })), redo: null };
+  assert.equal(applyCorrection(once, clash), once, "a new cancelling entry may not reuse an id that is already there");
+});
+test("a save keeps the new data in memory BEFORE it is written, so a second tap during the save sees it", async () => {
+  const { readFileSync } = await import("node:fs");
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  const at = app.indexOf("async function commit(state"), body = app.slice(at, app.indexOf("\n}\n", at));
+  assert.ok(body.indexOf("ledger = next;") > 0 && body.indexOf("ledger = next;") < body.indexOf("await writeBoth(text)"), "ledger = next comes before the await");
+  assert.match(app, /if \(M\.alreadyCancelled\(S\(\), plan\)\) \{ showToast\("That entry is already cancelled\."\); break; \}/, "and the cancel button says so instead of repeating");
+});

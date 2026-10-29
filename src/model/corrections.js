@@ -86,7 +86,14 @@ export function planCorrection(state, input, now = new Date()) {
 }
 
 // The state after a correction: the cancelling entries added and the fresh draft(s) waiting in Verify. Existing rows are untouched.
+// An entry can be cancelled ONCE: a plan made from the state at the tap is refused when that state has since gained the same cancelling entry (a second tap
+// while the first save was still in flight, or the same plan sent again). The very same state comes back, so nothing is added, not even the fresh draft.
+export const alreadyCancelled = (state, plan) => {
+  const have = new Set(state.transactions.map((t) => t.id)), cancelled = new Set(state.transactions.filter((t) => t.reverses != null).map((t) => t.reverses));
+  return plan.transactions.some((t) => have.has(t.id) || (t.reverses != null && cancelled.has(t.reverses)));
+};
 export function applyCorrection(state, plan) {
+  if (alreadyCancelled(state, plan)) return state;
   const next = { ...state, transactions: [...state.transactions, ...plan.transactions], entries: [...state.entries, ...plan.entries] };
   return plan.redo ? applyDrafts(next, plan.redo) : next;
 }
