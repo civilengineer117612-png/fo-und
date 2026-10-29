@@ -140,3 +140,24 @@ test("the statement day: the last close on or before today, a short month uses i
   const cleared = setCardDetails(r.state, "c", { due_day: "28", statement_day: "", date: "2026-10-17" }).state.accounts.find((a) => a.id === "c");
   assert.equal(cleared.statement_day, undefined, "an empty box clears it");
 });
+
+// Invented: only a real payment lowers what is still owed of the statement. A "Posted by the bank" pair (a purchase moved from pending to posted:
+// owed does not change), a payment that was cancelled at the Weekly review, and a card count are not payments.
+test("only a payment from one of your accounts counts: a posted-by-the-bank pair, a cancelled payment and a count do not", () => {
+  const TS = "2026-10-12T09:00:00.000+08:00", st0 = withCard({ statement_balance: 500000 });
+  const add = (s, t, es) => ({ ...s, transactions: [...s.transactions, { payee: "", memo: "", status: "verified", created_at: TS, verified_at: TS, ...t }], entries: [...s.entries, ...es] });
+  const posted = add(st0, { id: "pb", date: "2026-10-12", payee: "Posted by the bank", memo: "Posted by the bank: x1", source: "reconciliation" },
+    [{ transaction_id: "pb", account_id: "c", amount: 30000, card_state: "pending" }, { transaction_id: "pb", account_id: "c", amount: -30000, card_state: "posted" }]);
+  assert.equal(dues(posted, {}, "2026-10-28").drafts[0].amount, 500000, "moving a purchase from pending to posted pays nothing");
+  const paid = planCardPayment(st0, { card_id: "c", from_id: "d", amount: 200000, date: "2026-10-10", newId: () => "p1" }).state;
+  const cancelled = add(paid, { id: "rev:p1", date: "2026-10-11", payee: "Card payment", source: "correction", reverses: "p1" },
+    [{ transaction_id: "rev:p1", account_id: "c", amount: -200000, card_state: "posted" }, { transaction_id: "rev:p1", account_id: "d", amount: 200000 }]);
+  assert.equal(dues(cancelled, {}, "2026-10-28").drafts[0].amount, 500000, "a cancelled payment is not paid");
+  const counted = add(st0, { id: "ck", date: "2026-10-15", payee: "Weekly check-in", memo: "Reconciliation: counted", source: "reconciliation" },
+    [{ transaction_id: "ck", account_id: "c", amount: 50000, card_state: "posted" }, { transaction_id: "ck", category_id: "cat-unlogged", amount: -50000 }]);
+  assert.equal(dues(counted, {}, "2026-10-28").drafts[0].amount, 500000, "a count is not a payment");
+  assert.equal(dues(paid, {}, "2026-10-28").drafts[0].amount, 300000, "a real payment still counts");
+  const advance = add(st0, { id: "adv", date: "2026-10-05", payee: "Cash advance", source: "manual" }, [{ transaction_id: "adv", account_id: "c", amount: -100000, card_state: "posted" }, { transaction_id: "adv", account_id: "d", amount: 100000 }]);
+  const undone = add(advance, { id: "rev:adv", date: "2026-10-12", payee: "Cash advance", source: "correction", reverses: "adv" }, [{ transaction_id: "rev:adv", account_id: "c", amount: 100000, card_state: "posted" }, { transaction_id: "rev:adv", account_id: "d", amount: -100000 }]);
+  assert.equal(dues(undone, {}, "2026-10-28").drafts[0].amount, 500000, "cancelling a cash advance is not a payment");
+});
