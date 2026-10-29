@@ -847,12 +847,20 @@ check((await text(page, "#top")).includes("Weekly review") && (await text(page, 
 check(!(await text(page, "#screen")).includes("Weekly questions"), "the weekly questions wait until something is counted");
 const ck = await text(page, "#screen"), lastBackup = JSON.parse((await stored(page)).local).settings.last_backup_at;
 check(ck.includes("One reminder: back up after this check-in") === !lastBackup, "the check-in carries the backup reminder when a backup is due, and stays quiet right after one (last backup: " + (lastBackup ? "today" : "never") + ")");
+// A count with a gap is only kept until you say what happened (here: "I spent some of it", which books the missing money as unlogged spending, as the owner chose).
+const decide = async (page, name, why) => {   // `why` is wanted when that choice exists (a shortfall offers "spent"); a count with no gap has nothing to decide
+  const card = `#screen .card:has-text("${name}") button[data-action="gap-decide"]`;
+  if (!(await page.locator(card).count())) return;
+  await page.click((await page.locator(`${card}[data-why="${why}"]`).count()) ? `${card}[data-why="${why}"]` : `${card}[data-why="later"]`);
+  await page.waitForTimeout(300); if (await page.locator('#sheet button[data-action="gap-sure"]').count()) await page.click('#sheet button[data-action="gap-sure"]'); };
 await page.click('.choice:has-text("Wallet")');
 await page.fill("#f-amount", "1");
 check((await text(page, "#f-diff")).includes("missing"), "typing a count shows the difference before saving");
 await shot(page, "21-checkin-count");
-await page.click("#f-save");
-check(await seen(page, "#toast", "Wallet:") && (await text(page, ".choice:has-text('Wallet')")).includes("missing"), "a count that is short is recorded and says how much is missing");
+await page.click("#f-save"); await seen(page, "#toast", "Wallet: counted");
+check((await text(page, ".choice:has-text('Wallet')")).includes("missing") && JSON.parse((await stored(page)).local).state.checkIns.length === 0, "a count that is short is kept, not posted yet, and says how much is missing");
+await decide(page, "Wallet", "spent"); await seen(page, "#toast", "Wallet:");
+check((await text(page, ".choice:has-text('Wallet')")).includes("missing"), "after the choice it is recorded and says how much is missing");
 ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.state.checkIns.length === 1 && ledgerNow.state.transactions.some((t) => t.source === "reconciliation" && t.status === "verified"), "the count is kept, with a verified Unlogged entry for the gap");
 await page.click('.choice:has-text("Four quick questions")');
@@ -875,6 +883,7 @@ for (let wk = 1; wk <= 3; wk++) {   // three more weeks, so there are four answe
   await page.reload(); await page.waitForSelector("#nav button");
   await menuGo(page, "Weekly review");
   await page.click('.choice:has-text("Wallet")'); await page.fill("#f-amount", String(wk)); await page.click("#f-save"); await seen(page, "#toast", "Wallet:");
+  await decide(page, "Wallet", "spent"); await seen(page, "#toast", "Wallet:");
   await page.click('.choice:has-text("Four quick questions")');
   await page.click(`#sheet button[data-action="survey-ease"][data-id="${wk + 1}"]`); await page.fill("#f-annoy", "week " + wk + " note");
   await page.click("#f-save"); await seen(page, "#toast", "Answers saved");
@@ -4181,7 +4190,11 @@ console.log("\n-- Card count after paying --");
   check((await text(page, ".choice:has-text('Test Card')")).includes("Matches the ledger"), "the card reads Matches the ledger");
   // a count saved WITHOUT logging the payment can be put right at the Weekly review
   await page.click('button[data-action="open-checkin"][data-id="b"]'); await page.waitForSelector("#sheet .sheet");
-  await page.fill("#f-amount", "25000"); await page.click("#f-save"); await page.waitForTimeout(600);
+  await page.fill("#f-amount", "25000"); await page.click("#f-save"); await page.waitForTimeout(500);
+  check(!JSON.parse((await stored(page)).local).state.transactions.some((x) => x.source === "reconciliation"), "a count with a gap is only kept until you say what happened: nothing is chosen for you");
+  await page.click('button[data-action="gap-decide"][data-id="b"][data-why="later"]');
+  check(await seen(page, "#sheet", "This is most of the balance"), "a gap of more than half the balance asks first: did you move it, or mistype the count?");
+  await page.click('#sheet button[data-action="gap-sure"]'); await page.waitForTimeout(600);
   check((await text(page, ".choice:has-text('Test Bank')")).includes("more than logged"), "a count that found money is saved");
   await page.click('button[data-action="open-correct"]');
   check(await seen(page, "#sheet", "Weekly check-in"), "the count's entry is offered under Put right a verified entry");
@@ -4191,22 +4204,6 @@ console.log("\n-- Card count after paying --");
   d = JSON.parse((await stored(page)).local).state;
   const unl = d.entries.filter((e) => e.category_id === "cat-unlogged").reduce((n, e) => n + e.amount, 0);
   check(unl === 0 && d.transactions.some((x) => x.reverses && x.payee === "Weekly check-in"), "the count gap is cancelled: Unlogged is back to zero");
-  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
-
-// ===== A count that found money brings the month down: its minus row is shown, so the rows add up =====
-console.log("\n-- Minus row in Category --");
-{ const acc = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-09-01" };
-  const TS = "2026-10-02T09:00:00.000+08:00";
-  const lunch = { id: "lunch", date: "2026-10-02", payee: "Lunch", memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS };
-  const count = { id: "cnt", date: "2026-10-02", payee: "Weekly check-in", memo: "", status: "verified", source: "reconciliation", created_at: TS, verified_at: TS };
-  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acc], transactions: [lunch, count],
-    entries: [{ transaction_id: "lunch", category_id: "cat-food", amount: 50000 }, { transaction_id: "lunch", account_id: "w", amount: -50000 },
-              { transaction_id: "cnt", account_id: "w", amount: 20000 }, { transaction_id: "cnt", category_id: "cat-unlogged", amount: -20000 }] } };
-  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
-  await menuGo(page, "Spending");
-  const t = await text(page, "#screen");
-  check(t.includes("\u20B1300.00") && t.includes("Food") && t.includes("\u20B1500.00"), "the month says 300.00 spent, with Food at 500.00");
-  check(t.includes("Unlogged") && t.includes("\u2212\u20B1200.00") && t.includes("brings the total down"), "the count that found 200.00 shows as its own minus row, so the rows add up");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 // ===== A spending draft that was really a move to your own account =====
@@ -4230,115 +4227,67 @@ console.log("\n-- Spending draft to a move --");
   check(l.transactions.find((t) => t.id === "atm").status === "draft" && es.length === 2 && es.every((e) => e.category_id == null) && es.some((e) => e.account_id === "cash" && e.amount === 395012) && es.some((e) => e.account_id === "b" && e.amount === -395012), "the draft is now a move from the bank to Cash, still a draft, with no spending");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
-// ===== A count that found money brings the month down: its minus row is shown, so the rows add up =====
-console.log("\n-- Minus row in Category --");
-{ const acc = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-09-01" };
-  const TS = "2026-10-02T09:00:00.000+08:00";
-  const lunch = { id: "lunch", date: "2026-10-02", payee: "Lunch", memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS };
-  const count = { id: "cnt", date: "2026-10-02", payee: "Weekly check-in", memo: "", status: "verified", source: "reconciliation", created_at: TS, verified_at: TS };
-  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acc], transactions: [lunch, count],
-    entries: [{ transaction_id: "lunch", category_id: "cat-food", amount: 50000 }, { transaction_id: "lunch", account_id: "w", amount: -50000 },
-              { transaction_id: "cnt", account_id: "w", amount: 20000 }, { transaction_id: "cnt", category_id: "cat-unlogged", amount: -20000 }] } };
-  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
-  await menuGo(page, "Spending");
-  const t = await text(page, "#screen");
-  check(t.includes("\u20B1300.00") && t.includes("Food") && t.includes("\u20B1500.00"), "the month says 300.00 spent, with Food at 500.00");
-  check(t.includes("Unlogged") && t.includes("\u2212\u20B1200.00") && t.includes("brings the total down"), "the count that found 200.00 shows as its own minus row, so the rows add up");
-  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
-
-// ===== A card counted after it was paid: one tap logs the payment; a count gap can be put right =====
-console.log("\n-- Card count after paying --");
-{ const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 2000000, opening_date: "2026-09-01", reserve_for: "cc" };
-  const card = { id: "cc", name: "Test Card", class: "liability", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-09-01" };
-  const TS = "2026-09-20T09:00:00.000+08:00";
-  const buy = { id: "buy", date: "2026-09-20", payee: "Sample Mart", memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS };
-  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [bank, card], transactions: [buy],
-    entries: [{ transaction_id: "buy", category_id: "cat-shopping", amount: 1000000 }, { transaction_id: "buy", account_id: "cc", amount: -1000000, card_state: "posted" }] } };
-  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
-  await menuGo(page, "Weekly review"); await page.waitForTimeout(300);
-  await page.click('button[data-action="open-checkin"][data-id="cc"]'); await page.waitForSelector("#sheet .sheet");
-  check(!(await text(page, "#sheet")).includes("Type everything you owe") && !(await text(page, "#sheet")).includes("Type the posted amount"), "the card count has no extra notes");
-  await page.click('button[data-action="count-basis"][data-id="owed"]'); await page.fill("#f-amount", "0");
-  const t = (await text(page, "#sheet")).replace(/\s+/g, " ");
-  check(t.includes("Ledger: \u20B110,000.00 \u00b7 \u20B110,000.00 less") && t.includes("I paid the card: log \u20B110,000.00"), "owing less than the ledger offers one button to log the payment");
-  await page.click('#sheet button[data-action="count-paid"]');
-  check(await seen(page, "#toast", "card payment waits in Verify") && await seen(page, "#f-diff", "matches"), "the payment waits in Verify and the count now matches");
-  let d = JSON.parse((await stored(page)).local).state;
-  const pay = d.transactions.find((x) => x.payee === "Card payment"), pes = d.entries.filter((e) => e.transaction_id === pay?.id);
-  check(pay && pay.status === "draft" && pes.some((e) => e.account_id === "cc" && e.amount === 1000000) && pes.some((e) => e.account_id === "b" && e.amount === -1000000), "one draft move of 10,000.00 from the bank that backs the card into the card");
-  await page.click("#f-save"); await page.waitForTimeout(600);
-  d = JSON.parse((await stored(page)).local).state;
-  check(!d.entries.some((e) => e.category_id === "cat-unlogged"), "nothing went to Unlogged, so the month's spending did not drop");
-  check((await text(page, ".choice:has-text('Test Card')")).includes("Matches the ledger"), "the card reads Matches the ledger");
-  // a count saved WITHOUT logging the payment can be put right at the Weekly review
-  await page.click('button[data-action="open-checkin"][data-id="b"]'); await page.waitForSelector("#sheet .sheet");
-  await page.fill("#f-amount", "25000"); await page.click("#f-save"); await page.waitForTimeout(600);
-  check((await text(page, ".choice:has-text('Test Bank')")).includes("more than logged"), "a count that found money is saved");
-  await page.click('button[data-action="open-correct"]');
-  check(await seen(page, "#sheet", "Weekly check-in"), "the count's entry is offered under Put right a verified entry");
-  await page.click('#sheet button[data-action="pick-correct"]:has-text("Weekly check-in")');
-  check((await text(page, "#sheet")).includes("A count is cancelled only. Log what explains it"), "it is cancelled only, nothing is made again, and it says what to do next");
-  await page.click('#sheet button[data-action="do-correct"]'); await page.waitForTimeout(600);
-  d = JSON.parse((await stored(page)).local).state;
-  const unl = d.entries.filter((e) => e.category_id === "cat-unlogged").reduce((n, e) => n + e.amount, 0);
-  check(unl === 0 && d.transactions.some((x) => x.reverses && x.payee === "Weekly check-in"), "the count gap is cancelled: Unlogged is back to zero");
-  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
-
-// ===== A count that found money brings the month down: its minus row is shown, so the rows add up =====
-console.log("\n-- Minus row in Category --");
-{ const acc = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-09-01" };
-  const TS = "2026-10-02T09:00:00.000+08:00";
-  const lunch = { id: "lunch", date: "2026-10-02", payee: "Lunch", memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS };
-  const count = { id: "cnt", date: "2026-10-02", payee: "Weekly check-in", memo: "", status: "verified", source: "reconciliation", created_at: TS, verified_at: TS };
-  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acc], transactions: [lunch, count],
-    entries: [{ transaction_id: "lunch", category_id: "cat-food", amount: 50000 }, { transaction_id: "lunch", account_id: "w", amount: -50000 },
-              { transaction_id: "cnt", account_id: "w", amount: 20000 }, { transaction_id: "cnt", category_id: "cat-unlogged", amount: -20000 }] } };
-  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
-  await menuGo(page, "Spending");
-  const t = await text(page, "#screen");
-  check(t.includes("\u20B1300.00") && t.includes("Food") && t.includes("\u20B1500.00"), "the month says 300.00 spent, with Food at 500.00");
-  check(t.includes("Unlogged") && t.includes("\u2212\u20B1200.00") && t.includes("brings the total down"), "the count that found 200.00 shows as its own minus row, so the rows add up");
-  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
-
-// ===== A bank count with a gap: where did it come from, or go? =====
+// ===== Counting every account first, then every gap side by side =====
 console.log("\n-- Count with a gap --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 520000, opening_date: "2026-09-01" };
   const cash = { id: "cash", name: "Cash", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-09-01" };
   const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [bank, cash] } };
+  const save = async (page, id, amount) => { await page.click(`button[data-action="open-checkin"][data-id="${id}"]`); await page.waitForSelector("#sheet .sheet"); await page.fill("#f-amount", amount); await page.click("#f-save"); await page.waitForTimeout(500); };
   ({ ctx, page, errors } = await open({ blockSw: true, seed }));
   await menuGo(page, "Weekly review"); await page.waitForTimeout(300);
+  // 1. the count window only takes the figure: no choices there
   await page.click('button[data-action="open-checkin"][data-id="b"]'); await page.waitForSelector("#sheet .sheet");
-  await page.fill("#f-amount", "8996.94");
-  check(await seen(page, "#sheet", "Where did the extra \u20B13,796.94 come from?"), "more money than the app asks where the extra came from");
-  const t = (await text(page, "#sheet")).replace(/\s+/g, " ");
-  check(t.includes("Moved in from another account of mine") && t.includes("Money I received") && t.includes("Not sure: just match it") && t.includes("Matching it does not count as spending."), "with its three choices; just match it is the default, and says it is not spending");
-  check(await page.getAttribute('#sheet button[data-action="count-why"][data-id="match"]', "aria-pressed") === "true", "just match it is picked already");
-  await page.click("#f-save"); await page.waitForTimeout(600);
-  let d = JSON.parse((await stored(page)).local).state;
-  const tx = d.transactions.find((x) => x.source === "reconciliation");
-  check(tx && tx.adjustment === true && d.checkIns[0].matched === true && d.checkIns[0].difference === 379694, "just match it saved the count as an adjustment");
-  check((await text(page, "#screen")).includes("Matched to your bank. Log the moves when you can."), "Weekly review shows the quiet reminder");
+  await page.fill("#f-amount", "1403.06");
+  let t = (await text(page, "#sheet")).replace(/\s+/g, " ");
+  check(t.includes("The ledger says ₱5,200.00") && t.includes("₱3,796.94 missing") && !t.includes("I spent some of it") && !t.includes("Not sure: just match it"), "the count window shows the gap but asks nothing yet");
+  check(t.includes("Count your other accounts too"), "it says to count the other accounts first");
+  await page.click("#f-save"); await page.waitForTimeout(500);
+  let d = JSON.parse((await stored(page)).local);
+  check(d.state.transactions.filter((x) => x.source === "reconciliation").length === 0 && d.settings.checkin_pending?.b?.counted === 140306, "a count with a gap is only kept for now: nothing is posted, the balance is untouched");
+  t = (await text(page, "#screen")).replace(/\s+/g, " ");
+  check(t.includes("₱1,403.06") && t.includes("₱3,796.94 missing") && /what happened\?/i.test(t) && t.includes("Moved to another account of mine") && t.includes("I'll explain later"), "the Weekly review shows the gap beside the account and asks what happened");
+  // 2. the second account makes the two gaps one proposed move
+  await save(page, "cash", "3796.94");
+  t = (await text(page, "#screen")).replace(/\s+/g, " ");
+  check(/looks like a move/i.test(t) && t.includes("₱3,796.94 left Test Bank and arrived in Cash.") && !/what happened\?/i.test(t), "an exactly equal short and extra become ONE proposed move");
+  check(await page.locator('#screen button.primary[data-action="gap-move-confirm"]').count() === 1 && await page.locator('#screen button[data-action="gap-decide"]').count() === 0, "its button is the filled one; no other choice is offered for those two");
+  await shot(page, "p04-proposed-move");
+  await page.click('button[data-action="gap-move-confirm"]'); await seen(page, "#toast", "waits in Verify"); await page.waitForTimeout(500);
+  d = JSON.parse((await stored(page)).local);
+  const mv = d.state.transactions.find((x) => x.payee === "Moved (found at count)"), es = d.state.entries.filter((e) => e.transaction_id === mv?.id);
+  check(mv && mv.status === "draft" && es.some((e) => e.account_id === "b" && e.amount === -379694) && es.some((e) => e.account_id === "cash" && e.amount === 379694), "one draft move of 3,796.94 from the bank to Cash");
+  check(d.state.checkIns.length === 2 && d.state.checkIns.every((c) => c.difference === 0) && !d.state.transactions.some((x) => x.source === "reconciliation") && !d.settings.checkin_pending?.b && !d.settings.checkin_pending?.cash, "both counts match: no gap entry, nothing left waiting");
+  // 3. an unmatched gap: I'll explain later keeps it apart
+  await save(page, "b", "903.06");   // the ledger is 1,403.06 after the move: 500.00 missing
+  await page.click('button[data-action="gap-decide"][data-why="later"]'); await page.waitForTimeout(500);
+  d = JSON.parse((await stored(page)).local);
+  check(d.state.transactions.filter((x) => x.source === "reconciliation" && x.adjustment).length === 1 && d.settings.checkin_pending?.b === undefined, "I'll explain later holds it: balance corrected, not spending");
+  check((await text(page, "#screen")).includes("1 gap is not yet explained"), "Weekly review says one gap waits");
   await menuGo(page, "Spending");
-  const sp = await text(page, "#screen");
-  check(!sp.includes("brings the total down") && !sp.includes("\u2212\u20B1"), "the found money is not spending going down: no minus row");
+  t = (await text(page, "#screen")).replace(/\s+/g, " ");
+  check(/not yet explained/i.test(t) && t.includes("₱500.00") && t.includes("₱0.00 spent") , "Category lists the 500.00 apart; the total says 0.00 spent");
+  await shot(page, "p04-not-yet-explained");
+  // 4. a count of most of the balance asks first
   await menuGo(page, "Weekly review");
-  await page.click('button[data-action="open-checkin"][data-id="cash"]'); await page.waitForSelector("#sheet .sheet");
-  await page.fill("#f-amount", "3796.94");
-  check(await seen(page, "#sheet", "Where did the extra"), "Cash counted higher asks too");
-  await page.click('#sheet button[data-action="count-why"][data-id="move"]');
-  check(await page.locator("#f-save").isDisabled(), "moved in from another account waits until the account is chosen");
-  await page.click('#sheet .chip[data-action="pick-count-other"]:has-text("Test Bank")');
-  check(!(await page.locator("#f-save").isDisabled()), "choosing it turns Save on");
-  await page.click("#f-save");
-  check(await seen(page, "#toast", "The move waits in Verify"), "it says the move waits in Verify");
-  d = JSON.parse((await stored(page)).local).state;
-  const mv = d.transactions.find((x) => x.payee.startsWith("Moved in")), es = d.entries.filter((e) => e.transaction_id === mv?.id);
-  check(mv && mv.status === "draft" && es.some((e) => e.account_id === "cash" && e.amount === 379694) && es.some((e) => e.account_id === "b" && e.amount === -379694), "a draft move from the bank into Cash was made");
-  check(d.checkIns.length === 2 && d.checkIns[1].difference === 0 && d.transactions.filter((x) => x.source === "reconciliation").length === 1, "the count matches, with no second gap entry");
-  await menuGo(page, "Weekly review");
-  await page.click('button[data-action="open-checkin"][data-id="b"]'); await page.waitForSelector("#sheet .sheet");
-  await page.fill("#f-amount", "3000");   // the bank's ledger is 5,200.00 after the move out
-  check(await seen(page, "#sheet", "Where did the missing") && (await text(page, "#sheet")).includes("I spent some of it") && (await text(page, "#sheet")).includes("Not sure counts as spending you did not log."), "less money than the app asks where it went, and says not sure counts as spending");
+  await save(page, "cash", "0");   // Cash holds 3,796.94 after the move
+  await page.click('button[data-action="gap-decide"][data-id="cash"][data-why="later"]');
+  check(await seen(page, "#sheet", "This is most of the balance") && (await text(page, "#sheet")).includes("Did you move it, or mistype the count?"), "a count of 0 asks first: did you move it, or mistype the count?");
+  await page.click('#sheet button[data-action="gap-change"]');
+  check((await page.inputValue("#f-amount")) === "0.00", "Change the count reopens it with the count typed");
+  await page.click("#f-save"); await page.waitForTimeout(400);
+  await page.click('button[data-action="gap-decide"][data-id="cash"][data-why="later"]'); await seen(page, "#sheet", "This is most of the balance");
+  await page.click('#sheet button[data-action="gap-sure"]'); await page.waitForTimeout(600);
+  d = JSON.parse((await stored(page)).local);
+  check(d.state.transactions.filter((x) => x.source === "reconciliation" && x.adjustment).length === 2, "after 'The count is right' it is held too: never spending by default");
+  // 5. an entry that is exactly a held gap offers: This explains the gap
+  await page.click('#nav button:has-text("Log")'); await page.click('button[data-action="open-other"]');
+  await page.fill("#f-amount", "500"); await page.click('#sheet [data-action="pick-cat"]:has-text("Food")'); await page.click('#sheet [data-action="pick-acct"]:has-text("Test Bank")'); await page.click("#f-save");
+  check(await seen(page, "#sheet", "This explains the gap?") && (await text(page, "#sheet")).includes("The gap is cancelled, so the money counts once"), "a 500.00 entry on that account is offered: This explains the gap");
+  await shot(page, "p04-explains-gap");
+  await page.click('#sheet button[data-action="explain-gap"]'); await seen(page, "#toast", "The gap is cleared"); await page.waitForTimeout(500);
+  await menuGo(page, "Spending");
+  t = (await text(page, "#screen")).replace(/\s+/g, " ");
+  check(t.includes("₱500.00 not verified yet") && !t.includes("Test Bank missing") && t.includes("Cash missing") && t.includes("₱3,796.94") && (t.match(/Not part of what you spent/g) ?? []).length === 1, "the 500.00 entry counts once (it waits in Verify); only the Cash gap of 3,796.94 is still not yet explained");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 // ===== A cancelled count does not show as spent today =====

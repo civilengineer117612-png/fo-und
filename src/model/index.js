@@ -60,6 +60,8 @@ export { searchEntries } from "./search.js";
 export { entriesCsv, CSV_COLUMNS } from "./csvexport.js";
 export { netWorthSeries } from "./networth.js";
 export { GOAL_SYMBOLS, goalSymbolSvg } from "./goalicons.js";
+export { proposeMoves, planProposedMove } from "./gapmatch.js";
+export { heldIds, unexplainedGaps, findOpenGap, bigGap, GAP_DAYS } from "./held.js";
 export { replaceWithCopy, copyHolds, holdsData, RESTORE_COPIES_KEPT } from "./restorecopy.js";
 export { PART_BYTES, planParts, partFileName, sealPictures, openPictures } from "./picturebackup.js";
 export { correctable, groupByDay, planCorrection, applyCorrection, alreadyCancelled, isReversed, correctionTag, CORRECTION_DAYS } from "./corrections.js";

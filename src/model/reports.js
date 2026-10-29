@@ -4,6 +4,7 @@
 //     are not spending (spec 2.3).
 //   - Categories are grouped as of `asOf` (the day the report is run), so a merge regroups history.
 //   - Unlogged counts: it is real money that left and was never logged.
+import { heldIds } from "./held.js";
 import { reportingCategory } from "./rules.js";
 import { naturalBalance, countedEntries } from "./balances.js";
 
@@ -25,12 +26,12 @@ const lastDayOf = (month) => month + "-31";   // string order is date order, so 
 export function spendingByRange(state, { from, to, categoryMaps = [], asOf }) {
   const expense = new Map(state.categories.filter((c) => c.kind === "expense").map((c) => [c.id, c]));
   const txById = new Map(state.transactions.map((t) => [t.id, t]));
-  const totals = new Map();
+  const totals = new Map(), held = heldIds(state);
   let pending = 0;
   for (const e of state.entries) {
     if (e.category_id == null || !expense.has(e.category_id)) continue;
     const t = txById.get(e.transaction_id);
-    if (!t || t.adjustment || t.date < from || t.date > to) continue;   // a matched count that found money is not spending, up or down
+    if (!t || held.has(t.id) || t.date < from || t.date > to) continue;   // a count gap that is not yet explained (and the entry that cancels it) is not spending, up or down
     if (t.status !== "verified") { pending += e.amount; continue; }
     const id = reportingCategory(categoryMaps, e.category_id, asOf ?? to);
     totals.set(id, (totals.get(id) ?? 0) + e.amount);
@@ -56,11 +57,11 @@ export function spendingByAccount(state, { month, from, to }) {
   const spendingTx = new Set();
   for (const e of state.entries) if (e.category_id != null && expense.has(e.category_id)) spendingTx.add(e.transaction_id);
   const txById = new Map(state.transactions.map((t) => [t.id, t]));
-  const totals = new Map();
+  const totals = new Map(), held = heldIds(state);
   for (const e of state.entries) {
     if (e.account_id == null || !spendingTx.has(e.transaction_id)) continue;
     const t = txById.get(e.transaction_id);
-    if (!t || t.adjustment || t.status !== "verified" || t.date < lo || t.date > hi) continue;
+    if (!t || held.has(t.id) || t.status !== "verified" || t.date < lo || t.date > hi) continue;
     totals.set(e.account_id, (totals.get(e.account_id) ?? 0) - e.amount);   // money out = a credit, stored negative
   }
   const rows = [...totals].filter(([, amount]) => amount !== 0)
@@ -74,14 +75,14 @@ export function spendingByAccount(state, { month, from, to }) {
 export function spendingTransactions(state, { from, to, category_id, account_id, categoryMaps = [], asOf = to }) {
   if (!category_id && !account_id) return { total: 0, rows: [] };
   const expense = new Set(state.categories.filter((c) => c.kind === "expense").map((c) => c.id));
-  const byTx = new Map();
+  const byTx = new Map(), held = heldIds(state);
   for (const e of state.entries) {
     const list = byTx.get(e.transaction_id) ?? [];
     list.push(e); byTx.set(e.transaction_id, list);
   }
   const rows = [];
   for (const transaction of state.transactions) {
-    if (transaction.adjustment || transaction.status !== "verified" || transaction.date < from || transaction.date > to) continue;
+    if (held.has(transaction.id) || transaction.status !== "verified" || transaction.date < from || transaction.date > to) continue;
     const entries = byTx.get(transaction.id) ?? [];
     if (!entries.some((e) => expense.has(e.category_id))) continue;
     const amount = entries.reduce((sum, e) => sum + (category_id
@@ -137,9 +138,9 @@ export function dayTotal(state, date) {
   const expense = new Set(state.categories.filter((c) => c.kind === "expense").map((c) => c.id));
   const txById = new Map(state.transactions.map((t) => [t.id, t]));
   let verified = 0, draft = 0, drafts = 0;
-  // A count's gap and the entry that CANCELS it are both left out (owner, Oct 20: only the count was skipped, so cancelling a count that found money
-  // showed that money as spending today, once more each time it was cancelled).
-  const notSpending = (t) => t.source === "reconciliation" || (t.reverses != null && txById.get(t.reverses)?.source === "reconciliation");
+  // The SAME rule as This month and Category (owner, Oct 29): a count gap that is not yet explained, and the entry that cancels it, are not spending; a gap the owner
+  // said was spent ("I spent some of it") is, so a day and its month always agree. (Before, every count was left out of the day and not of the month.)
+  const held = heldIds(state), notSpending = (t) => held.has(t.id);
   for (const e of state.entries) {
     if (e.category_id == null || !expense.has(e.category_id)) continue;
     const t = txById.get(e.transaction_id);

@@ -1,6 +1,7 @@
 // The spending line on Trends (owner, Oct 16): verified spending day by day, grouped into days, weeks or months by how far the chart is zoomed, and the
 // quick ranges 1M, 3M, 6M, 1Y and All. Counts exactly what the other reports count (verified expense entries, refunds reduce it). Pure; amounts are centavos,
 // dates are "YYYY-MM-DD" strings (string order is date order).
+import { heldIds } from "./held.js";
 const DAY = 86400000;
 const toMs = (d) => Date.parse(d + "T00:00:00Z");
 const toDate = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -14,11 +15,11 @@ export const RANGES = ["1M", "3M", "6M", "1Y", "All"];
 export function dailySpending(state, { from, to }) {
   const expense = new Set(state.categories.filter((c) => c.kind === "expense").map((c) => c.id));
   const tx = new Map(state.transactions.map((t) => [t.id, t]));
-  const out = new Map();
+  const out = new Map(), held = heldIds(state);
   for (const e of state.entries) {
     if (e.category_id == null || !expense.has(e.category_id)) continue;
     const t = tx.get(e.transaction_id);
-    if (!t || t.adjustment || t.status !== "verified" || t.date < from || t.date > to) continue;
+    if (!t || held.has(t.id) || t.status !== "verified" || t.date < from || t.date > to) continue;
     out.set(t.date, (out.get(t.date) ?? 0) + e.amount);
   }
   return out;

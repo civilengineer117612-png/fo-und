@@ -12,8 +12,8 @@ function counted() {
   s = verifyDraft(s, "lunch", NOW).state;
   return s;
 }
-function count(s, id, counted_balance) {
-  const p = planCheckIn(s, { id: "chk" + id, transaction_id: "cnt" + id, date: TODAY, account_id: "chk", counted_balance, unlogged_category_id: "unl" }, NOW);
+function count(s, id, counted_balance, why = "later") {   // "later": the gap is held, not spending (a plain count, `why` undefined, is unlogged spending)
+  const p = planCheckIn(s, { id: "chk" + id, transaction_id: "cnt" + id, date: TODAY, account_id: "chk", counted_balance, unlogged_category_id: "unl", ...(why ? { why } : {}) }, NOW);
   return { ...s, checkIns: [...(s.checkIns ?? []), p.checkIn], transactions: [...s.transactions, p.transaction], entries: [...s.entries, ...p.entries] };
 }
 const cancel = (s, id) => applyCorrection(s, planCorrection(s, { id, redo_id: "redo" + id, today: TODAY }, NOW));
@@ -33,6 +33,15 @@ test("cancelling a count that found money MISSING does not show it as spent toda
   assert.equal(dayTotal(s, TODAY).total, 5000);
   s = cancel(s, "cnt1");
   assert.equal(dayTotal(s, TODAY).total, 5000);
+});
+
+test("a count gap booked as spending counts in the day AND the month, and cancelling it nets both to zero (they always agree)", () => {
+  let s = count(counted(), "1", 80000, null);   // 150.00 missing, the owner said "I spent some of it"
+  assert.equal(dayTotal(s, TODAY).total, 5000 + 15000);
+  assert.equal(spendingByCategory(s, { month: "2026-10" }).total, 5000 + 15000);
+  s = cancel(s, "cnt1");
+  assert.equal(dayTotal(s, TODAY).total, 5000);
+  assert.equal(spendingByCategory(s, { month: "2026-10" }).total, 5000);
 });
 
 test("a cancelled ordinary entry still nets to zero in the day total (both sides count)", () => {

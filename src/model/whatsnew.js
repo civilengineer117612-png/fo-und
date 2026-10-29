@@ -1,6 +1,8 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-10-29-count-first", date: "2026-10-29", text: "Weekly review: count every account first, then see every gap side by side; a short and an equal extra between your own accounts become one proposed move." },
+  { id: "2026-10-29-not-yet-explained", date: "2026-10-29", text: "The weekly count no longer books a gap as spending unless you say so: \"I'll explain later\" keeps it apart under Not yet explained, and Spent today now agrees with the month." },
   { id: "2026-10-29-cancel-once", date: "2026-10-29", text: "Fixed: a verified entry can be cancelled only once; a second tap on Cancel no longer adds a second \"Cancels\" line." },
   { id: "2026-10-29-restore-safety-copy", date: "2026-10-29", text: "Restoring a backup now keeps a copy of what was on your phone first, and you can put it back (Backup and restore, Undo last restore)." },
   { id: "2026-10-29-card-due-paid", date: "2026-10-29", text: "Fixed: the card's due-day payment draft no longer treats a posted purchase, a count or a cancelled payment as money already paid." },
