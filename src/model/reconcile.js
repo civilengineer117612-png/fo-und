@@ -13,6 +13,7 @@ import { applyDrafts, planExpense } from "./drafts.js";
 import { planPayReceived } from "./plan.js";
 import { categoryFromBook } from "./payees.js";
 import { UNLOGGED_CATEGORY_ID } from "./seed.js";
+import { liveSlips } from "./income.js";
 
 const DAY = 86400000;
 const gap = (a, b) => Math.abs(Math.round((Date.parse(a) - Date.parse(b)) / DAY));
@@ -84,7 +85,7 @@ export function planPairedMove(state, pair, { newId, now = new Date() }) {
 
 // Money in that is a payslip arriving: the same account, the same amount as the payslip's deposit, within `days` of its pay date. A payslip matches once.
 export function matchPayslips(state, { days = 4 } = {}) {
-  const slips = [...(state.payslips ?? [])].sort((a, b) => a.pay_date.localeCompare(b.pay_date)), taken = new Set(), out = [];
+  const slips = [...liveSlips(state)].sort((a, b) => a.pay_date.localeCompare(b.pay_date)), taken = new Set(), out = [];
   for (const l of allLines(state).filter((x) => x.direction === "in")) {
     const p = slips.find((s) => !taken.has(s.id) && s.account_id === l.account_id && s.deposit === l.amount && gap(s.pay_date, l.date) <= days);
     if (p) { taken.add(p.id); out.push({ line: l, payslip: p }); }

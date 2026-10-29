@@ -130,7 +130,7 @@ export function suggestBudgets({ state, plan = null, pin = null, today, month, s
   const saved = lines.filter((l) => l.kind === "goal" || l.kind === "buffer").map((l) => ({ name: l.name, kind: l.kind, amount: l.pinned ? l.amount : toNearest50(l.amount), reason: l.reason, ...(l.goal_id ? { goal_id: l.goal_id } : {}), ...(l.pinned ? { pinned: true } : {}) }));
   const roles = new Map(state.categories.map((c) => [c.id, c.role ?? guessType(c.name)]).filter(([, r]) => r));
   const fit = fitToIncome({ rows, others, saved, income: income.amount, roles, buckets, limit: r.paydays[0].total });
-  return { ok: true, income, rows: fit.rows, others, saved, trimmed: fit.trimmed, unallocated: fit.unallocated, short: fit.short, history: r.history };
+  return { ok: true, income, rows: fit.rows, others, saved, trimmed: fit.trimmed, unallocated: fit.unallocated, short: fit.short, funding: r.funding, history: r.history };
 }
 
 // What confirming would save: draft {category_id: centavos} against the budget now in effect. Each change goes through the existing append-only

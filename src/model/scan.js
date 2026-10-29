@@ -345,7 +345,8 @@ export function readPayslip(text, today, { allowHistorical = false } = {}) {
   const company = top.map(clean).find((l) => COMPANY_WORD.test(l) && letters(l) >= 5);
   const named = top.map(clean).find((l) => letters(l) >= 5 && letters(l) >= l.length * 0.6 && l.length <= 45);
   const employer = (labelled ? clean(labelled) : null) || company || named || null;
-  return { employer, period_from, period_to, pay_date, printed_gross, printed_net, printed_deductions, earnings, deductions, notes, ...(lines.includes("Payslip table") ? readPayrollTable(lines) : {}) };
+  const table = lines.includes("Payslip table") ? readPayrollTable(lines) : null;
+  return { employer, period_from, period_to, pay_date, printed_gross, printed_net, printed_deductions, earnings, deductions, notes, ...(table ?? {}), ...(table ? { notes: [...notes, ...table.notes] } : {}) };
 }
 
 // PDF text has positions but no reading order. Keep the two sides of a payslip
@@ -479,25 +480,32 @@ function payrollTableText(rows, headersIn) {
   return out.join("\n").replace(/\b(\d{1,2})-([A-Za-z]{3,9})-(\d{4})\b/g, "$1 $2 $3");
 }
 
+// A recognised payroll table is NEVER refused (owner, Oct 29): the reader fills its best reading of every field, counts the rows it could not read
+// (`unread`, shown as empty rows to fill in), and says in `flags` what the arithmetic did not prove: earnings = gross, each deduction section = its
+// printed total, gross - deductions = net, sum of deposits = net. A flag is only a note: {field, reason}; nothing here decides what is saved.
 function readPayrollTable(lines) {
-  const fail = (reason) => ({ error: reason + " Nothing was filled in. Type the payslip from the paper instead.", earnings: [], deductions: [], printed_gross: null, printed_net: null, printed_deductions: null, deposit: null });
-  if (lines.filter(l => l === "Payslip table").length !== 1) return fail("I could not read more than one payroll table together.");
+  const flags = [], unread = { earning: 0, deduction: 0 };
+  const flag = (field, reason) => flags.push({ field, reason });
+  const plain = (c) => (Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const money = s => /^(?:\d{1,3}(?:,\d{3})*|\d+)\.\d{2}$/.test(s ?? "") ? amountsIn(s)[0] ?? (s === "0.00" ? 0 : null) : null;
+  if (lines.filter(l => l === "Payslip table").length !== 1) flag("structure", "more than one payroll table was found, so figures may be mixed");
   const summary = new Map(), sections = new Set(), amounts = { earning: 0, "pre-tax": 0, taxes: 0, deductions: 0 }, earnings = new Map(), deductions = new Map();
-  let deposit = 0, distributions = 0;
+  let deposit = 0, distributions = 0, here = null;
+  const lost = (section) => { unread[section === "earning" ? "earning" : "deduction"]++; };
   for (const line of lines) {
     const [key, label, value] = line.split("\t");
-    if (key === "Unreadable") return fail("I could not read every payroll table row.");
-    if (key === "Section") { if (sections.has(label)) return fail("I could not separate repeated payroll sections."); sections.add(label); }
+    if (key === "Unreadable") { if (label === "distribution row") flag("deposit", "a net pay distribution row could not be read"); else lost(here ?? "earning"); continue; }
+    if (key === "Section") { if (sections.has(label)) flag("structure", "a payroll section appears twice"); sections.add(label); here = label; continue; }
     if (key.startsWith("Summary ")) {
-      const n = money(label);
-      if (n === null || summary.has(key.slice(8))) return fail("I could not read the payroll summary.");
-      summary.set(key.slice(8), n);
+      const n = money(label), name = key.slice(8);
+      if (n === null) { if (name === "gross" || name === "net pay") flag(name === "gross" ? "gross" : "net", "the printed " + name + " could not be read"); }
+      else if (!summary.has(name)) summary.set(name, n);
+      continue;
     }
-    if (key === "Distribution") { const n = money(label); if (n === null) return fail("I could not read the net pay distribution."); deposit += n; distributions++; }
+    if (key === "Distribution") { const n = money(label); if (n === null) flag("deposit", "a net pay distribution amount could not be read"); else { deposit += n; distributions++; } continue; }
     if (key.startsWith("Line ")) {
       const section = key.slice(5), n = money(value);
-      if (n === null || !(section in amounts)) return fail("I could not read an earnings or deduction amount.");
+      if (n === null || !(section in amounts)) { lost(section); continue; }
       amounts[section] += n;
       const earning = section === "earning", low = label.toLowerCase();
       // Back pay is included in Other earnings, not today's basic rate or an
@@ -507,14 +515,21 @@ function readPayrollTable(lines) {
       dest.set(kind, (dest.get(kind) ?? 0) + n);
     }
   }
-  if (!["earning", "pre-tax", "taxes", "deductions", "distribution"].every(k => sections.has(k)) || summary.size !== 5 || !distributions) return fail("I could not find all the payroll sections and totals.");
-  if (amounts.earning !== summary.get("gross")) return fail("The earnings lines do not match the printed gross pay.");
-  if (["pre-tax", "taxes", "deductions"].some(k => amounts[k] !== summary.get(k))) return fail("The deduction lines do not match the printed deduction totals.");
+  for (const k of ["earning", "pre-tax", "taxes", "deductions"]) if (!sections.has(k) && !(k === "deductions" && summary.get("deductions") === 0)) flag("structure", "the " + (k === "earning" ? "earnings" : k) + " section was not found");
   const totalDed = amounts["pre-tax"] + amounts.taxes + amounts.deductions;
-  if (amounts.earning - totalDed !== summary.get("net pay")) return fail("Gross minus deductions does not match the printed net pay.");
-  if (deposit !== summary.get("net pay")) return fail("The net pay distribution does not match the printed net pay.");
+  const gross = summary.get("gross") ?? null, net = summary.get("net pay") ?? null;
+  if (gross !== null && amounts.earning !== gross && !flags.some(f => f.field === "gross")) flag("gross", `earnings add up to ${plain(gross - amounts.earning)} ${gross > amounts.earning ? "less" : "more"} than the printed gross`);
+  for (const [k, name] of [["pre-tax", "pre-tax deduction"], ["taxes", "tax"], ["deductions", "after-tax deduction"]]) {
+    const printed = summary.get(k);
+    if (printed !== undefined && amounts[k] !== printed) flag("deductions", `the ${name} lines add up to ${plain(printed - amounts[k])} ${printed > amounts[k] ? "less" : "more"} than the printed total`);
+  }
+  if (gross !== null && net !== null && gross - totalDed !== net && !flags.some(f => f.field === "net")) flag("net", `gross less deductions is ${plain(gross - totalDed - net)} ${gross - totalDed > net ? "more" : "less"} than the printed net pay`);
+  if (net !== null && distributions && deposit !== net && !flags.some(f => f.field === "deposit")) flag("deposit", `the account distribution is ${plain(net - deposit)} ${net > deposit ? "less" : "more"} than the printed net pay`);
+  if (!distributions && !flags.some(f => f.field === "deposit")) flag("deposit", "the net pay distribution was not found");
   const entries = m => [...m].filter(([,amount]) => amount > 0).map(([kind,amount]) => ({kind,amount}));
-  return { earnings: entries(earnings), deductions: entries(deductions), printed_gross: summary.get("gross"), printed_net: summary.get("net pay"), printed_deductions: totalDed, deposit, notes: [] };
+  // The best reading: the printed figure when there is one, else what the lines add to.
+  const earned = amounts.earning, printedNet = net ?? (gross ?? earned) - totalDed;
+  return { earnings: entries(earnings), deductions: entries(deductions), printed_gross: gross ?? (earned || null), printed_net: printedNet > 0 ? printedNet : null, printed_deductions: totalDed || (summary.get("pre-tax") ?? 0) + (summary.get("taxes") ?? 0) + (summary.get("deductions") ?? 0) || null, deposit: distributions ? deposit : (printedNet > 0 ? printedNet : null), notes: [], flags, unread };
 }
 
 
