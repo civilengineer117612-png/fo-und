@@ -44,7 +44,7 @@ const AMOUNT_RE = /(?:₱|php|\bp\b|#|£)?\s*(\d{1,3}(?:,\d{3})+|\d+)\.(\d{2})\b
 
 export function amountsIn(line) {
   const out = [];
-  // "1.750.32" (dots as thousands) is 1,750.32; "0.00 x 114.18" is a count times a rate: only the rate is a figure
+  // "1.750.32" (dots as thousands) is 1,750.32; "0.00 x 114.00" is a count times a rate: only the rate is a figure
   const plain = cleanDigits(line).replace(/(\d)\.(\d{3})\.(\d{2})\b/g, "$1,$2.$3").replace(/\d+(?:\.\d+)?\s*[x×]\s*(?=\d)/gi, "");
   for (const m of plain.matchAll(AMOUNT_RE)) {
     const c = Number(m[1].replace(/,/g, "")) * 100 + Number(m[2]);

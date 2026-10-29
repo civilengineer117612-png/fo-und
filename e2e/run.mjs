@@ -4024,7 +4024,7 @@ console.log("\n-- Goals eye --");
 // ===== A spend that would take a debit account below zero asks first; nothing blocks =====
 console.log("\n-- Overdraw warning --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
-  const st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [{ id: "sav", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 217830, opening_date: "2026-01-01" }, { id: "crd", name: "Test Card", class: "liability", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-01-01" }],
+  const st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [{ id: "sav", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 220000, opening_date: "2026-01-01" }, { id: "crd", name: "Test Card", class: "liability", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-01-01" }],
     goals: [{ id: "g1", account_id: "sav", name: "Test Goal", target: 100000, hidden_by_default: false }] };
   ({ ctx, page, errors } = await open({ blockSw: true, keepWarn: true, seed: { v: 10, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
   const spend = async (amount, acct) => { await page.click('button:has-text("Add expense")'); await page.fill("#f-amount", amount); await page.click('#sheet .chip:has-text("Shopping")'); await page.click('#sheet .chip:has-text("' + acct + '")'); await page.click("#f-save"); await page.waitForTimeout(300); };
@@ -4034,7 +4034,7 @@ console.log("\n-- Overdraw warning --");
   check(await page.locator("#warn .sheet").count() === 0, "a credit card may go up without a warning");
   await spend("3350", "Test Bank");
   const w = await text(page, "#warn");
-  check(w.includes("This takes Test Bank below zero") && w.includes("\u20b12,128.30") && w.includes("-\u20b13,350.00") && w.includes("-\u20b11,221.70"), "a spend that would overdraw says so with the balance now, the spend and what it would leave");
+  check(w.includes("This takes Test Bank below zero") && w.includes("\u20b12,150.00") && w.includes("-\u20b13,350.00") && w.includes("-\u20b11,200.00"), "a spend that would overdraw says so with the balance now, the spend and what it would leave");
   check(await page.locator('#warn button.primary[data-action="warn-income"]').count() === 1 && await page.locator('#warn button[data-action="warn-save"]').count() === 1, "one filled button to log money received first, and Save anyway");
   let led = JSON.parse((await stored(page)).local);
   check(!led.state.entries.some((e) => e.account_id === "sav" && e.amount === -335000), "nothing is saved while the warning waits");
@@ -4211,7 +4211,7 @@ console.log("\n-- Spending draft to a move --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 2000000, opening_date: "2026-09-01" };
   const cash = { id: "cash", name: "Cash", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-09-01" };
   const atm = { id: "atm", date: "2026-10-02", payee: "ATM withdrawal", memo: "", status: "draft", source: "manual", created_at: "2026-10-02T09:00:00.000+08:00" };
-  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [cash, bank], transactions: [atm], entries: [{ transaction_id: "atm", category_id: "cat-essentials", amount: 395012 }, { transaction_id: "atm", account_id: "b", amount: -395012 }] } };
+  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [cash, bank], transactions: [atm], entries: [{ transaction_id: "atm", category_id: "cat-essentials", amount: 400000 }, { transaction_id: "atm", account_id: "b", amount: -400000 }] } };
   ({ ctx, page, errors } = await open({ blockSw: true, seed }));
   await page.click('#nav button:has-text("Verify")');
   await page.click('#screen button[data-action="verify-edit"]');
@@ -4224,7 +4224,7 @@ console.log("\n-- Spending draft to a move --");
   await page.click("#f-save");
   check(await seen(page, "#toast", "Saved as a move"), "it says it was saved as a move");
   const l = JSON.parse((await stored(page)).local).state, es = l.entries.filter((e) => e.transaction_id === "atm");
-  check(l.transactions.find((t) => t.id === "atm").status === "draft" && es.length === 2 && es.every((e) => e.category_id == null) && es.some((e) => e.account_id === "cash" && e.amount === 395012) && es.some((e) => e.account_id === "b" && e.amount === -395012), "the draft is now a move from the bank to Cash, still a draft, with no spending");
+  check(l.transactions.find((t) => t.id === "atm").status === "draft" && es.length === 2 && es.every((e) => e.category_id == null) && es.some((e) => e.account_id === "cash" && e.amount === 400000) && es.some((e) => e.account_id === "b" && e.amount === -400000), "the draft is now a move from the bank to Cash, still a draft, with no spending");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 // ===== Counting every account first, then every gap side by side =====
@@ -4237,28 +4237,28 @@ console.log("\n-- Count with a gap --");
   await menuGo(page, "Weekly review"); await page.waitForTimeout(300);
   // 1. the count window only takes the figure: no choices there
   await page.click('button[data-action="open-checkin"][data-id="b"]'); await page.waitForSelector("#sheet .sheet");
-  await page.fill("#f-amount", "1403.06");
+  await page.fill("#f-amount", "1400.00");
   let t = (await text(page, "#sheet")).replace(/\s+/g, " ");
-  check(t.includes("The ledger says ₱5,200.00") && t.includes("₱3,796.94 missing") && !t.includes("I spent some of it") && !t.includes("Not sure: just match it"), "the count window shows the gap but asks nothing yet");
+  check(t.includes("The ledger says ₱5,200.00") && t.includes("₱3,800.00 missing") && !t.includes("I spent some of it") && !t.includes("Not sure: just match it"), "the count window shows the gap but asks nothing yet");
   check(t.includes("Count your other accounts too"), "it says to count the other accounts first");
   await page.click("#f-save"); await page.waitForTimeout(500);
   let d = JSON.parse((await stored(page)).local);
-  check(d.state.transactions.filter((x) => x.source === "reconciliation").length === 0 && d.settings.checkin_pending?.b?.counted === 140306, "a count with a gap is only kept for now: nothing is posted, the balance is untouched");
+  check(d.state.transactions.filter((x) => x.source === "reconciliation").length === 0 && d.settings.checkin_pending?.b?.counted === 140000, "a count with a gap is only kept for now: nothing is posted, the balance is untouched");
   t = (await text(page, "#screen")).replace(/\s+/g, " ");
-  check(t.includes("₱1,403.06") && t.includes("₱3,796.94 missing") && /what happened\?/i.test(t) && t.includes("Moved to another account of mine") && t.includes("I'll explain later"), "the Weekly review shows the gap beside the account and asks what happened");
+  check(t.includes("₱1,400.00") && t.includes("₱3,800.00 missing") && /what happened\?/i.test(t) && t.includes("Moved to another account of mine") && t.includes("I'll explain later"), "the Weekly review shows the gap beside the account and asks what happened");
   // 2. the second account makes the two gaps one proposed move
-  await save(page, "cash", "3796.94");
+  await save(page, "cash", "3800.00");
   t = (await text(page, "#screen")).replace(/\s+/g, " ");
-  check(/looks like a move/i.test(t) && t.includes("₱3,796.94 left Test Bank and arrived in Cash.") && !/what happened\?/i.test(t), "an exactly equal short and extra become ONE proposed move");
+  check(/looks like a move/i.test(t) && t.includes("₱3,800.00 left Test Bank and arrived in Cash.") && !/what happened\?/i.test(t), "an exactly equal short and extra become ONE proposed move");
   check(await page.locator('#screen button.primary[data-action="gap-move-confirm"]').count() === 1 && await page.locator('#screen button[data-action="gap-decide"]').count() === 0, "its button is the filled one; no other choice is offered for those two");
   await shot(page, "p04-proposed-move");
   await page.click('button[data-action="gap-move-confirm"]'); await seen(page, "#toast", "waits in Verify"); await page.waitForTimeout(500);
   d = JSON.parse((await stored(page)).local);
   const mv = d.state.transactions.find((x) => x.payee === "Moved (found at count)"), es = d.state.entries.filter((e) => e.transaction_id === mv?.id);
-  check(mv && mv.status === "draft" && es.some((e) => e.account_id === "b" && e.amount === -379694) && es.some((e) => e.account_id === "cash" && e.amount === 379694), "one draft move of 3,796.94 from the bank to Cash");
+  check(mv && mv.status === "draft" && es.some((e) => e.account_id === "b" && e.amount === -380000) && es.some((e) => e.account_id === "cash" && e.amount === 380000), "one draft move of 3,800.00 from the bank to Cash");
   check(d.state.checkIns.length === 2 && d.state.checkIns.every((c) => c.difference === 0) && !d.state.transactions.some((x) => x.source === "reconciliation") && !d.settings.checkin_pending?.b && !d.settings.checkin_pending?.cash, "both counts match: no gap entry, nothing left waiting");
   // 3. an unmatched gap: I'll explain later keeps it apart
-  await save(page, "b", "903.06");   // the ledger is 1,403.06 after the move: 500.00 missing
+  await save(page, "b", "900.00");   // the ledger is 1,400.00 after the move: 500.00 missing
   await page.click('button[data-action="gap-decide"][data-why="later"]'); await page.waitForTimeout(500);
   d = JSON.parse((await stored(page)).local);
   check(d.state.transactions.filter((x) => x.source === "reconciliation" && x.adjustment).length === 1 && d.settings.checkin_pending?.b === undefined, "I'll explain later holds it: balance corrected, not spending");
@@ -4269,7 +4269,7 @@ console.log("\n-- Count with a gap --");
   await shot(page, "p04-not-yet-explained");
   // 4. a count of most of the balance asks first
   await menuGo(page, "Weekly review");
-  await save(page, "cash", "0");   // Cash holds 3,796.94 after the move
+  await save(page, "cash", "0");   // Cash holds 3,800.00 after the move
   await page.click('button[data-action="gap-decide"][data-id="cash"][data-why="later"]');
   check(await seen(page, "#sheet", "This is most of the balance") && (await text(page, "#sheet")).includes("Did you move it, or mistype the count?"), "a count of 0 asks first: did you move it, or mistype the count?");
   await page.click('#sheet button[data-action="gap-change"]');
@@ -4287,7 +4287,7 @@ console.log("\n-- Count with a gap --");
   await page.click('#sheet button[data-action="explain-gap"]'); await seen(page, "#toast", "The gap is cleared"); await page.waitForTimeout(500);
   await menuGo(page, "Spending");
   t = (await text(page, "#screen")).replace(/\s+/g, " ");
-  check(t.includes("₱500.00 not verified yet") && !t.includes("Test Bank missing") && t.includes("Cash missing") && t.includes("₱3,796.94") && (t.match(/Not part of what you spent/g) ?? []).length === 1, "the 500.00 entry counts once (it waits in Verify); only the Cash gap of 3,796.94 is still not yet explained");
+  check(t.includes("₱500.00 not verified yet") && !t.includes("Test Bank missing") && t.includes("Cash missing") && t.includes("₱3,800.00") && (t.match(/Not part of what you spent/g) ?? []).length === 1, "the 500.00 entry counts once (it waits in Verify); only the Cash gap of 3,800.00 is still not yet explained");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 // ===== A cancelled count does not show as spent today =====
