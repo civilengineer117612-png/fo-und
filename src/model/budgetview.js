@@ -17,16 +17,19 @@ export const toNearest50 = (centavos) => Math.floor((centavos + 2500) / 5000) * 
 // Rounding up must never push the suggestion past the income. After every suggested line is rounded, any excess comes off the LARGEST unpinned "want"
 // line in 50-peso steps (then the next largest, and so on); with no want line left it comes off the largest unpinned spending line. Never the rent, never a
 // line the owner typed (pinned), never a saved line (goals and the buffer), never a fixed payment. What is still short after that is the owner's own doing.
+// limit: the engine's own total BEFORE rounding. Only what rounding added on top of it is trimmed: when the engine's lines already pass the income,
+// that shortage is real and stays Short; a need is never cut to hide it.
 // rows: [{category_id, name, amount, suggested, pinned, ...}]; others: [{amount}] fixed payments; saved: [{amount}]; roles: Map(category_id -> role).
-export function fitToIncome({ rows, others = [], saved = [], income, roles = new Map(), buckets = null }) {
+export function fitToIncome({ rows, others = [], saved = [], income, roles = new Map(), buckets = null, limit = 0 }) {
   const out = rows.map((r) => ({ ...r })), trimmed = [];
   const sum = (xs) => xs.reduce((n, x) => n + x.amount, 0), total = () => sum(out) + sum(others) + sum(saved);
   const isNeed = (r) => (buckets ? buckets.get(r.category_id) === "need" : NEEDS_ROLES.includes(roles.get(r.category_id))), isRent = (r) => roles.get(r.category_id) === "rent";
+  const ceiling = Math.max(income, limit);
   const cutFrom = (cands) => {
-    while (total() > income) {
+    while (total() > ceiling) {
       const c = cands.filter((r) => r.amount > 0).sort((a, b) => b.amount - a.amount || (a.name < b.name ? -1 : 1))[0];
       if (!c) return;
-      const take = Math.min(c.amount, Math.ceil((total() - income) / 5000) * 5000);
+      const take = Math.min(c.amount, Math.ceil((total() - ceiling) / 5000) * 5000);
       c.amount -= take; if (!c.pinned) c.suggested = c.amount;
       const t = trimmed.find((x) => x.category_id === c.category_id);
       if (t) t.by += take; else trimmed.push({ category_id: c.category_id, name: c.name, by: take });
@@ -126,7 +129,7 @@ export function suggestBudgets({ state, plan = null, pin = null, today, month, s
   const others = lines.filter((l) => !l.category_id && l.kind === "expense").map((l) => ({ name: l.name, amount: l.amount, reason: l.reason }));
   const saved = lines.filter((l) => l.kind === "goal" || l.kind === "buffer").map((l) => ({ name: l.name, kind: l.kind, amount: l.pinned ? l.amount : toNearest50(l.amount), reason: l.reason, ...(l.goal_id ? { goal_id: l.goal_id } : {}), ...(l.pinned ? { pinned: true } : {}) }));
   const roles = new Map(state.categories.map((c) => [c.id, c.role ?? guessType(c.name)]).filter(([, r]) => r));
-  const fit = fitToIncome({ rows, others, saved, income: income.amount, roles, buckets });
+  const fit = fitToIncome({ rows, others, saved, income: income.amount, roles, buckets, limit: r.paydays[0].total });
   return { ok: true, income, rows: fit.rows, others, saved, trimmed: fit.trimmed, unallocated: fit.unallocated, short: fit.short, history: r.history };
 }
 
