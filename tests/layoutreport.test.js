@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { maskText, maskedLayout, layoutReport, KNOWN_WORDS } from "../src/model/index.js";
@@ -45,4 +46,12 @@ test("a whole invented payroll PDF: its headings survive, its names and figures 
   for (const secret of ["Example", "Person", "17,000.00", "15,200.00", "12,000.00", "1,200.00", "2026", "Jan"]) assert.ok(!text.includes(secret), secret + " is hidden");
   assert.ok(!/[0-8]/.test(text.split("\n").slice(1).filter((l) => l && !/^Page \d+$/.test(l)).map((l) => l.replace(/^\d+:\s*/, "").replace(/\d+\/\d+ /g, "")).join("\n")), "no digit but 9 in any text");
   assert.ok(onlySafe(text.split("\n").slice(1).join("\n").replace(/Page \d+/g, "")), "only x's and known headings");
+});
+
+test("the screen copies only the masked report, made when the PDF is read, and only for a PDF", () => {
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8"), pdf = readFileSync(new URL("../app/pdftext.js", import.meta.url), "utf8");
+  assert.match(app, /layoutText: layout \? M\.layoutReport\(layout\) : ""/, "masked when the form opens: the raw pieces are not kept in the form");
+  assert.match(app, /case "copy-layout": \{[^]*?writeText\(ui\.form\.layoutText \?\? ""\)/, "what is copied is the masked text");
+  assert.match(app, /\$\{f\.layoutText \? `<p class="note small"><button class="link" data-action="copy-layout">Copy layout report/, "the link shows only when there is a report");
+  assert.match(pdf, /layout\.push\(items\)/); assert.match(pdf, /blob: await canvasBlob\(preview\), layout \}/);
 });

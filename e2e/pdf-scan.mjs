@@ -108,6 +108,17 @@ try {
     assert.equal(await page.locator(`[data-field="${field}"]`).inputValue(),expected);
   }
   assert.equal(await page.locator('#p-emp').inputValue(),'Example Employer Ltd');
+  // The layout report: one tap copies a skeleton of the PDF's text with every digit as 9 and every word that is not an app heading as x's; the real
+  // name, employer and figures never reach the clipboard.
+  await ctx.grantPermissions(['clipboard-read','clipboard-write'], { origin: new URL(base).origin });
+  await page.locator('[data-action="copy-layout"]').click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  assert.match(copied, /^LAYOUT REPORT/);
+  for (const heading of ['Gross','Summary','Earnings','Distribution','Amount']) assert.ok(copied.includes(heading), heading + ' is kept');
+  for (const secret of ['Example','Person','17,000.00','15,200.00','12,000.00','2,500.00','Jan','2026']) assert.ok(!copied.includes(secret), secret + ' never leaves the phone');
+  const body = copied.split('\n').filter(l => l && !/^(LAYOUT|Page )/.test(l)).map(l => l.replace(/^\d+:\s*/, '').replace(/(^|; )\d+\/\d+ /g, '$1')).join('\n');
+  assert.ok(!/[0-8]/.test(body), 'no digit but 9 in any text');
+  console.log('ok: Copy layout report copies a masked skeleton: headings and positions, no digit or name');
   const paid = page.locator('#sheet button[data-id="example-bank"]');
   if (!(await paid.isVisible())) await paid.locator('xpath=ancestor::div[@class="pick"][1]').locator('.pickrow').click();
   await paid.click();
