@@ -3,6 +3,7 @@
 import { validateShape } from "./schema.js";
 import { phTimestamp, deepEqual } from "./util.js";
 import { checkTransactionSave } from "./index.js";
+import { payslipDraftBlock } from "./income.js";
 
 // Drafts dated on or before `throughDate`, oldest first (older drafts never fall off the list).
 // Within a day they come in the order they were captured, so verifying follows the day as it happened.
@@ -19,6 +20,8 @@ export function verifyTransaction(state, transactionId, now = new Date()) {
   const fail = (code, message) => ({ ok: false, violations: [{ code, severity: "error", message }], transaction: null });
   if (!t) return fail("UNKNOWN_TRANSACTION", "no transaction " + transactionId);
   if (t.status === "verified") return fail("ALREADY_VERIFIED", transactionId + " is already verified");
+  const block = payslipDraftBlock(state, transactionId);   // a payslip kept as a draft becomes income only when its figures add up
+  if (block) return fail("PAYSLIP_DOES_NOT_ADD_UP", block.message);
   const verified = { ...t, status: "verified", verified_at: phTimestamp(now) };
   const shape = validateShape("Transaction", verified);
   return shape.length ? { ok: false, violations: shape, transaction: null } : { ok: true, violations: [], transaction: verified };

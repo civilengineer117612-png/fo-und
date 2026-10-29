@@ -120,21 +120,54 @@ try {
   assert.equal(saved.state.payslips[0].deposit,1520000);
   assert.equal(saved.v,seed.v);
   console.log('ok: the actual scan form saves reconciled earnings and deductions in the unchanged ledger format');
-  for (const [name, change] of [
-    ['gross',a=>{a.find(i=>i.y===640&&i.str==='17,000.00').str='18,000.00';}],
-    ['deductions',a=>{a.find(i=>i.y===580&&i.str==='100.00').str='200.00';}],
-    ['net',a=>{a.find(i=>i.y===640&&i.str==='15,200.00').str='15,300.00';}],
-    ['distribution',a=>{a.find(i=>i.y===345&&i.str==='15,200.00').str='15,100.00';}],
+  // A table that does not add up is never refused (owner, Oct 29): the form is filled with the best reading, the figure the arithmetic did not prove is
+  // marked "Check this" with the difference, and Save asks once and keeps the payslip as a DRAFT in Verify, never as verified income.
+  const ledgerNow = () => page.evaluate(() => JSON.parse(localStorage.getItem('financialTracker.ledger')));
+  const verifiedPay = (l) => l.state.transactions.filter(t => t.status === 'verified' && l.state.payslips.some(x => x.transaction_id === t.id)).length;
+  let month = 1;
+  for (const [name, change, field, reason, gap] of [
+    ['gross',a=>{a.find(i=>i.y===640&&i.str==='17,000.00').str='18,000.00';}, '#p-gross', 'earnings add up to 1,000.00 less than the printed gross', '\u20B11,000.00'],
+    ['deductions',a=>{a.find(i=>i.y===580&&i.str==='100.00').str='200.00';}, '#p-net', 'gross less deductions is 100.00 less than the printed net pay', '\u20B1100.00'],
+    ['net',a=>{a.find(i=>i.y===640&&i.str==='15,200.00').str='15,300.00';}, '#p-net', 'gross less deductions is 100.00 less than the printed net pay', '\u20B1100.00'],
+    ['distribution',a=>{a.find(i=>i.y===345&&i.str==='15,200.00').str='15,100.00';}, '#p-dep', 'the account received 100.00 less than the printed net pay', '\u20B1100.00'],
   ]) {
+    const before = await ledgerNow();
     await payrollScan({change});
-    await page.locator('#sheet [role="alert"]').waitFor();
-    assert.match(await page.locator('#sheet').innerText(),/Nothing was filled in/);
-    assert.equal(await page.locator('#f-save').count(),0);
-    assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('financialTracker.ledger')).state.payslips.length),1);
-    await page.locator('#sheet [data-action="close-sheet"]').last().click();
-    console.log(`ok: inconsistent ${name} is refused before a save form opens and the ledger is unchanged`);
+    await page.locator('#p-net').waitFor({state:'attached'});
+    assert.doesNotMatch(await page.locator('#sheet').innerText(),/Nothing was filled in/);
+    assert.equal(await page.locator('[data-field="e_basic"]').inputValue(),'12000.00', name + ': the lines are filled as read');
+    assert.equal(await page.locator('[data-field="d_tax"]').inputValue(),'600.00');
+    assert.ok(await page.locator(field).evaluate(el => el.classList.contains('chk')), name + ': the figure is outlined');
+    const mark = await page.locator(field.replace('#p-gross','#chk-gross').replace('#p-net','#chk-net').replace('#p-dep','#chk-deposit')).first();
+    assert.match(await mark.innerText(), new RegExp('Check this: ' + reason));
+    assert.ok(!(await page.locator('#sheet').innerHTML()).match(/color:\s*red|#[Ff]00|#[Cc]00/), 'never red');
+    month++; const m = String(month).padStart(2, '0');
+    await page.locator('#p-from').fill(`2026-${m}-01`); await page.locator('#p-to').fill(`2026-${m}-15`); await page.locator('#p-date').fill(`2026-${m}-16`);
+    const paid = page.locator('#sheet button[data-id="example-bank"]');
+    if (!(await paid.isVisible())) await paid.locator('xpath=ancestor::div[@class="pick"][1]').locator('.pickrow').click();
+    await paid.click();
+    assert.equal(await page.locator('#f-save').isDisabled(), false, name + ': Save stays available');
+    await page.locator('#f-save').click();
+    await page.locator('#p-ask').waitFor({state:'visible'});
+    assert.match(await page.locator('#p-askq').innerText(), new RegExp('The figures differ by ' + gap.replace('\u20B1','\u20B1') + '\\. Save as a draft to check later\\?'));
+    assert.equal((await ledgerNow()).state.payslips.length, before.state.payslips.length, 'asking saves nothing');
+    await page.locator('[data-action="save-payslip-draft"]').click();
+    await page.waitForFunction((n)=>JSON.parse(localStorage.getItem('financialTracker.ledger')).state.payslips.length===n, before.state.payslips.length + 1);
+    const after = await ledgerNow(), slip = after.state.payslips.at(-1), tx = after.state.transactions.find(t => t.id === slip.transaction_id);
+    assert.equal(tx.status, 'draft', name + ': kept as a draft'); assert.equal(tx.verified_at, undefined);
+    assert.equal(verifiedPay(after), verifiedPay(before), name + ': no verified income was created');
+    assert.equal(after.v, seed.v);
+    console.log(`ok: inconsistent ${name} fills the form, marks the figure, and Save keeps a draft (no verified income)`);
   }
-
+  // The draft waits in Verify: verifying it is refused while the figures differ; Edit opens the payslip window; once it adds up, Save makes it verified income.
+  { const l = await ledgerNow();
+    await page.locator('#nav [data-tab="verify"]').click();
+    const row = page.locator('#screen').getByText('Example Employer Ltd').first(); await row.waitFor();
+    await page.locator('#screen [data-action="verify-ok"]').first().click();
+    await page.waitForFunction(() => /still differ by/.test(document.getElementById('toast').innerText));
+    assert.equal(verifiedPay(await ledgerNow()), verifiedPay(l), 'verifying was refused: no payslip became verified');
+    console.log('ok: a payslip draft with figures that differ cannot be verified');
+  }
   const bankDomains = new Set(BANKS.flatMap((bank) => [bank.domain, ...(bank.alt ?? [])]));
   for (const request of external) {
     const host = new URL(request.url).hostname.replace(/^www\./, "");

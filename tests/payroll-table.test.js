@@ -34,13 +34,47 @@ test('distribution is read independently and employer/date labels stay separate'
   const r=read();assert.equal(r.deposit,1520000);assert.equal(r.employer,'Example Employer Ltd');
   assert.equal(r.pay_date,'2026-01-16');assert.equal(r.period_from,'2026-01-01');assert.equal(r.period_to,'2026-01-15');
 });
-for(const [label,change] of [
-  ['gross',a=>{a.find(i=>i.y===640&&i.str==='17,000.00').str='18,000.00';}],
-  ['deduction section',a=>{a.find(i=>i.y===640&&i.str==='1,200.00').str='1,100.00';a.find(i=>i.y===640&&i.str==='600.00').str='700.00';}],
-  ['net',a=>{for(const i of a.filter(i=>i.str==='15,200.00'))i.str='15,300.00';}],
-  ['distribution',a=>{a.find(i=>i.y===345&&i.str==='15,200.00').str='15,100.00';}],
-  ['malformed amount',a=>{a.find(i=>i.str==='12,000.00').str='12,OOO.OO';}],
-  ['missing section',a=>{a.find(i=>i.str==='Tax Deductions').str='Unclear heading';}],
-]) test(`reader refuses ${label} with a plain message and no guessed lines`,()=>{
-  const r=read({change});assert.match(r.error??'',/could not|do not|does not/i);assert.deepEqual(r.earnings,[]);assert.deepEqual(r.deductions,[]);
+// The reader never refuses a recognised table (owner, Oct 29): it fills its best reading and says what the arithmetic did not prove.
+// Hand-worked: earnings 12,000.00 + 2,500.00 + 2,500.00 = 17,000.00 (centavos 1700000); deductions 1,200.00 + 600.00 = 1,800.00; net 15,200.00.
+const flagOf = (r, field) => r.flags.filter(f => f.field === field).map(f => f.reason);
+test('a clean table is fully proven: no flags and no unread rows',()=>{
+  const r=read();assert.deepEqual(r.flags,[]);assert.deepEqual(r.unread,{earning:0,deduction:0});assert.equal(r.error,undefined);
+});
+test('a wrong printed gross is filled as printed and flagged with the difference',()=>{
+  const r=read({change:a=>{a.find(i=>i.y===640&&i.str==='17,000.00').str='18,000.00';}});
+  assert.equal(r.error,undefined);assert.equal(r.printed_gross,1800000);assert.equal(sum(r.earnings),1700000);
+  assert.deepEqual(flagOf(r,'gross'),['earnings add up to 1,000.00 less than the printed gross']);
+});
+test('a deduction section that differs from its printed total is flagged, the lines are kept',()=>{
+  const r=read({change:a=>{a.find(i=>i.y===640&&i.str==='1,200.00').str='1,100.00';a.find(i=>i.y===640&&i.str==='600.00').str='700.00';}});
+  assert.equal(sum(r.deductions),180000);assert.equal(r.printed_deductions,180000);
+  assert.deepEqual(flagOf(r,'deductions'),['the pre-tax deduction lines add up to 100.00 more than the printed total','the tax lines add up to 100.00 less than the printed total']);
+});
+test('a printed net that differs from gross less deductions is filled and flagged',()=>{
+  const r=read({change:a=>{for(const i of a.filter(i=>i.str==='15,200.00'))i.str='15,300.00';}});
+  assert.equal(r.printed_net,1530000);assert.equal(r.deposit,1530000);
+  assert.deepEqual(flagOf(r,'net'),['gross less deductions is 100.00 less than the printed net pay']);
+});
+test('a distribution that differs from the net is filled as read and flagged',()=>{
+  const r=read({change:a=>{a.find(i=>i.y===345&&i.str==='15,200.00').str='15,100.00';}});
+  assert.equal(r.printed_net,1520000);assert.equal(r.deposit,1510000);
+  assert.deepEqual(flagOf(r,'deposit'),['the account distribution is 100.00 less than the printed net pay']);
+});
+test('an unreadable earnings amount: every other field is filled, the row is counted, gross is flagged with the missing amount',()=>{
+  const r=read({change:a=>{a.find(i=>i.str==='12,000.00').str='12,OOO.OO';}});
+  assert.equal(r.error,undefined);assert.deepEqual(r.unread,{earning:1,deduction:0});
+  assert.equal(r.printed_gross,1700000);assert.equal(r.printed_net,1520000);assert.equal(r.deposit,1520000);assert.equal(sum(r.deductions),180000);
+  assert.equal(sum(r.earnings),500000);assert.equal(r.earnings.find(l=>l.kind==='basic'),undefined,'the unreadable line is not guessed');
+  assert.deepEqual(flagOf(r,'gross'),['earnings add up to 12,000.00 less than the printed gross']);
+});
+test('a missing section is said, the lines read are kept and the deduction totals are flagged',()=>{
+  const r=read({change:a=>{a.find(i=>i.str==='Tax Deductions').str='Unclear heading';}});
+  assert.equal(r.error,undefined);assert.equal(sum(r.earnings),1700000);
+  assert.ok(flagOf(r,'structure').some(x=>/taxes section was not found/.test(x)));
+  assert.ok(r.unread.deduction>=1,'the unclear heading row is counted as an unread row');
+  assert.ok(flagOf(r,'deductions').length>=1);
+});
+test('nothing the old refusal covered returns an error or empties the form',()=>{
+  const cases=[a=>{a.find(i=>i.y===640&&i.str==='17,000.00').str='18,000.00';},a=>{a.find(i=>i.str==='12,000.00').str='12,OOO.OO';},a=>{a.find(i=>i.str==='Tax Deductions').str='Unclear heading';}];
+  for(const change of cases){const r=read({change});assert.equal(r.error,undefined);assert.ok(r.earnings.length>0&&r.deductions.length>0&&r.printed_net>0&&r.deposit>0);}
 });
