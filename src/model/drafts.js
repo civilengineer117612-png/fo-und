@@ -67,8 +67,8 @@ export function discardDraft(state, id) {
 
 // Verifying a purchase also verifies its generated reserve transfer: that one is mechanical,
 // so you look at it once, as part of the purchase.
-export function verifyDraft(state, id, now = new Date()) {
-  const main = verifyTransaction(state, id, now);
+export function verifyDraft(state, id, now = new Date(), opts = {}) {
+  const main = verifyTransaction(state, id, now, opts);
   if (!main.ok) return { ok: false, violations: main.violations, state };
   const swap = new Map([[id, main.transaction]]);
   for (const partner of state.transactions.filter((x) => partnerIds(id).includes(x.id) && x.status === "draft")) {

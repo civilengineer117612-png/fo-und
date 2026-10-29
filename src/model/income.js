@@ -23,6 +23,11 @@ const fail = (code, message) => ({ ok: false, violations: [{ code, severity: "er
 const sameEmployer = (a, b) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
 // Bump when a fix changes what a saved payslip should hold. A payslip saved under an older version may carry wrong figures until it is saved again.
 export const PAYSLIP_VERSION = 2;
+// A payslip kept as a DRAFT (its checks did not pass, owner Oct 29) is not income yet: every figure below counts only payslips whose pay entry is verified.
+export const liveSlips = (state) => {
+  const draft = new Set(state.transactions.filter((t) => t.status === "draft").map((t) => t.id));
+  return (state.payslips ?? []).filter((p) => !draft.has(p.transaction_id));
+};
 export const linesOf = (state, payslipId) => (state.payslipLines ?? []).filter((l) => l.payslip_id === payslipId);
 export const payslipTotals = (lines) => {
   const earn = lines.filter((l) => l.side === "earning"), ded = lines.filter((l) => l.side === "deduction");
@@ -47,6 +52,22 @@ export function payslipChecks(payslip, lines) {
     else if (w !== payslip.printed_net) flags.push({ code: "WORDS", message: `The words say ${peso(w)} but the figures say ${peso(payslip.printed_net)}.` });
   }
   return flags;
+}
+
+// Everything that does not add up on a payslip, as flags, plus the gap in centavos for the one plain question "The figures differ by X".
+// The four checks above, and the printed deductions total against the lines. Empty means every figure is proven by the arithmetic.
+export function payslipProblems(payslip, lines) {
+  const flags = payslipChecks(payslip, lines), t = payslipTotals(lines);
+  if (payslip.printed_deductions > 0 && payslip.printed_deductions !== t.deductions) flags.push({ code: "DEDUCTIONS", message: `The printed deductions are ${peso(payslip.printed_deductions)} but the deduction lines add to ${peso(t.deductions)}.` });
+  const gaps = [payslip.printed_gross - t.gross, payslip.printed_net - t.net, payslip.deposit - payslip.printed_net, payslip.printed_deductions > 0 ? payslip.printed_deductions - t.deductions : 0];
+  return { flags, gap: Math.abs(gaps.find((g) => g !== 0) ?? 0) };
+}
+// A payslip kept as a draft cannot become verified income while its figures still do not add up, unless the owner says "Verify anyway" (then the deposit is the money in and the paper's difference stays as a note).
+export function payslipDraftBlock(state, transactionId) {
+  const p = (state.payslips ?? []).find((x) => x.transaction_id === transactionId);
+  if (!p) return null;
+  const { flags, gap } = payslipProblems(p, linesOf(state, p.id));
+  return flags.length ? { gap, message: "The payslip itself differs" + (gap ? " by " + peso(gap) : "") + "." } : null;
 }
 
 // Saves a payslip and the pay it brought: ONE verified entry for what arrived (copying a figure off paper is itself the
@@ -80,7 +101,9 @@ export function planPayslip(state, input, now = new Date()) {
 
   const stamp = phTimestamp(now), t = payslipTotals(lines);
   const overtime = Math.min(t.overtime, input.deposit);
-  const transaction = { id: input.transaction_id, date: input.pay_date, payee: employer, memo: "Payslip " + input.period_from + " to " + input.period_to, status: "verified", source: "manual", created_at: stamp, verified_at: stamp };
+  // Verified only when asked: a payslip whose checks fail is kept as a DRAFT (input.status "draft"), which waits in Verify and counts as no income yet.
+  const draft = input.status === "draft";
+  const transaction = { id: input.transaction_id, date: input.pay_date, payee: employer, memo: "Payslip " + input.period_from + " to " + input.period_to, status: draft ? "draft" : "verified", source: "manual", created_at: stamp, ...(draft ? {} : { verified_at: stamp }) };
   const entries = [
     { transaction_id: transaction.id, account_id: account.id, amount: input.deposit },
     ...(overtime > 0 ? [{ transaction_id: transaction.id, category_id: "cat-overtime", amount: -overtime }] : []),
@@ -151,7 +174,7 @@ export function incomeBySource(state, { from, to }) {
 export function incomeBreakdown(state, { from, to }) {
   const sources = incomeBySource(state, { from, to }), earn = new Map();
   let deductions = 0;
-  for (const p of state.payslips ?? []) {
+  for (const p of liveSlips(state)) {
     if (slipDate(p) < from || slipDate(p) > to) continue;
     for (const l of linesOf(state, p.id)) { if (l.side === "earning") earn.set(l.kind, (earn.get(l.kind) ?? 0) + l.amount); else deductions += l.amount; }
   }
@@ -176,7 +199,7 @@ export function incomeByMonth(state, year) {
 
 // One row per payslip in the year, oldest first: what arrived, split into base and overtime.
 export function netPerPayday(state, range) {
-  return (state.payslips ?? []).filter((p) => inRange(range, p)).sort((a, b) => a.pay_date.localeCompare(b.pay_date) || a.id.localeCompare(b.id)).map((p) => {
+  return liveSlips(state).filter((p) => inRange(range, p)).sort((a, b) => a.pay_date.localeCompare(b.pay_date) || a.id.localeCompare(b.id)).map((p) => {
     const t = payslipTotals(linesOf(state, p.id)), overtime = Math.min(t.overtime, p.deposit);
     return { payslip_id: p.id, date: p.pay_date, employer: p.employer, net: p.deposit, overtime, base: p.deposit - overtime };
   });
@@ -185,7 +208,7 @@ export function netPerPayday(state, range) {
 // Basic pay over time: each payslip's basic salary, and the change from the one before it.
 // With a year, only that year's payslips are listed, but each change is still measured against the payslip before it (even from an earlier year).
 export function raiseHistory(state, year = null) {
-  const rows = (state.payslips ?? []).slice().sort((a, b) => a.pay_date.localeCompare(b.pay_date) || a.id.localeCompare(b.id))
+  const rows = liveSlips(state).slice().sort((a, b) => a.pay_date.localeCompare(b.pay_date) || a.id.localeCompare(b.id))
     .map((p) => ({ date: p.pay_date, slip: slipDate(p), employer: p.employer, basic: sum(linesOf(state, p.id).filter((l) => l.side === "earning" && l.kind === "basic")) }))
     .filter((r) => r.basic > 0);
   return rows.map((r, i) => ({ ...r, change: i === 0 ? null : r.basic - rows[i - 1].basic, raised: i > 0 && r.basic > rows[i - 1].basic })).filter((r) => inRange(year, { period_to: r.slip }));
@@ -196,7 +219,7 @@ export function raiseHistory(state, year = null) {
 export function deductionsByMonth(state, range) {
   const zero = () => ({ tax: 0, sss: 0, philhealth: 0, pagibig: 0, absences: 0, lates: 0, loan: 0, other: 0 });
   const by = new Map();
-  for (const p of state.payslips ?? []) {
+  for (const p of liveSlips(state)) {
     if (!inRange(range, p)) continue;
     const m = by.get(monthOf(slipDate(p))) ?? zero();
     for (const l of linesOf(state, p.id)) if (l.side === "deduction") m[l.kind] += l.amount;
@@ -211,7 +234,7 @@ export function deductionsByMonth(state, range) {
 // Employers in the order they were worked for: first and last pay date, and how many payslips.
 export function employerHistory(state, range = null) {
   const by = new Map();
-  for (const p of state.payslips ?? []) {
+  for (const p of liveSlips(state)) {
     if (!inRange(range, p)) continue;
     const e = by.get(p.employer) ?? { employer: p.employer, first: p.pay_date, last: p.pay_date, payslips: 0 };
     e.first = e.first < p.pay_date ? e.first : p.pay_date; e.last = e.last > p.pay_date ? e.last : p.pay_date; e.payslips += 1;
@@ -258,6 +281,8 @@ export const revisionsOf = (state, payslipId) => (state.payslipRevisions ?? []).
 export function payslipNotes(state, p) {
   const out = [], gap = Math.round((Date.parse(p.pay_date + "T00:00:00Z") - Date.parse(p.period_to + "T00:00:00Z")) / 86400000);
   if (gap > 7) out.push("Pay date is " + gap + " days after period end.");
+  const paper = payslipProblems(p, linesOf(state, p.id));   // a payslip whose paper does not add up keeps this note for good, even after "Verify anyway"
+  if (paper.flags.some((f) => f.code !== "DEDUCTIONS")) out.push("Paper differs by " + (paper.gap ? peso(paper.gap) : "the amount in words") + ".");   // a deductions-only difference has its own line below
   if (p.printed_deductions > 0) {
     const diff = p.printed_deductions - payslipTotals(linesOf(state, p.id)).deductions;
     out.push(diff === 0 ? "Lines match paper." : "Lines differ from paper by " + peso(Math.abs(diff)) + ".");
@@ -270,7 +295,7 @@ export function payslipNotes(state, p) {
 // (some month holds two). A period counts from the first payslip on, and only once it ended more than a week ago (pay arrives after the period).
 // A payslip belongs to the half of its period end. Returns [{from, to}] oldest first, limited to `range` (see inRange).
 export function missingPayPeriods(state, range, today) {
-  const slips = state.payslips ?? [], half = (d) => monthOf(d) + (Number(d.slice(8)) <= 15 ? "-a" : "-b");
+  const slips = liveSlips(state), half = (d) => monthOf(d) + (Number(d.slice(8)) <= 15 ? "-a" : "-b");
   const have = new Set(slips.map((p) => half(slipDate(p))));
   const twice = slips.some((p) => have.has(monthOf(slipDate(p)) + "-a") && have.has(monthOf(slipDate(p)) + "-b"));
   if (!slips.length || !twice) return [];

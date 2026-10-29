@@ -79,6 +79,14 @@ test("money in that equals a payslip's deposit near its pay date is the payslip 
   assert.equal(matchPayslips(off).length, 0, "a different amount is not a match");
 });
 
+test("a payslip kept as a draft is not income arriving, so no money in is matched to it", () => {
+  let s = keep(base(), "bk", stmt([line("2023-03-15", "Employer pay", 2500000, "in", 2500000, "in")], 0), 1);
+  const slip = { id: "ps1", employer: "Sample Employer", period_from: "2023-03-01", period_to: "2023-03-15", pay_date: "2023-03-15", account_id: "bk", transaction_id: "t-ps1", printed_gross: 3000000, printed_net: 2500000, deposit: 2500000 };
+  assert.equal(matchPayslips({ ...s, payslips: [slip] }).length, 1, "a verified payslip matches");
+  const draft = { ...s, payslips: [slip], transactions: [...s.transactions, { id: "t-ps1", date: "2023-03-15", payee: "Sample Employer", memo: "", status: "draft", source: "manual", created_at: "2023-03-15T09:00:00+08:00" }] };
+  assert.equal(matchPayslips(draft).length, 0);
+});
+
 test("one arrival is claimed by ONE send, even when two identical sends could fit it; the other stays alone", () => {
   const w = stmt([line("2023-02-01", "Sent GCash to Test Bank ending 2222", 100000, "out", 50000, "unsure", { last4: "2222" }), line("2023-02-01", "Sent GCash to Test Bank ending 2222", 100000, "out", 40000, "unsure", { last4: "2222" })], 150000);
   const r = pairMoves(both(w, BANK()));
