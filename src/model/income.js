@@ -282,7 +282,7 @@ export function payslipNotes(state, p) {
   const out = [], gap = Math.round((Date.parse(p.pay_date + "T00:00:00Z") - Date.parse(p.period_to + "T00:00:00Z")) / 86400000);
   if (gap > 7) out.push("Pay date is " + gap + " days after period end.");
   const paper = payslipProblems(p, linesOf(state, p.id));   // a payslip whose paper does not add up keeps this note for good, even after "Verify anyway"
-  if (paper.flags.length) out.push("Paper differs by " + (paper.gap ? peso(paper.gap) : "the amount in words") + ".");
+  if (paper.flags.some((f) => f.code !== "DEDUCTIONS")) out.push("Paper differs by " + (paper.gap ? peso(paper.gap) : "the amount in words") + ".");   // a deductions-only difference has its own line below
   if (p.printed_deductions > 0) {
     const diff = p.printed_deductions - payslipTotals(linesOf(state, p.id)).deductions;
     out.push(diff === 0 ? "Lines match paper." : "Lines differ from paper by " + peso(Math.abs(diff)) + ".");
