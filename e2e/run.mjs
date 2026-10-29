@@ -4354,6 +4354,112 @@ console.log("\n-- Cancelled count and Spent today --");
   check(/spent today/i.test(t) && t.includes("\u20B10.00") && !t.includes("11,000.00"), "a cancelled count that found 11,000.00 shows nothing as spent today");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
+// ===== Replacing the ledger keeps a safety copy first, and it can be put back =====
+console.log("\n-- Restore safety copy --");
+{ const { upgradeLedger, encryptLedgerBackup } = await import("../src/model/index.js");
+  const TSR = "2026-10-01T09:00:00.000+08:00", PASSR = "correct horse battery";
+  // Invented. A (the phone now): Food 150.00, Transport 45.00, Rent 3,000.00. B (an older backup): Food 150.00, Transport 45.00.
+  const ALL = [["food", "Food", "cat-food", 15000], ["transport", "Transport", "cat-essentials", 4500], ["rent", "Rent", "cat-rent", 300000]];
+  const mk = (n) => { const cash = { id: "cash", name: "Test Cash", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-09-01" };
+    const transactions = [], entries = [];
+    for (const [id, payee, cat, amount] of ALL.slice(0, n)) { transactions.push({ id: "t-" + id, date: "2026-10-01", payee, memo: "", status: "verified", source: "manual", created_at: TSR, verified_at: TSR });
+      entries.push({ transaction_id: "t-" + id, category_id: cat, amount }, { transaction_id: "t-" + id, account_id: "cash", amount: -amount }); }
+    return { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [cash], transactions, entries } }; };
+  const up = upgradeLedger(mk(2)); if (!up.ok) throw new Error("test ledger B: " + up.error);
+  const fileB = join(mkdtempSync(join(tmpdir(), "rb-")), "finance-backup-b.json"); writeFileSync(fileB, JSON.stringify(await encryptLedgerBackup(up.ledger, PASSR)));
+  const copiesOf = (page) => page.evaluate(async () => {
+    const ls = (k) => { try { return JSON.parse(localStorage.getItem(k) ?? "null"); } catch { return null; } };
+    const db = await new Promise((res, rej) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const get = (key) => new Promise((res) => { const g = db.transaction("safety").objectStore("safety").get(key); g.onsuccess = () => res(g.result ?? null); g.onerror = () => res(null); });
+    const out = { lsRestore: ls("financialTracker.restorecopy"), lsPre: ls("financialTracker.preupgrade"), idbRestore: await get("restore-copies"), idbPre: await get("copies") };
+    db.close(); return out; });
+  const ids = (l) => l.state.transactions.map((t) => t.id).sort().join(",");
+  const startRestore = async (page, pass = PASSR) => { await menuGo(page, "Setup"); await page.click('button:has-text("Restore from a backup")'); await page.setInputFiles("#r-file", fileB); await page.fill("#r-pass", pass); await page.click('button:has-text("Open backup")'); };
+
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: mk(3) }));
+  await menuGo(page, "Setup");
+  const aBefore = JSON.parse((await stored(page)).local);
+  check(aBefore.state.transactions.length === 3, "the phone holds A: three entries");
+  const pre0 = await copiesOf(page);
+  check(pre0.lsRestore === null && pre0.idbRestore === null, "no restore copy exists yet");
+  check((await page.locator('button[data-action="undo-restore"]').count()) === 0, "and Setup shows no Undo line while there is none");
+
+  // a wrong passphrase: refused, nothing changed, no copy made
+  await startRestore(page, "a different passphrase");
+  check(await seen(page, "#sheet", "Wrong passphrase, or the file is damaged"), "a wrong passphrase is refused plainly");
+  { const c = await copiesOf(page); check(c.lsRestore === null && c.idbRestore === null && JSON.parse((await stored(page)).local).state.transactions.length === 3, "and no copy was made and the ledger is unchanged"); }
+  await page.click('#sheet button:has-text("Cancel")');
+
+  // the copy cannot be saved: the restore stops, the ledger stays
+  await page.evaluate(() => { const put = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function (v, k) { if (k === "restore-copies") throw new Error("storage full"); return put.call(this, v, k); };
+    const set = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (k === "financialTracker.restorecopy") throw new Error("quota"); return set.call(this, k, v); }; });
+  await startRestore(page); await page.click("#f-save"); await page.click("#f-save");
+  check(await seen(page, "body", "safety copy of it could not be saved"), "a copy that cannot be saved stops the restore and says so plainly");
+  check(JSON.parse((await stored(page)).local).state.transactions.length === 3, "the ledger is exactly as it was");
+  await page.reload(); await page.waitForSelector("#nav button");   // the breakage was only in that page
+
+  // the copy does not read back the same: the restore stops too
+  await page.evaluate(() => { const put = IDBObjectStore.prototype.put; IDBObjectStore.prototype.put = function (v, k) { return put.call(this, k === "restore-copies" ? [] : v, k); };
+    const set = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { return set.call(this, k, k === "financialTracker.restorecopy" ? "[]" : v); }; });
+  await startRestore(page); await page.click("#f-save"); await page.click("#f-save");
+  check(await seen(page, "body", "did not match when it was read back"), "a copy that does not read back the same stops the restore");
+  check(JSON.parse((await stored(page)).local).state.transactions.length === 3, "and the ledger is exactly as it was");
+  await page.reload(); await page.waitForSelector("#nav button");
+
+  // the real restore of B
+  const before = JSON.parse((await stored(page)).local);
+  await startRestore(page);
+  check(await seen(page, "#sheet", "Replace this phone's data?"), "the right file shows what will be replaced");
+  await page.click("#f-save"); check((await text(page, "#sheet")).includes("Tap again to replace"), "replacing still asks for a second tap");
+  await Promise.all([page.waitForNavigation(), page.click("#f-save")]);
+  await page.waitForSelector("#nav button");
+  check(await seen(page, "#sheet", "Your data was replaced") && (await text(page, "#sheet")).includes("Kept from before") && (await text(page, "#sheet")).includes("1 account, 3 entries"), "after the restore a window says the old data is kept");
+  check(await page.locator('#sheet button[data-action="put-back"]').count() === 1 && await page.locator('#sheet button.primary').innerText() === "Got it", "with Put it back as the plain button and Got it as the filled one");
+  await shot(page, "p03-replaced-window");
+  const now = JSON.parse((await stored(page)).local);
+  check(ids(now) === "t-food,t-transport", "the ledger is B: two entries");
+  const c1 = await copiesOf(page);
+  check(c1.idbRestore?.length === 1 && c1.lsRestore?.length === 1, "one restore copy, in both stores");
+  { const kept = JSON.parse(c1.idbRestore[0].text); check(JSON.stringify(kept.state) === JSON.stringify(before.state) && kept.v === before.v, "the copy is A to the last field: every entry and centavo"); }
+  check(JSON.stringify(c1.idbPre) === JSON.stringify(pre0.idbPre) && JSON.stringify(c1.lsPre) === JSON.stringify(pre0.lsPre), "the copies from before an update were not touched");
+  check(JSON.stringify(c1.idbRestore) !== JSON.stringify(c1.idbPre), "the restore copy lives apart from them");
+  await page.click('#sheet button:has-text("Got it")');
+  await page.reload(); await page.waitForSelector("#nav button");
+  check(!(await page.locator("#sheet .sheet").count() ? await text(page, "#sheet") : "").includes("Your data was replaced"), "the window does not come back at the next start");
+  while (await page.locator("#sheet button.primary").count()) await page.click("#sheet button.primary");   // the What's new window it held back, if the backup's settings call for one
+  await menuGo(page, "Setup");
+  check(await seen(page, "#screen", "Undo last restore"), "Setup now offers one plain line: Undo last restore");
+  await shot(page, "p03-setup-undo-line");
+
+  // put it back (from Setup): asks twice, then A is back exactly and B is kept
+  await page.click('button[data-action="undo-restore"]'); check((await text(page, "#screen")).includes("Tap again to put back"), "the Setup line asks for a second tap");
+  await Promise.all([page.waitForNavigation(), page.click('button[data-action="undo-restore"]')]); await page.waitForSelector("#nav button");
+  check(await seen(page, "#sheet", "Put back"), "a window says it is put back");
+  { const back = JSON.parse((await stored(page)).local);
+    check(JSON.stringify(back.state) === JSON.stringify(before.state), "the ledger is A again, to the last field");
+    const c2 = await copiesOf(page);
+    check(c2.idbRestore.length === 2 && ids(JSON.parse(c2.idbRestore[0].text)) === "t-food,t-transport", "and B is kept as the newest copy, so putting back can be undone");
+    await page.click('#sheet button:has-text("Got it")'); }
+
+  // restore twice more: never more than two copies, and the update copies are still untouched
+  for (let i = 0; i < 2; i++) { await startRestore(page); await page.click("#f-save"); await Promise.all([page.waitForNavigation(), page.click("#f-save")]); await page.waitForSelector("#nav button");
+    if (await page.locator('#sheet button:has-text("Got it")').count()) await page.click('#sheet button:has-text("Got it")');
+    if (i === 0) { await menuGo(page, "Setup"); await page.click('button[data-action="undo-restore"]'); await Promise.all([page.waitForNavigation(), page.click('button[data-action="undo-restore"]')]); await page.waitForSelector("#nav button"); if (await page.locator('#sheet button:has-text("Got it")').count()) await page.click('#sheet button:has-text("Got it")'); } }
+  { const c3 = await copiesOf(page); check(c3.idbRestore.length === 2 && c3.lsRestore.length === 2, "after more restores only the last two copies are kept");
+    check(JSON.stringify(c3.idbPre) === JSON.stringify(pre0.idbPre), "and the copies from before an update are still exactly as they were"); }
+
+  // the old "copy from before the last update" now keeps a safety copy too
+  await menuGo(page, "Setup");
+  if (await page.locator('button[data-action="restore-copy"][data-id="0"]').count()) {
+    const beforeUp = JSON.parse((await stored(page)).local);
+    await page.click('button[data-action="restore-copy"][data-id="0"]');
+    await Promise.all([page.waitForNavigation(), page.click('button[data-action="restore-copy"][data-id="0"]')]); await page.waitForSelector("#nav button");
+    const c4 = await copiesOf(page);
+    check(c4.idbRestore[0] && JSON.stringify(JSON.parse(c4.idbRestore[0].text).state) === JSON.stringify(beforeUp.state) && c4.idbRestore.length === 2, "restoring the copy from before an update first keeps what is on the phone");
+    check(await seen(page, "#sheet", "Your data was replaced"), "and says so, with the way back"); }
+  else check(false, "the copy from before the last update is offered");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : "")); await ctx.close(); }
+
 // ===== A line repeated inside one picture or file is left out until asked for =====
 console.log("\n-- Repeated lines --");
 { const acc = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-04-01" };

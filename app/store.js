@@ -4,9 +4,10 @@
 let LS_KEY = "financialTracker.ledger", DB_NAME = "financialTracker";
 const STORE = "kv", KEY = "ledger", PHOTOS = "photos", SAFETY = "safety";
 let COPIES_KEY = "financialTracker.preupgrade";   // the copies kept from before an upgrade (see model/migrate.js)
+let RESTORE_KEY = "financialTracker.restorecopy";   // the copies kept from before a restore (see model/restorecopy.js): a list of their own, never mixed with the one above
 
 // A trial copy keeps everything under other names, so it can never touch (or be mistaken for) a real ledger.
-export function useTrialStorage() { LS_KEY = "financialTracker.trial.ledger"; COPIES_KEY = "financialTracker.trial.preupgrade"; DB_NAME = "financialTracker-trial"; }
+export function useTrialStorage() { LS_KEY = "financialTracker.trial.ledger"; COPIES_KEY = "financialTracker.trial.preupgrade"; DB_NAME = "financialTracker-trial"; RESTORE_KEY = "financialTracker.trial.restorecopy"; }
 export async function clearTrialStorage() {
   if (!DB_NAME.endsWith("-trial")) return;   // only ever the trial copy
   try { localStorage.removeItem(LS_KEY); } catch { /* nothing to remove */ }
@@ -95,19 +96,25 @@ async function idbCopies(mode, run) {
     });
   } finally { db.close(); }
 }
-export async function readCopies() {
+// One list of copies under a localStorage name and an IndexedDB key: written to both, read from whichever holds more.
+async function readList(lsKey, idbKey) {
   let a = [], b = [];
-  try { a = JSON.parse(localStorage.getItem(COPIES_KEY) ?? "[]"); } catch { a = []; }
-  try { b = (await idbCopies("readonly", (st) => st.get("copies"))) ?? []; } catch { b = []; }
+  try { a = JSON.parse(localStorage.getItem(lsKey) ?? "[]"); } catch { a = []; }
+  try { b = (await idbCopies("readonly", (st) => st.get(idbKey))) ?? []; } catch { b = []; }
   const ok = (x) => (Array.isArray(x) ? x.filter((c) => c && typeof c.text === "string") : []);
   return ok(b).length >= ok(a).length ? ok(b) : ok(a);
 }
-export async function writeCopies(copies) {
+async function writeList(lsKey, idbKey, copies) {
   const result = { local: false, idb: false };
-  try { localStorage.setItem(COPIES_KEY, JSON.stringify(copies)); result.local = true; } catch { /* reported below */ }
-  try { await idbCopies("readwrite", (st) => st.put(copies, "copies")); result.idb = true; } catch { /* reported below */ }
+  try { localStorage.setItem(lsKey, JSON.stringify(copies)); result.local = true; } catch { /* reported below */ }
+  try { await idbCopies("readwrite", (st) => st.put(copies, idbKey)); result.idb = true; } catch { /* reported below */ }
   return result;
 }
+export const readCopies = () => readList(COPIES_KEY, "copies");
+export const writeCopies = (copies) => writeList(COPIES_KEY, "copies", copies);
+// The copies kept from before a restore: the ledger as it was, the last two.
+export const readRestoreCopies = () => readList(RESTORE_KEY, "restore-copies");
+export const writeRestoreCopies = (copies) => writeList(RESTORE_KEY, "restore-copies", copies);
 
 // Claim once per browser storage bucket, in the existing database (no ledger
 // field/version change). An IndexedDB transaction also serializes other tabs.
