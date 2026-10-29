@@ -38,7 +38,7 @@ test catches it. That careful work happens in the build agent, so that is where 
 7. The build agent builds, tests, mutation-checks, opens the PR, and replies with the report (PART 4).
 8. The report always ends with a box "PASTE TO PROJECT CHAT", or with the line "Nothing to paste to the project chat."
    The owner pastes the box into the project chat only when there is one.
-9. Merging: see the merge rule in PART 5.
+9. Merging: the build agent merges on two green checks, except a migration or a backup/restore change (merge rule in PART 5).
 
 The build agent may fix a bug it finds on the way WITHOUT going through the project chat only when ALL of these hold:
 it is a real defect (a wrong figure, lost data, a broken screen), it is reproduced by a failing test first, the fix changes no
@@ -128,13 +128,15 @@ Building and checking
   charts, plain short words, no row tints, tone firm never harsh.
 
 Merging and deploying
-- Merge rule (owner, Oct 23; replaces the Oct 15 standing permission until the owner confirms "e2e" is a required check in the
-  ruleset): the build agent merges ONLY when the owner says so, either "Merge PR n" or an explicit "merge them once green" in the
-  request, and only when BOTH checks (test and e2e) are green on the PR's current head. Never on red.
+- Merge rule (owner, Oct 29): the build agent merges a PR itself as soon as BOTH checks (test and e2e) are green on the PR's
+  current head; never on red, never before the checks have run. Two kinds wait for the owner's "Merge PR n": a data migration
+  (`LEDGER_VERSION` or the shape of saved data changes; the owner makes a fresh backup first) and anything touching backup or restore.
+  Visible changes are already held by the preview rule (the owner's yes comes before building). GitHub's own auto-merge stays off
+  while only "test" is a required check, because it would merge before e2e has run.
 - After a merge, the other open PRs are brought up to date (merge main in, keep both What's new lines) and their checks run again.
 - Deploys happen only through the GitHub Pages workflow on merge. No deploy by hand, no Vercel, no other host.
-- No scheduled checks or routines. Waiting for CI: the GitHub app should send the events; while it cannot (see Owner-only actions),
-  the build agent may wait with a short timer only when the owner asked it to merge once green, and says so.
+- No scheduled checks or routines. Waiting for CI to merge: the GitHub app should send the events; while it cannot (see Owner-only
+  actions), the build agent waits with short timers and says so.
 
 How the owner wants to be talked to
 - Plain, short words; a one-line explanation for any jargon; no emojis; formal but human; direct, no praise.

@@ -25,7 +25,7 @@ payslips, account numbers or balances, and never ship brand logos (account pictu
   `python3 -m http.server 8124` first). A new file under `src/model/` must also be added to the list in `app/sw.js`;
   a test enforces it.
 - After writing a check, break the code on purpose and confirm the check fails (mutation check).
-- Deploys happen on merge to `main` (GitHub Pages). MERGE RULE (owner, Oct 23; the Oct 15 standing permission is SUSPENDED until the owner confirms "e2e" is a required check): merge a PR ONLY when the owner says so ("Merge PR n", or "merge them once green" in the request) and BOTH CI checks (test and e2e) are green on its head; never on red; say what was merged afterwards (with the Backlog). Everything else that is outward-facing still needs the owner's yes.
+- Deploys happen on merge to `main` (GitHub Pages). MERGE RULE (owner, Oct 29): merge a PR yourself as soon as BOTH CI checks (test and e2e) are green on its CURRENT head, never on red, never before the checks have run. EXCEPTIONS that wait for the owner's "Merge PR n": a data migration (any change to `LEDGER_VERSION` or the shape of saved data: the owner makes a fresh backup first) and anything touching backup or restore. Say what was merged afterwards (with the Backlog). GitHub's own auto-merge stays OFF while only "test" is a required check (it would merge before e2e). Everything else that is outward-facing still needs the owner's yes.
 
 ## How the owner wants to work
 - FIXED DECISION (owner, no budget): the app stays free. Never add a paid or AI service, an API key, or a button that sends a
