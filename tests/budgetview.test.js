@@ -250,3 +250,21 @@ test("end to end: suggestions that round up past the income are brought back und
   }
   assert.ok(found >= 1, "at least one of these incomes needed the fix");
 });
+
+// Invented: pay of 12,000 a month, 6,000 on food and 8,000 rent every month. The needs alone pass the income, so the suggestion is SHORT.
+// Before this fix the trim meant for rounding cut Food and Fun until the shortage disappeared and called it rounding.
+test("a real shortage stays Short: only what rounding added is trimmed, never a need cut to hide it", () => {
+  const s = base();
+  for (const m of M6) { slip(s, m + "-28", 1200000); logMonth(s, m); }
+  const r = sug(s);
+  assert.equal(r.ok, true);
+  const plan = suggestPlan({ state: s, paydays: [{ id: "month", label: "Month", day: 1 }], income: [1200000], today: TODAY, month: MONTH }).paydays[0];
+  const engine = new Map(plan.lines.filter((l) => l.category_id).map((l) => [l.category_id, l.amount]));
+  assert.ok(plan.short > 0, "the engine itself says the lines pass the income");
+  for (const x of r.rows.filter((y) => engine.has(y.category_id))) assert.ok(x.amount >= engine.get(x.category_id) - 2500, `${x.name} keeps the engine's figure (within rounding)`);
+  assert.ok(r.short >= plan.short - 2500 * (r.rows.length + r.saved.length), "the shortage is shown, not hidden");
+  const t = r.rows.reduce((a, x) => a + x.amount, 0) + r.others.reduce((a, x) => a + x.amount, 0) + r.saved.reduce((a, x) => a + x.amount, 0);
+  assert.equal(t + r.unallocated, 1200000, "the lines and Unallocated (negative when short) are the income exactly");
+  assert.equal(r.short, t - 1200000, "Short is exactly how far the lines pass the income");
+  for (const x of r.trimmed) assert.ok(x.by <= 5000 * r.rows.length, `${x.name} is only trimmed by rounding`);
+});

@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-10-29-budget-short", date: "2026-10-29", text: "Fixed: Suggest a budget no longer lowers Food or other needs to hide a shortage; it now says how much the suggestion is over your pay." },
   { id: "2026-10-23-storage-protection", date: "2026-10-23", text: "After a successful save, the app asks once for protected storage; Setup shows the browser’s current answer." },
   { id: "2026-10-23-payroll-tables", date: "2026-10-23", text: "Payslip PDF tables now include all earnings and check each deduction total and net pay before filling the form." },
   { id: "2026-10-22-spending-details", date: "2026-10-22", text: "Tap a Category or Accounts row in Spending to see the entries behind its total for the selected period." },

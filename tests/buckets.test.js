@@ -171,7 +171,7 @@ test("starter: the targets set the pools, with the rent typed first and the buff
 test("the buckets reach the screens: the Budget block, the question, and the settings keys", () => {
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8"), sw = readFileSync(new URL("../app/sw.js", import.meta.url), "utf8");
   const bv = readFileSync(new URL("../src/model/budgetview.js", import.meta.url), "utf8");
-  assert.match(bv, /fitToIncome\(\{ rows, others, saved, income: income\.amount, roles, buckets \}\)/, "the trimming reads the same buckets as the suggestion");
+  assert.match(bv, /fitToIncome\(\{ rows, others, saved, income: income\.amount, roles, buckets, limit: r\.paydays\[0\]\.total \}\)/, "the trimming reads the same buckets as the suggestion");
   assert.match(sw, /buckets\.js/);
   assert.match(app, /bucket_overrides/); assert.match(app, /bucket_targets/);
   assert.match(app, /overrides: set\.bucket_overrides/); assert.match(app, /targets: set\.bucket_targets/);
