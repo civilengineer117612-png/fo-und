@@ -3,6 +3,8 @@
 TWO CHATS (owner, Oct 29): ideas and decisions live in a claude.ai PROJECT CHAT; this repo's session is the BUILD AGENT. How they hand work to each
 other, the task and report templates, the current backlog and the merge rule are in `docs/WORKFLOW.md`: read it first. Every report ends with a
 "PASTE TO PROJECT CHAT" box, or the line "Nothing to paste to the project chat."
+EFFORT CHECK: before building, and whenever the work turns out to be money math, a migration, statements or payslips, backup or restore,
+data loss or a bug hunt, STOP unless the prompt says high effort or Opus is set: "This is a HIGH task: switch to Opus or high effort, then say Go."
 
 Personal finance app for one owner. A web app installed to the iPhone Home Screen. The ledger lives ONLY on that
 iPhone (local-first, no server, no sync). This repository is PUBLIC: never commit real financial data, screenshots,

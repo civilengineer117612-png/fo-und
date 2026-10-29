@@ -23,6 +23,11 @@ When the build agent should run at HIGH effort or on Opus (the project chat says
 money math (balances, budgets, goals, cards, reports), a data migration, statement or payslip reading, backup and restore,
 anything that can lose data, and any bug hunt. Everything else (wording, layout, docs, small tests): medium.
 
+Effort check (owner, Oct 29): the build agent cannot see its own effort setting, so it judges by the TASK. At Step 0, and again
+whenever a task turns out to touch one of the HIGH kinds above, it STOPS if the prompt does not say high effort or Opus is already
+set, and replies with one line: "This is a HIGH task: switch to Opus or high effort, then say Go." It checks the kind of work, not
+only the label, so a money task marked "medium" is still caught.
+
 Why: bugs in this app are found by reading the money code, reproducing the bug, and then breaking the fix on purpose to prove the
 test catches it. That careful work happens in the build agent, so that is where the effort goes when the stakes are money.
 
