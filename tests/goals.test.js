@@ -177,3 +177,24 @@ test("shares on one account cannot pass 100%", () => {
   assert.equal(ok.ok, true);
   assert.deepEqual(ok.state.goals.map((g) => goalProgress(ok.state, g).balance), [60000, 40000]);
 });
+
+// Invented: a goal with its own typed share is moved onto an account where another goal already has one, and the two pass 100%.
+// The account is never counted more than once: the parts are scaled down so the goals add up to what the account holds.
+test("typed shares that pass 100% after a goal moves never count the account twice", () => {
+  const s = shared({ share_bps: 8000 }, { share_bps: 8000 });
+  const parts = s.goals.map((g) => goalProgress(s, g).balance);
+  assert.deepEqual(parts, [50000, 50000]);
+  assert.equal(parts[0] + parts[1], 100000);
+});
+test("moving a goal with a share onto a shared account keeps the total at what the account holds", () => {
+  const s = shared({ share_bps: 7000 }); s.accounts.push(acc({ id: "other", name: "Test Other", class: "asset", opening_balance: 0 }));
+  s.goals = [s.goals[0], { ...s.goals[1], account_id: "other", share_bps: 9000 }];
+  const moved = setGoalAccount(s, "g2", "goalacct");
+  assert.equal(moved.ok, true);
+  const sum = moved.state.goals.reduce((n, g) => n + goalProgress(moved.state, g).balance, 0);
+  assert.equal(sum, 100000);
+});
+test("scaled parts that do not divide evenly still add up to the whole account", () => {
+  const s = shared({ share_bps: 4000 }, { share_bps: 4000 }); s.goals.push(goal({ id: "g3", name: "Test Three", share_bps: 4000 }));
+  assert.equal(s.goals.reduce((n, g) => n + goalProgress(s, g).balance, 0), 100000);
+});
