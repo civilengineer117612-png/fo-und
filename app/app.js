@@ -2115,16 +2115,41 @@ const countedThisWeek = (accountId) => {
 const surveyThisWeek = () => S().surveyResponses.find((r) => r.id === "survey:" + thisWeek().week_start) ?? null;
 const differenceText = (d, card = false) => d === 0 ? "Matches the ledger" : card ? "owes " + peso(Math.abs(d)) + (d < 0 ? " less" : " more") + " than logged" : d < 0 ? peso(-d) + " missing" : peso(d) + " more than logged";   // a card counts what is owed: less owed is not money missing
 
+// Every gap side by side, after the accounts are counted (owner, Oct 29). Money that left one own account and arrived in another by exactly the same amount is ONE proposed move.
+const proposedMoves = () => {
+  const gaps = [];
+  for (const [id, r] of Object.entries(pendingCounts())) { const a = S().accounts.find((x) => x.id === id); if (a?.class === "asset") { const d = pendingGap(a, r).difference; if (d) gaps.push({ account_id: id, gap: d }); } }
+  return M.proposeMoves(gaps, S().accounts);
+};
+function reviewGapsHtml(accts, pend) {
+  const items = accts.filter((a) => pend[a.id]).map((a) => ({ a, gap: pendingGap(a, pend[a.id]).difference })).filter((i) => i.gap !== 0);
+  if (!items.length) return "";
+  const moves = proposedMoves(), inMove = new Set(moves.flatMap((m) => [m.from_id, m.to_id]));
+  const moveCards = moves.map((m, i) => `<div class="card"><p><b>${peso(m.amount)}</b> left ${esc(accountName(m.from_id))} and arrived in ${esc(accountName(m.to_id))}.</p><p class="note small">One move between your own accounts. It waits in Verify, and both counts then match.</p>
+      <p><button class="primary" data-action="gap-move-confirm" data-id="${i}">Moved to another account of mine</button></p></div>`).join("");
+  const btn = (a, why, text) => `<p><button style="width:100%" data-action="gap-decide" data-id="${esc(a.id)}" data-why="${why}">${text}</button></p>`;
+  const cards = items.filter((i) => !inMove.has(i.a.id)).map(({ a, gap }) => {
+    const card = a.class === "liability", more = gap > 0;
+    const opts = card ? (more ? btn(a, "spent", "I spent some of it") + btn(a, "later", "I'll explain later") : `<p><button style="width:100%" data-action="open-checkin" data-id="${esc(a.id)}">I paid the card</button></p>` + btn(a, "later", "I'll explain later"))
+      : more ? btn(a, "move", "Moved in from another account of mine") + btn(a, "income", "Money I received") + btn(a, "later", "I'll explain later")
+        : btn(a, "move", "Moved to another account of mine") + btn(a, "spent", "I spent some of it") + btn(a, "later", "I'll explain later");
+    const phrase = card ? (more ? "more owed than logged" : "less owed than logged") : more ? "more than logged" : "missing";
+    return `<div class="card"><p>${esc(a.name)}: <b>${peso(Math.abs(gap))}</b> ${phrase}.</p>${opts}<p class="note small">I'll explain later keeps your balance right. The amount waits as Not yet explained and is not counted as spending.</p></div>`;
+  }).join("");
+  return (moveCards ? `<h2 class="today">Looks like a move</h2>${moveCards}` : "") + (cards ? `<h2 class="today">${moveCards ? "Not matched" : "What happened?"}</h2>${cards}` : "");
+}
+
 function viewCheckin() {
   const accts = activeAccounts();
   if (!accts.length) return `<h1>Weekly review</h1><p class="note">Add accounts first.</p><button class="primary" data-action="tab" data-tab="setup" data-page="accounts">Add accounts</button>`;
   const w = thisWeek();
+  const pend = pendingCounts();
   const rows = accts.map((a) => {
-    const c = countedThisWeek(a.id);
-    const state = c ? `<span class="bval">${c.difference === 0 ? "\u2713 " : "\u25B2 "}${esc(differenceText(c.difference, a.class === "liability"))}</span>` : `<span class="bval">Not counted</span>`;
+    const c = countedThisWeek(a.id), wait = pend[a.id], wd = wait ? pendingGap(a, wait).difference : 0;
+    const state = wait ? `<span class="bval">${esc(peso(wait.counted))}<small class="note small" style="display:block;margin:0;text-align:right">${esc(wd === 0 ? "matches now" : differenceText(wd, a.class === "liability"))}</small></span>` : c ? `<span class="bval">${c.difference === 0 ? "\u2713 " : "\u25B2 "}${esc(differenceText(c.difference, a.class === "liability"))}</span>` : `<span class="bval">Not counted</span>`;
     return `<button class="choice" data-action="open-checkin" data-id="${esc(a.id)}"><span class="who">${withIcon(a, 28)}</span>${state}</button>`;
   }).join("");
-  const done = accts.filter((a) => countedThisWeek(a.id)).length;
+  const done = accts.filter((a) => countedThisWeek(a.id) || pend[a.id]).length;
   const sv = surveyThisWeek();
   const questions = done
     ? `<h2 class="today">Weekly questions</h2><button class="choice" data-action="open-survey"><span>Four quick questions</span><span class="bval">${sv ? "Answered \u2713" : "Not answered"}</span></button>` : "";
@@ -2137,8 +2162,8 @@ function viewCheckin() {
   const fix = `<h2 class="today">A mistake in something verified?</h2><p class="note">A verified entry is final. Here, and only here, you can cancel one from the last two weeks and enter it again.</p>
     <button class="choice" data-action="open-correct"${fixable ? "" : " disabled"}><span>Put right a verified entry</span><span class="bval">${fixable ? fixable + " can be put right" : "none to put right"}</span></button>`;
   return `<h1>Weekly review</h1><p class="sub">Week of ${esc(longDate(w.week_start))} to ${esc(longDate(w.week_end))}</p>
-    <p class="note">Open each account, look at the real balance, and type it in. ${accts.length ? pairFig(done, accts.length, { fmt: (n) => String(n), tail: "counted", left: "to count", doneWord: "All counted" }) : ""}</p>${backupLine}${(() => { const l = M.picturesBackupLine((S().attachments ?? []).length, ledger.settings.last_pictures_backup_at ?? "", today()); return l ? `<p class="note">${esc(l)} <button class="link" data-action="tab" data-tab="setup" data-page="backup">Back up pictures</button></p>` : ""; })()}${rows}${gapNote}${matchedNote}${fix}${questions}
-    ${why("Money the ledger cannot explain is recorded as Unlogged. It never blocks anything.")}`;
+    <p class="note">Open each account, look at the real balance, and type it in. Count them all first; then you see every gap together. ${accts.length ? pairFig(done, accts.length, { fmt: (n) => String(n), tail: "counted", left: "to count", doneWord: "All counted" }) : ""}</p>${backupLine}${(() => { const l = M.picturesBackupLine((S().attachments ?? []).length, ledger.settings.last_pictures_backup_at ?? "", today()); return l ? `<p class="note">${esc(l)} <button class="link" data-action="tab" data-tab="setup" data-page="backup">Back up pictures</button></p>` : ""; })()}${rows}${reviewGapsHtml(accts, pend)}${gapNote}${matchedNote}${fix}${questions}
+    ${why("A gap you do not explain is kept apart as Not yet explained and is not counted as spending. It never blocks anything.")}`;
 }
 
 // The switch is a settings key, off by default; off, this is exactly the screen it always was.
@@ -2584,13 +2609,20 @@ function renderSheet() {
       <p class="note">This is saved as a draft transfer. Verify it like any other entry.</p>
       ${REQNOTE}
       <p><button class="primary" id="f-save" data-action="save-deposit" style="margin-top:6px" disabled>Save</button></p>`;
-  } else if (sh.type === "checkin" && ui.form.bigSure === "ask") {
-    const a = S().accounts.find((x) => x.id === sh.id), q = M.planCheckIn(S(), { ...checkInInput(a, M.parsePesos(ui.form.amount).centavos), id: "probe", transaction_id: "probe" }).checkIn;
-    body = `<h3>This is most of the balance</h3>
+  } else if (sh.type === "gap-big") {
+    const a = S().accounts.find((x) => x.id === sh.id), r = pendingCounts()[sh.id], q = a && r ? pendingGap(a, r) : null;
+    body = q ? `<h3>This is most of the balance</h3>
       <p>You counted <b>${peso(q.counted_balance)}</b>. The ledger says <b>${peso(q.ledger_balance)}</b>.</p>
       <p class="note">Did you move it, or mistype the count?</p>
-      <p><button class="primary" data-action="count-sure">The count is right</button></p>
-      <p><button data-action="count-change" style="width:100%">Change the count</button></p>`;
+      <p><button class="primary" data-action="gap-sure">The count is right</button></p>
+      <p><button data-action="gap-change" style="width:100%">Change the count</button></p>` : `<p class="note">That count is no longer waiting.</p><p><button class="primary" data-action="close-sheet">Got it</button></p>`;
+  } else if (sh.type === "gap-move") {
+    const a = S().accounts.find((x) => x.id === sh.id), r = pendingCounts()[sh.id], q = a && r ? pendingGap(a, r) : null, more = q && q.difference > 0;
+    const others = S().accounts.filter((x) => x.class === "asset" && !x.archived && x.id !== sh.id);
+    body = q ? `<h3>${more ? "Moved in from which account?" : "Moved to which account?"}</h3>
+      <p class="note">${a.name}: ${peso(Math.abs(q.difference))} ${more ? "more than logged" : "missing"}. The move waits in Verify.</p>
+      <label>${more ? "From" : "To"}${REQ}</label>${accountPicker(others, ui.form.other_id, "pick-count-other", "countother", "Choose an account")}
+      <p><button class="primary" id="f-save" data-action="gap-move-save" disabled>Save the move</button></p>` : `<p class="note">That count is no longer waiting.</p><p><button class="primary" data-action="close-sheet">Got it</button></p>`;
   } else if (sh.type === "checkin") {
     const a = S().accounts.find((x) => x.id === sh.id);
     body = `<h3>Count ${esc(a.name)}</h3>
@@ -3119,23 +3151,20 @@ function refreshSave() {
   } else if (type === "checkin") {
     const a = M.parsePesos(f.amount), acct = S().accounts.find((x) => x.id === ui.sheet.id), card = acct?.class === "liability";
     const q = a.ok && acct ? M.planCheckIn(S(), { ...checkInInput(acct, a.centavos), id: "probe", transaction_id: "probe" }) : null;
-    const gap = q ? q.checkIn.difference : 0, why = gap !== 0 ? f.why : null;   // nothing is chosen for you (owner, Oct 29): the old default "just match it" booked the gap as spending
-    btn.disabled = !a.ok || a.centavos < 0 || (gap !== 0 && !why) || (why === "move" && !f.other_id);
+    const gap = q ? q.checkIn.difference : 0;
+    btn.disabled = !a.ok || a.centavos < 0;
     const out = $("f-diff");
     if (out) out.textContent = !q ? "" : card ? "Ledger: " + peso(q.checkIn.ledger_balance) + (gap === 0 ? " \u00b7 matches" : " \u00b7 " + peso(Math.abs(gap)) + (gap > 0 ? " more" : " less")) : "The ledger says " + peso(q.checkIn.ledger_balance) + ". " + differenceText(gap) + ".";
     const box = $("f-paid");
     if (box) {
       // a card that owes LESS than the ledger says was usually paid and the payment is not logged yet: one button logs it (owner, Oct 20), so it is not counted as money found
-      const less = card && gap < 0 ? -gap : 0, more = gap > 0, amt = peso(Math.abs(gap));
-      const opts = card ? (more ? [["spent", "I spent some of it"], ["later", "I'll explain later"]] : [["later", "I'll explain later"]])
-        : more ? [["move", "Moved in from another account of mine"], ["income", "Money I received"], ["later", "I'll explain later"]] : [["move", "Moved to another account of mine"], ["spent", "I spent some of it"], ["later", "I'll explain later"]];
-      const others = S().accounts.filter((x) => x.class === "asset" && !x.archived && x.id !== acct.id);
-      const head = card ? (more ? `Where did the extra ${amt} owed come from?` : `The card owes ${amt} less than logged.`) : more ? `Where did the extra ${amt} come from?` : `Where did the missing ${amt} go?`;
-      box.hidden = gap === 0;
-      box.innerHTML = gap === 0 ? "" : (less ? `<button data-action="count-paid" style="width:100%">I paid the card: log ${peso(less)}</button>` : "") + `<h4 class="dayhead">${head}</h4>` + opts.map(([v, t2]) => `<button class="chip wide" data-action="count-why" data-id="${v}" aria-pressed="${why === v}">${t2}</button>`).join("")
-        + (why === "move" ? `<label>${more ? "From" : "To"}${REQ}</label>${accountPicker(others, f.other_id, "pick-count-other", "countother", "Choose an account")}` : "")
-        + `<p class="note small">${why === "later" ? `Your balance is corrected. The ${amt} is kept apart as not yet explained and is not counted as spending.` : why === "spent" ? "Counts as spending you did not log." : ""}</p>`;
+      const less = card && gap < 0 ? -gap : 0;
+      box.hidden = !less && gap === 0;
+      box.innerHTML = (less ? `<button data-action="count-paid" style="width:100%">I paid the card: log ${peso(less)}</button>` : "") + (gap !== 0 ? `<p class="note small">Count your other accounts too. Then the Weekly review shows every gap side by side and asks what happened.</p>` : "");
     }
+    btn.textContent = "Save count";
+  } else if (type === "gap-move") {
+    btn.disabled = !f.other_id;
   } else if (type === "survey") {
     const c = (f.q1c ?? "").trim(), a = M.parsePesos(f.q1a ?? "");
     btn.disabled = !(f.ease && /^\d{1,4}$/.test(c) && a.ok);
@@ -3368,30 +3397,58 @@ async function logExpense(input, label) {
   return ok;
 }
 
-// One count. A gap the owner has not explained is held as "not yet explained" (not spending); the count window makes them choose, and asks first when the gap is most of the balance.
+// The counts waiting for a decision (owner, Oct 29): every account is counted FIRST; a count with a gap is only kept (settings `checkin_pending`, so a restart does not lose
+// it) until the Weekly review shows all the gaps side by side and the owner says what happened. Only this week's are kept.
+const pendingCounts = () => {
+  const w = thisWeek(), p = ledger.settings.checkin_pending ?? {};
+  return Object.fromEntries(Object.entries(p).filter(([id, r]) => r && r.date >= w.week_start && S().accounts.some((a) => a.id === id && !a.archived)));
+};
+const pendingInput = (acct, r) => ({ date: today(), account_id: acct.id, counted_balance: r.counted, unlogged_category_id: M.UNLOGGED_CATEGORY_ID,
+  ...(acct.class === "liability" ? { basis: r.basis ?? "posted", posted_tx_ids: r.ticked ?? [] } : {}) });
+const pendingGap = (acct, r) => M.planCheckIn(S(), { ...pendingInput(acct, r), id: "probe", transaction_id: "probe" }).checkIn;
+const settingsWithPending = (id, rec) => { const cur = { ...(ledger.settings.checkin_pending ?? {}) }; if (rec) cur[id] = rec; else delete cur[id]; return { ...ledger.settings, checkin_pending: cur }; };
+
 async function saveCheckin() {
   const amount = M.parsePesos(ui.form.amount), acct = S().accounts.find((x) => x.id === ui.sheet.id);
   if (!amount.ok) { showToast("Enter the balance like 1250.50"); return; }
-  const probe = M.planCheckIn(S(), { ...checkInInput(acct, amount.centavos), id: "probe", transaction_id: "probe" }).checkIn;
-  const gap = probe.difference, why = gap !== 0 ? ui.form.why : null;
-  if (gap !== 0 && !why) { showToast("Choose what happened to the difference."); return; }
-  if (gap !== 0 && M.bigGap(probe.ledger_balance, amount.centavos) && ui.form.bigSure !== true) { ui.form.bigSure = "ask"; renderSheet(); return; }   // most of the balance, or a count of 0: moved, or mistyped?
-  if (why === "income") { ui.sheet = { type: "income" }; ui.form = { amount: (gap / 100).toFixed(2), date: today(), account_id: acct.id, category_id: null }; renderSheet(); showToast("Log the money received, then count again"); return; }
-  if (why === "move") {
-    const r = M.planCheckInWithMove(S(), { ...checkInInput(acct, amount.centavos), id: newId("chk"), transaction_id: newId("tx") }, { account_id: ui.form.other_id, move_id: newId("tx") }, new Date());
-    if (!r.ok) { showToast("Could not save: " + r.violations[0].message); return; }
-    ui.sheet = null; renderSheet();
-    await commit({ ...r.state, checkIns: [...S().checkIns, r.plan.checkIn] });
-    showToast("Counted. The move waits in Verify."); return;
-  }
-  const plan = M.planCheckIn(S(), { ...checkInInput(acct, amount.centavos), id: newId("chk"), transaction_id: newId("tx"), posting_transaction_id: newId("tx"), ...(why === "later" ? { why: "later" } : {}) }, new Date());   // "spent": a plain count, unlogged spending
-  if (!plan.ok) { showToast("Could not save: " + plan.violations[0].message); return; }
-  const next = { ...S(), checkIns: [...S().checkIns, plan.checkIn] };
-  const made = [plan.posting, plan.transaction ? { transaction: plan.transaction, entries: plan.entries } : null].filter(Boolean);   // the posting pair first, then the count's own entry
-  if (made.length) { next.transactions = [...S().transactions, ...made.map((m) => m.transaction)]; next.entries = [...S().entries, ...made.flatMap((m) => m.entries)]; }
+  const rec = { counted: amount.centavos, date: today(), ...(acct.class === "liability" ? { basis: ui.form.basis ?? "posted", ticked: ui.form.ticked ?? [] } : {}) };
+  const gap = pendingGap(acct, rec).difference;
+  if (gap === 0) { ui.sheet = null; renderSheet(); await postCount(acct, rec, null, null, "save"); return; }   // matches: counted, nothing to decide
   ui.sheet = null; renderSheet();
-  await commit(next);
-  showToast(acct.name + ": " + (why === "later" ? differenceText(plan.checkIn.difference, acct.class === "liability") + ", not yet explained" : differenceText(plan.checkIn.difference, acct.class === "liability")));
+  await commit(S(), settingsWithPending(acct.id, rec));
+  showToast(acct.name + ": counted. Count your other accounts, then say what happened to the gap.");
+}
+
+// Post one count with the owner's decision about its gap: "later" holds it as not yet explained, "spent" is unlogged spending, "move" makes the move first (a draft in Verify).
+async function postCount(acct, rec, why, otherId, mode) {
+  let next;
+  if (why === "move") {
+    const r = M.planCheckInWithMove(S(), { ...pendingInput(acct, rec), id: newId("chk"), transaction_id: newId("tx") }, { account_id: otherId, move_id: newId("tx") }, new Date());
+    if (!r.ok) { showToast("Could not save: " + r.violations[0].message); return false; }
+    next = { ...r.state, checkIns: [...S().checkIns, r.plan.checkIn] };
+  } else {
+    const plan = M.planCheckIn(S(), { ...pendingInput(acct, rec), id: newId("chk"), transaction_id: newId("tx"), posting_transaction_id: newId("tx"), ...(why === "later" ? { why: "later" } : {}) }, new Date());   // "spent": a plain count, unlogged spending
+    if (!plan.ok) { showToast("Could not save: " + plan.violations[0].message); return false; }
+    next = { ...S(), checkIns: [...S().checkIns, plan.checkIn] };
+    const made = [plan.posting, plan.transaction ? { transaction: plan.transaction, entries: plan.entries } : null].filter(Boolean);   // the posting pair first, then the count's own entry
+    if (made.length) { next.transactions = [...S().transactions, ...made.map((m) => m.transaction)]; next.entries = [...S().entries, ...made.flatMap((m) => m.entries)]; }
+  }
+  const ok = await commit(next, settingsWithPending(acct.id, null));
+  showToast(why === "move" ? "Counted. The move waits in Verify." : acct.name + ": " + (why === "later" ? "kept apart as not yet explained" : why === "spent" ? "counted as spending you did not log" : "matches the ledger"));
+  return ok;
+}
+
+// What was decided about a gap on the review screen. A gap of most of the balance asks first.
+async function decideGap(id, why, otherId = null, sure = false) {
+  const acct = S().accounts.find((x) => x.id === id), rec = pendingCounts()[id];
+  if (!acct || !rec) return;
+  const q = pendingGap(acct, rec);
+  if (q.difference === 0) { await postCount(acct, rec, null, null); return; }
+  if (!sure && M.bigGap(q.ledger_balance, rec.counted)) { ui.sheet = { type: "gap-big", id, why, other: otherId }; ui.form = {}; renderSheet(); return; }
+  if (why === "income") { ui.sheet = { type: "income" }; ui.form = { amount: (q.difference / 100).toFixed(2), date: today(), account_id: acct.id, category_id: null }; renderSheet(); showToast("Log the money received. Your count is kept."); return; }
+  if (why === "move" && !otherId) { ui.sheet = { type: "gap-move", id }; ui.form = {}; renderSheet(); return; }
+  ui.sheet = null; renderSheet();
+  await postCount(acct, rec, why, otherId);
 }
 
 async function onClick(el) {
@@ -3515,7 +3572,7 @@ async function onClick(el) {
       showToast(amount.centavos === 0 ? "Budget removed for " + name : "Budget saved for " + name);
       break;
     }
-    case "open-checkin": ui.sheet = { type: "checkin", id }; ui.form = { amount: "" }; renderSheet(); break;
+    case "open-checkin": { const r = pendingCounts()[id]; ui.sheet = { type: "checkin", id }; ui.form = { amount: r ? (r.counted / 100).toFixed(2) : "", ...(r?.basis ? { basis: r.basis, ticked: r.ticked ?? [] } : {}) }; renderSheet(); refreshSave(); break; }
     case "save-checkin": await saveCheckin(); break;
     case "explain-gap": {
       const gapId = ui.sheet?.gapId, plan = M.planCorrection(S(), { id: gapId, redo_id: newId("fix"), today: today() }, new Date());
@@ -3525,10 +3582,23 @@ async function onClick(el) {
       showToast("The gap is cleared. The money counts once.");
       break;
     }
-    case "count-sure": ui.form.bigSure = true; await saveCheckin(); break;
-    case "count-change": ui.form.bigSure = null; renderSheet(); break;
+    case "gap-decide": await decideGap(id, el.dataset.why); break;
+    case "gap-sure": { const sh = ui.sheet; await decideGap(sh.id, sh.why, sh.other, true); break; }
+    case "gap-change": { const sh = ui.sheet; ui.sheet = { type: "checkin", id: sh.id }; const r = pendingCounts()[sh.id]; ui.form = { amount: r ? (r.counted / 100).toFixed(2) : "" }; renderSheet(); refreshSave(); break; }
+    case "gap-move-save": { const sh = ui.sheet; await decideGap(sh.id, "move", ui.form.other_id); break; }
+    case "gap-move-confirm": {   // one proposed move between two own accounts: the move first (a draft), then both counts match
+      const sh = proposedMoves()[Number(id)];
+      if (!sh) break;
+      const A = S().accounts.find((x) => x.id === sh.from_id), B = S().accounts.find((x) => x.id === sh.to_id), pend = pendingCounts();
+      const mk = (a) => ({ input: { ...pendingInput(a, pend[a.id]), id: newId("chk"), transaction_id: newId("tx") } });
+      const r = M.planProposedMove(S(), { move: sh, move_id: newId("tx"), counts: [mk(A), mk(B)] }, new Date());
+      if (!r.ok) { showToast("Could not save: " + r.violations[0].message); break; }
+      const cur = { ...(ledger.settings.checkin_pending ?? {}) }; delete cur[A.id]; delete cur[B.id];
+      await commit(r.state, { ...ledger.settings, checkin_pending: cur });
+      showToast(peso(sh.amount) + " move from " + A.name + " to " + B.name + " waits in Verify.");
+      break;
+    }
     case "count-basis": ui.form.basis = id; renderSheet(); break;
-    case "count-why": ui.form.why = id; renderSheet(); break;
     case "pick-count-other": ui.form.other_id = id; if (ui.sheet) ui.sheet.pick = null; renderSheet(); break;
     case "count-paid": {   // the card owes less than the ledger: log the payment (a draft move from the account that backs the card), then the count matches
       const acct = S().accounts.find((x) => x.id === ui.sheet.id), a = M.parsePesos(ui.form.amount);

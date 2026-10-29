@@ -4181,11 +4181,11 @@ console.log("\n-- Card count after paying --");
   check((await text(page, ".choice:has-text('Test Card')")).includes("Matches the ledger"), "the card reads Matches the ledger");
   // a count saved WITHOUT logging the payment can be put right at the Weekly review
   await page.click('button[data-action="open-checkin"][data-id="b"]'); await page.waitForSelector("#sheet .sheet");
-  await page.fill("#f-amount", "25000");
-  check(await page.locator("#f-save").isDisabled(), "a count with a gap waits until you choose what happened: nothing is chosen for you");
-  await page.click('#sheet button[data-action="count-why"][data-id="later"]'); await page.click("#f-save");
+  await page.fill("#f-amount", "25000"); await page.click("#f-save"); await page.waitForTimeout(500);
+  check(!JSON.parse((await stored(page)).local).state.transactions.some((x) => x.source === "reconciliation"), "a count with a gap is only kept until you say what happened: nothing is chosen for you");
+  await page.click('button[data-action="gap-decide"][data-id="b"][data-why="later"]');
   check(await seen(page, "#sheet", "This is most of the balance"), "a gap of more than half the balance asks first: did you move it, or mistype the count?");
-  await page.click('#sheet button[data-action="count-sure"]'); await page.waitForTimeout(600);
+  await page.click('#sheet button[data-action="gap-sure"]'); await page.waitForTimeout(600);
   check((await text(page, ".choice:has-text('Test Bank')")).includes("more than logged"), "a count that found money is saved");
   await page.click('button[data-action="open-correct"]');
   check(await seen(page, "#sheet", "Weekly check-in"), "the count's entry is offered under Put right a verified entry");
@@ -4197,71 +4197,67 @@ console.log("\n-- Card count after paying --");
   check(unl === 0 && d.transactions.some((x) => x.reverses && x.payee === "Weekly check-in"), "the count gap is cancelled: Unlogged is back to zero");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
-// ===== A bank count with a gap: where did it come from, or go? =====
+// ===== Counting every account first, then every gap side by side =====
 console.log("\n-- Count with a gap --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 520000, opening_date: "2026-09-01" };
   const cash = { id: "cash", name: "Cash", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-09-01" };
   const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [bank, cash] } };
+  const save = async (page, id, amount) => { await page.click(`button[data-action="open-checkin"][data-id="${id}"]`); await page.waitForSelector("#sheet .sheet"); await page.fill("#f-amount", amount); await page.click("#f-save"); await page.waitForTimeout(500); };
   ({ ctx, page, errors } = await open({ blockSw: true, seed }));
   await menuGo(page, "Weekly review"); await page.waitForTimeout(300);
+  // 1. the count window only takes the figure: no choices there
   await page.click('button[data-action="open-checkin"][data-id="b"]'); await page.waitForSelector("#sheet .sheet");
-  await page.fill("#f-amount", "8996.94");
-  check(await seen(page, "#sheet", "Where did the extra ₱3,796.94 come from?"), "more money than the app asks where the extra came from");
-  const t = (await text(page, "#sheet")).replace(/\s+/g, " ");
-  check(t.includes("Moved in from another account of mine") && t.includes("Money I received") && t.includes("I'll explain later") && !t.includes("Not sure: just match it"), "with its three choices; \"Not sure: just match it\" is gone");
-  check(await page.locator('#sheet button[aria-pressed="true"]').count() === 0 && await page.locator("#f-save").isDisabled(), "none is chosen for you, and Save waits");
-  await page.click('#sheet button[data-action="count-why"][data-id="later"]');
-  check((await text(page, "#sheet")).includes("is kept apart as not yet explained and is not counted as spending"), "I'll explain later says the amount is kept apart and is not spending");
-  await page.click("#f-save");
-  check(await seen(page, "#sheet", "This is most of the balance") && (await text(page, "#sheet")).includes("Did you move it, or mistype the count?"), "3,796.94 of 5,200.00 is more than half, so it asks first");
-  await page.click('#sheet button[data-action="count-change"]');
-  check((await page.inputValue("#f-amount")) === "8996.94", "Change the count goes back with the count still typed");
-  await page.click("#f-save"); await page.click('#sheet button[data-action="count-sure"]'); await page.waitForTimeout(600);
-  let d = JSON.parse((await stored(page)).local).state;
-  const tx = d.transactions.find((x) => x.source === "reconciliation");
-  check(tx && tx.adjustment === true && d.checkIns[0].matched === true && d.checkIns[0].difference === 379694, "I'll explain later saved the count as held, not spending");
-  check((await text(page, "#screen")).includes("1 gap is not yet explained. It is not counted as spending."), "Weekly review shows the quiet reminder");
+  await page.fill("#f-amount", "1403.06");
+  let t = (await text(page, "#sheet")).replace(/\s+/g, " ");
+  check(t.includes("The ledger says ₱5,200.00") && t.includes("₱3,796.94 missing") && !t.includes("I spent some of it") && !t.includes("Not sure: just match it"), "the count window shows the gap but asks nothing yet");
+  check(t.includes("Count your other accounts too"), "it says to count the other accounts first");
+  await page.click("#f-save"); await page.waitForTimeout(500);
+  let d = JSON.parse((await stored(page)).local);
+  check(d.state.transactions.filter((x) => x.source === "reconciliation").length === 0 && d.settings.checkin_pending?.b?.counted === 140306, "a count with a gap is only kept for now: nothing is posted, the balance is untouched");
+  t = (await text(page, "#screen")).replace(/\s+/g, " ");
+  check(t.includes("₱1,403.06") && t.includes("₱3,796.94 missing") && /what happened\?/i.test(t) && t.includes("Moved to another account of mine") && t.includes("I'll explain later"), "the Weekly review shows the gap beside the account and asks what happened");
+  // 2. the second account makes the two gaps one proposed move
+  await save(page, "cash", "3796.94");
+  t = (await text(page, "#screen")).replace(/\s+/g, " ");
+  check(/looks like a move/i.test(t) && t.includes("₱3,796.94 left Test Bank and arrived in Cash.") && !/what happened\?/i.test(t), "an exactly equal short and extra become ONE proposed move");
+  check(await page.locator('#screen button.primary[data-action="gap-move-confirm"]').count() === 1 && await page.locator('#screen button[data-action="gap-decide"]').count() === 0, "its button is the filled one; no other choice is offered for those two");
+  await shot(page, "p04-proposed-move");
+  await page.click('button[data-action="gap-move-confirm"]'); await seen(page, "#toast", "waits in Verify"); await page.waitForTimeout(500);
+  d = JSON.parse((await stored(page)).local);
+  const mv = d.state.transactions.find((x) => x.payee === "Moved (found at count)"), es = d.state.entries.filter((e) => e.transaction_id === mv?.id);
+  check(mv && mv.status === "draft" && es.some((e) => e.account_id === "b" && e.amount === -379694) && es.some((e) => e.account_id === "cash" && e.amount === 379694), "one draft move of 3,796.94 from the bank to Cash");
+  check(d.state.checkIns.length === 2 && d.state.checkIns.every((c) => c.difference === 0) && !d.state.transactions.some((x) => x.source === "reconciliation") && !d.settings.checkin_pending?.b && !d.settings.checkin_pending?.cash, "both counts match: no gap entry, nothing left waiting");
+  // 3. an unmatched gap: I'll explain later keeps it apart
+  await save(page, "b", "903.06");   // the ledger is 1,403.06 after the move: 500.00 missing
+  await page.click('button[data-action="gap-decide"][data-why="later"]'); await page.waitForTimeout(500);
+  d = JSON.parse((await stored(page)).local);
+  check(d.state.transactions.filter((x) => x.source === "reconciliation" && x.adjustment).length === 1 && d.settings.checkin_pending?.b === undefined, "I'll explain later holds it: balance corrected, not spending");
+  check((await text(page, "#screen")).includes("1 gap is not yet explained"), "Weekly review says one gap waits");
   await menuGo(page, "Spending");
-  const sp = await text(page, "#screen");
-  check(!sp.includes("brings the total down") && !sp.includes("−₱"), "the found money is not spending going down: no minus row");
-  check(/not yet explained/i.test(sp) && sp.includes("₱3,796.94") && sp.includes("more than logged") && sp.includes("Not part of what you spent"), "Category lists it under Not yet explained, outside the total");
+  t = (await text(page, "#screen")).replace(/\s+/g, " ");
+  check(/not yet explained/i.test(t) && t.includes("₱500.00") && t.includes("₱0.00 spent") , "Category lists the 500.00 apart; the total says 0.00 spent");
   await shot(page, "p04-not-yet-explained");
+  // 4. a count of most of the balance asks first
   await menuGo(page, "Weekly review");
-  await page.click('button[data-action="open-checkin"][data-id="cash"]'); await page.waitForSelector("#sheet .sheet");
-  await page.fill("#f-amount", "3796.94");
-  check(await seen(page, "#sheet", "Where did the extra"), "Cash counted higher asks too");
-  await page.click('#sheet button[data-action="count-why"][data-id="move"]');
-  check(await page.locator("#f-save").isDisabled(), "moved in from another account waits until the account is chosen");
-  await page.click('#sheet .chip[data-action="pick-count-other"]:has-text("Test Bank")');
-  check(!(await page.locator("#f-save").isDisabled()), "choosing it turns Save on");
-  await page.click("#f-save");
-  check(await seen(page, "#toast", "The move waits in Verify"), "it says the move waits in Verify");
-  d = JSON.parse((await stored(page)).local).state;
-  const mv = d.transactions.find((x) => x.payee.startsWith("Moved in")), es = d.entries.filter((e) => e.transaction_id === mv?.id);
-  check(mv && mv.status === "draft" && es.some((e) => e.account_id === "cash" && e.amount === 379694) && es.some((e) => e.account_id === "b" && e.amount === -379694), "a draft move from the bank into Cash was made");
-  check(d.checkIns.length === 2 && d.checkIns[1].difference === 0 && d.transactions.filter((x) => x.source === "reconciliation").length === 1, "the count matches, with no second gap entry");
-  await menuGo(page, "Weekly review");
-  await page.click('button[data-action="open-checkin"][data-id="b"]'); await page.waitForSelector("#sheet .sheet");
-  await page.fill("#f-amount", "3000");   // the bank's ledger is 5,200.00 after the move out
-  check(await seen(page, "#sheet", "Where did the missing") && (await text(page, "#sheet")).includes("I spent some of it") && (await text(page, "#sheet")).includes("I'll explain later"), "less money than the app asks where it went");
-  await page.click('#sheet button[data-action="count-why"][data-id="spent"]');
-  check((await text(page, "#sheet")).includes("Counts as spending you did not log."), "I spent some of it says it counts as spending");
-  await page.click('#sheet button[data-action="count-why"][data-id="later"]'); await page.click("#f-save"); await page.waitForTimeout(500);
-  if (await page.locator('#sheet button[data-action="count-sure"]').count()) { await page.click('#sheet button[data-action="count-sure"]'); await page.waitForTimeout(500); }
-  d = JSON.parse((await stored(page)).local).state;
-  check(d.transactions.filter((x) => x.source === "reconciliation" && x.adjustment).length === 2, "the second gap (2,200.00 missing) is held too: two are not yet explained");
-  // a charge logged afterwards that is exactly the held 2,200.00 gap: "This explains the gap"
+  await save(page, "cash", "0");   // Cash holds 3,796.94 after the move
+  await page.click('button[data-action="gap-decide"][data-id="cash"][data-why="later"]');
+  check(await seen(page, "#sheet", "This is most of the balance") && (await text(page, "#sheet")).includes("Did you move it, or mistype the count?"), "a count of 0 asks first: did you move it, or mistype the count?");
+  await page.click('#sheet button[data-action="gap-change"]');
+  check((await page.inputValue("#f-amount")) === "0.00", "Change the count reopens it with the count typed");
+  await page.click("#f-save"); await page.waitForTimeout(400);
+  await page.click('button[data-action="gap-decide"][data-id="cash"][data-why="later"]'); await seen(page, "#sheet", "This is most of the balance");
+  await page.click('#sheet button[data-action="gap-sure"]'); await page.waitForTimeout(600);
+  d = JSON.parse((await stored(page)).local);
+  check(d.state.transactions.filter((x) => x.source === "reconciliation" && x.adjustment).length === 2, "after 'The count is right' it is held too: never spending by default");
+  // 5. an entry that is exactly a held gap offers: This explains the gap
   await page.click('#nav button:has-text("Log")'); await page.click('button[data-action="open-other"]');
-  await page.fill("#f-amount", "2200"); await page.click('#sheet [data-action="pick-cat"]:has-text("Food")'); await page.click('#sheet [data-action="pick-acct"]:has-text("Test Bank")'); await page.click("#f-save");
-  check(await seen(page, "#sheet", "This explains the gap?") && (await text(page, "#sheet")).includes("The gap is cancelled, so the money counts once"), "an entry that is exactly a held gap offers: This explains the gap");
+  await page.fill("#f-amount", "500"); await page.click('#sheet [data-action="pick-cat"]:has-text("Food")'); await page.click('#sheet [data-action="pick-acct"]:has-text("Test Bank")'); await page.click("#f-save");
+  check(await seen(page, "#sheet", "This explains the gap?") && (await text(page, "#sheet")).includes("The gap is cancelled, so the money counts once"), "a 500.00 entry on that account is offered: This explains the gap");
   await shot(page, "p04-explains-gap");
   await page.click('#sheet button[data-action="explain-gap"]'); await seen(page, "#toast", "The gap is cleared"); await page.waitForTimeout(500);
-  d = JSON.parse((await stored(page)).local).state;
-  const gapTx = d.transactions.find((x) => x.source === "reconciliation" && x.adjustment && d.entries.some((e) => e.transaction_id === x.id && e.category_id === "cat-unlogged" && e.amount === 220000));
-  check(gapTx && d.transactions.some((x) => x.reverses === gapTx.id), "one tap cancelled that gap with a correction");
   await menuGo(page, "Spending");
-  const sp2 = (await text(page, "#screen")).replace(/\s+/g, " ");
-  check(sp2.includes("₱2,200.00") && !sp2.includes("₱5,996.94") && sp2.includes("₱3,796.94") && (sp2.match(/Not part of what you spent/g) ?? []).length === 1, "the 2,200.00 counts once as spending; only the 3,796.94 gap is still not yet explained");
+  t = (await text(page, "#screen")).replace(/\s+/g, " ");
+  check(t.includes("₱500.00 not verified yet") && !t.includes("Test Bank missing") && t.includes("Cash missing") && t.includes("₱3,796.94") && (t.match(/Not part of what you spent/g) ?? []).length === 1, "the 500.00 entry counts once (it waits in Verify); only the Cash gap of 3,796.94 is still not yet explained");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 // ===== A cancelled count does not show as spent today =====
