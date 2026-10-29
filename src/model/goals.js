@@ -15,9 +15,12 @@ export function goalSlices(state, account, alsoGoal) {
   const balance = Math.max(0, naturalBalance(account, countedEntries(state)));
   if (goals.length <= 1) return new Map(goals.map((g) => [g.id, { balance, bps: 10000, shared: false }]));
   const set = goals.filter((g) => g.share_bps != null), unset = goals.filter((g) => g.share_bps == null);
-  const rest = Math.max(0, 10000 - set.reduce((n, g) => n + g.share_bps, 0));
-  const bpsOf = new Map(set.map((g) => [g.id, g.share_bps]));
+  // Typed parts can pass 100% when a goal with its own part is moved onto this account: they are scaled down so the account is never counted twice.
+  const typed = set.reduce((n, g) => n + g.share_bps, 0), scale = (b) => (typed > 10000 ? Math.floor((b * 10000) / typed) : b);
+  const rest = Math.max(0, 10000 - set.reduce((n, g) => n + scale(g.share_bps), 0));
+  const bpsOf = new Map(set.map((g) => [g.id, scale(g.share_bps)]));
   unset.forEach((g, i) => bpsOf.set(g.id, Math.floor(rest / unset.length) + (i === 0 ? rest % unset.length : 0)));
+  if (typed > 10000 && !unset.length) bpsOf.set(set[0].id, bpsOf.get(set[0].id) + rest);   // the scaling's rounding stays inside the account
   const out = new Map(goals.map((g) => [g.id, { balance: Math.trunc((balance * bpsOf.get(g.id)) / 10000), bps: bpsOf.get(g.id), shared: true }]));
   const given = [...out.values()].reduce((n, x) => n + x.balance, 0), all = [...bpsOf.values()].reduce((n, b) => n + b, 0);
   if (all === 10000) out.get(goals[0].id).balance += balance - given;
