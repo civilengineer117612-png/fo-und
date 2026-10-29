@@ -2742,7 +2742,7 @@ function renderSheet() {
         ${top}<p class="center"><button class="link" data-action="open-targets">Change the 50 / 30 / 20 split</button></p>
         <h4 class="sugh">Spending, each a month</h4>${list}<p class="center"><button class="link" data-action="sug-edit">${f.sugEdit ? "Hide my own figures" : "Type my own figures"}</button></p>
         ${saved ? `<h4 class="sugh">Saved and set aside</h4>${saved}<p class="center"><button class="link" data-action="open-shares">Share the saving between goals</button></p>` : ""}
-        <p class="note" id="sug-left">${r.short > 0 ? `Your own figures, the rent and the saved lines add up to <b>${peso(r.short)}</b> more than your income.` : `Left unallocated if you use all of them: <b>${peso(r.unallocated)}</b>.`}${r.trimmed.length ? ` Rounding would have gone over your income, so ${esc(r.trimmed.map((t) => `${t.name} was lowered by ${peso(t.by)}`).join(", "))}.` : ""}</p>
+        <p class="note" id="sug-left">${r.short > 0 ? `<b>Short by ${peso(r.short)}.</b> Fixed, needs and savings floor: ${peso(r.income.amount + r.short)}. Income: ${peso(r.income.amount)}.` : `Funded in order: fixed, needs, savings floor, buffer, then wants (up to ${peso(r.funding.wantsCap)}). Left: <b>${peso(r.unallocated)}</b>.`}${r.trimmed.length ? ` Rounding would have gone over your income, so ${esc(r.trimmed.map((t) => `${t.name} was lowered by ${peso(t.by)}`).join(", "))}.` : ""}</p>
         <p><button data-action="use-all-sug" style="width:100%">Use all suggestions</button></p>
         <p><button class="primary" data-action="review-sug">Confirm</button></p>`;
     }

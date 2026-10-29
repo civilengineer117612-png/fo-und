@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { suggestPlan, resolveSettings, SUGGEST_DEFAULTS } from "../src/model/index.js";
@@ -126,4 +127,12 @@ test("a category with the subscription role is a fixed commitment even with no s
   // income 20,000.00: fixed 8,000 + 1,000 (streaming) + needs 11,500 = 20,500 -> short by 500.00; the streaming line stays 1,000.00
   const r = run(500000, 2000000, {}, 100000);
   assert.equal(total(r, "Streaming"), 100000); assert.equal(r.funding.fixed, 900000); assert.equal(r.funding.shortBy, 50000); assert.deepEqual(needsOf(r), USUAL); assert.ok(balances(r));
+});
+
+test("the window says how it was funded, in one short line, and 'Short by' when fixed payments, needs and the floor do not fit", () => {
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  assert.ok(app.includes("<b>Short by ${peso(r.short)}.</b> Fixed, needs and savings floor: ${peso(r.income.amount + r.short)}. Income: ${peso(r.income.amount)}."));
+  assert.ok(app.includes("Funded in order: fixed, needs, savings floor, buffer, then wants (up to ${peso(r.funding.wantsCap)}). Left: <b>${peso(r.unallocated)}</b>."));
+  const view = readFileSync(new URL("../src/model/budgetview.js", import.meta.url), "utf8");
+  assert.match(view, /short: fit\.short, funding: r\.funding/, "the window gets the engine's funding figures");
 });
