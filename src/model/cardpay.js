@@ -70,6 +70,17 @@ export function planCardPayment(state, { card_id, from_id, amount, date, newId, 
 // a last statement and a backing account. A card is drafted once a month (`made`: {cardId: "YYYY-MM"}, kept in settings), so a draft the owner threw away
 // does not come back that month. Drafts are never verified by itself. Returns {state, made, drafts: [{card_id, amount, date}], changed}.
 export const DUE_CATCH_UP_DAYS = 7;
+
+// What was PAID into a card on or after a date: money moved in from one of your own accounts (a draft counts, so it is not asked for twice). Not a payment:
+// a count or a "Posted by the bank" pair (neither touches one of your accounts), a correction (cancelling a cash advance moves money the same way), or a
+// payment that a correction cancelled.
+export function paidIntoCard(state, cardId, since) {
+  const assets = new Set(state.accounts.filter((a) => a.class === "asset").map((a) => a.id));
+  const cancelled = new Set(state.transactions.filter((t) => t.reverses != null).map((t) => t.reverses));
+  const fromAccount = new Set(state.entries.filter((e) => assets.has(e.account_id) && e.amount < 0).map((e) => e.transaction_id));
+  const ok = new Map(state.transactions.map((t) => [t.id, t.date >= since && t.reverses == null && !cancelled.has(t.id) && fromAccount.has(t.id)]));
+  return state.entries.filter((e) => e.account_id === cardId && e.amount > 0 && ok.get(e.transaction_id)).reduce((n, e) => n + e.amount, 0);
+}
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export function makeCardDueDrafts(state, made, today, { newId, now = new Date() }) {
   let next = state, marked = { ...(made ?? {}) };
@@ -80,8 +91,8 @@ export function makeCardDueDrafts(state, made, today, { newId, now = new Date() 
     if (today < date || days(date, today) > DUE_CATCH_UP_DAYS) continue;
     const from_id = payerFor(next, card.id), st = cardStatement(next, card.id);
     if (!from_id || !st) continue;
-    const since = st.date ?? `${y}-${pad(m)}-01`, byId = new Map(next.transactions.map((t) => [t.id, t]));
-    const paid = next.entries.filter((e) => e.account_id === card.id && e.amount > 0 && (byId.get(e.transaction_id)?.date ?? "") >= since && !byId.get(e.transaction_id)?.reverses).reduce((n, e) => n + e.amount, 0);
+    const since = st.date ?? `${y}-${pad(m)}-01`;
+    const paid = paidIntoCard(next, card.id, since);
     const amount = st.balance - paid;
     marked[card.id] = month;
     if (amount <= 0) continue;   // already paid since the statement: nothing to draft
