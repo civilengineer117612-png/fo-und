@@ -4450,6 +4450,65 @@ console.log("\n-- Appearance --");
   check(await ground() === "#F5F3EE" && await page.evaluate(() => document.documentElement.dataset.theme === undefined), "Match my phone goes back to following the phone");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
+// ===== Past weekly counts: repaired in one step, after a safety copy; a matching pair becomes a move waiting in Verify =====
+console.log("\n-- Repair of past counts --");
+{ const { naturalBalance, countedEntries, spendingByCategory } = await import("../src/model/index.js");
+  const TSG = "2026-09-12T09:00:00.000+08:00";
+  // Invented, as the app made them before Oct 29: X was 3,000.00 short and Z 400.00 short (booked as Unlogged spending), Y had 3,000.00 extra (just matched).
+  const acct = (id) => ({ id, name: "Test " + id, class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-09-01" });
+  const tx = (id, date, payee, source, flags = {}) => ({ id, date, payee, memo: source === "reconciliation" ? "Reconciliation: old count" : "", status: "verified", source, created_at: TSG, verified_at: TSG, ...flags });
+  const transactions = [tx("lunch", "2026-09-10", "Cafe", "manual"), tx("gX", "2026-09-12", "Weekly check-in", "reconciliation"), tx("gY", "2026-09-12", "Weekly check-in", "reconciliation", { adjustment: true }), tx("gZ", "2026-09-13", "Weekly check-in", "reconciliation")];
+  const entries = [{ transaction_id: "lunch", category_id: "cat-food", amount: 200000 }, { transaction_id: "lunch", account_id: "X", amount: -200000 },
+    { transaction_id: "gX", account_id: "X", amount: -300000 }, { transaction_id: "gX", category_id: "cat-unlogged", amount: 300000 },
+    { transaction_id: "gY", account_id: "Y", amount: 300000 }, { transaction_id: "gY", category_id: "cat-unlogged", amount: -300000 },
+    { transaction_id: "gZ", account_id: "Z", amount: -40000 }, { transaction_id: "gZ", category_id: "cat-unlogged", amount: 40000 }];
+  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: ["X", "Y", "Z"].map(acct), transactions, entries } };
+  const read = async () => JSON.parse((await stored(page)).local);
+  const balances = (l) => Object.fromEntries(l.state.accounts.map((a) => [a.id, naturalBalance(a, countedEntries(l.state))]));
+  const sep = (l) => spendingByCategory(l.state, { month: "2026-09" }).total;
+  const copies = () => page.evaluate(async () => { const db = await new Promise((res, rej) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const v = await new Promise((res) => { const g = db.transaction("safety").objectStore("safety").get("copies"); g.onsuccess = () => res(g.result ?? null); g.onerror = () => res(null); }); db.close(); return v; });
+
+  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
+  const L0 = await read();
+  check(L0.v === 10 && sep(L0) === 540000, "before: September shows 5,400.00 of spending (the lunch and the two shortfalls)");
+  const bal0 = balances(L0);
+  await menuGo(page, "Weekly review");
+  check(await seen(page, "#screen", "Past counts booked \u20B13,400.00 as spending."), "the Weekly review says how much the old counts booked as spending");
+  check(await page.locator("#screen button.primary").count() === 1, "one filled button on the screen");
+  await page.click('button[data-action="open-repair"]');
+  check(await seen(page, "#sheet", "Repair past weekly counts"), "the repair window opens");
+  const sheet = await page.innerText("#sheet");
+  check(/September 2026/.test(sheet) && sheet.includes("\u20B15,400.00") && sheet.includes("\u20B12,000.00") && /goes down by \u20B13,400\.00/.test(sheet), "it shows the month before and after (5,400.00 to 2,000.00) and the total change");
+  check(/copy of your data as it is now/i.test(sheet), "and says the app keeps a copy of the data first");
+  check((await read()).state.transactions.length === L0.state.transactions.length, "looking changes nothing");
+  await page.click('button[data-action="repair-run"]');
+  check(await seen(page, "#toast", "Repaired 2 counts"), "the repair runs and says how many counts");
+  const L1 = await read();
+  check(L1.state.transactions.length === L0.state.transactions.length + 4, "four entries were added: a cancelling correction and a held count for each of the two counts");
+  check(L0.state.transactions.every((t, i) => JSON.stringify(L1.state.transactions[i]) === JSON.stringify(t)), "no old entry was edited or removed");
+  check(sep(L1) === 200000, "September spending is now just the lunch, 2,000.00");
+  check(JSON.stringify(balances(L1)) === JSON.stringify(bal0), "every account balance is exactly what it was");
+  const kept = await copies();
+  check(Array.isArray(kept) && kept.some((c) => c.kind === "repair"), "a safety copy from before the repair was kept");
+  const copy = kept.find((c) => c.kind === "repair"), cl = JSON.parse(copy.text);
+  check(cl.state.transactions.length === L0.state.transactions.length && JSON.stringify(cl.state.entries) === JSON.stringify(L0.state.entries), "and it reads back as the ledger exactly as it was before");
+
+  await menuGo(page, "Weekly review");
+  check(!(await seen(page, "#screen", "Past counts booked", 600)), "the repair card is gone");
+  check(/past gaps that look like a move/i.test(await page.innerText("#screen")) && (await page.innerText("#screen")).includes("\u20B13,000.00"), "the 3,000.00 short and 3,000.00 extra are offered as one move");
+  await page.click('button[data-action="past-move"]');
+  check(await seen(page, "#toast", "waits in Verify"), "the move waits in Verify");
+  const L2 = await read();
+  const mv = L2.state.transactions.filter((t) => t.status === "draft");
+  check(mv.length === 1 && JSON.stringify(L2.state.entries.filter((e) => e.transaction_id === mv[0].id).map((e) => [e.account_id, e.amount]).sort()) === JSON.stringify([["X", -300000], ["Y", 300000]]), "it is ONE draft move from X to Y");
+  check(JSON.stringify(balances(L2)) === JSON.stringify(bal0) && sep(L2) === 200000, "balances still as they were, and no spending");
+  check(!/past gaps that look like a move/i.test(await page.innerText("#screen")), "the offer is gone");
+
+  await menuGo(page, "Setup");
+  check(await seen(page, "#screen", "Restore the copy from before the repair"), "Setup offers the copy from before the repair");
+  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+
 await protectionChecks({ browser, base: BASE, open, addAccount, menuGo, check });
 
 await browser.close();

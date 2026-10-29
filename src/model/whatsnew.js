@@ -2,6 +2,7 @@
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
   { id: "2026-10-29-payslip-fill", date: "2026-10-29", text: "A payroll PDF is never refused: the payslip form is filled with what was read, figures that do not add up say Check this, and a payslip that still differs is kept as a draft in Verify, where you can verify it anyway." },
+  { id: "2026-10-29-repair-counts", date: "2026-10-29", text: "Weekly review can put right past counts that booked a gap as spending: each is cancelled and counted again as not yet explained, after the app keeps a copy of your data." },
   { id: "2026-10-29-count-first", date: "2026-10-29", text: "Weekly review: count every account first, then see every gap side by side; a short and an equal extra between your own accounts become one proposed move." },
   { id: "2026-10-29-not-yet-explained", date: "2026-10-29", text: "The weekly count no longer books a gap as spending unless you say so: \"I'll explain later\" keeps it apart under Not yet explained, and Spent today now agrees with the month." },
   { id: "2026-10-29-cancel-once", date: "2026-10-29", text: "Fixed: a verified entry can be cancelled only once; a second tap on Cancel no longer adds a second \"Cancels\" line." },

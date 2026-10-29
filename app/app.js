@@ -1481,7 +1481,7 @@ function viewSetup() {
     <p class="note" id="about-reader">Checking the photo reader\u2026</p>
     <p><button data-action="warm-reader" id="warm-btn" style="width:100%" hidden>Download the photo reader now</button></p>
     <p class="note" id="about-storage"></p>${(() => { const g = M.shrinkProgress(S().attachments ?? [], today(), ledger.settings.photos_shrunk_through ?? ""); return g.old ? `<p class="note" id="shrink-note">Pictures older than 3 months are shrunk to save space, one time each: ${g.done} of ${g.old} done.</p>${g.waiting ? `<p><button data-action="shrink-now" style="width:100%">Shrink them now</button></p>` : ""}` : ""; })()}
-    ${(ui.copies ?? []).map((c, i) => `<p><button data-action="restore-copy" data-id="${i}" style="width:100%">${ui.confirmCopy === i ? "Tap again to restore. Entries made since then will be lost." : i === 0 ? "Restore the copy from before the last update" : "Restore the copy from before the update before that"}</button></p><p class="note small">Saved ${esc(fullDate(c.at.slice(0, 10)))}, before your data was updated from format ${c.from_version}.</p>`).join("")}`;
+    ${(ui.copies ?? []).map((c, i) => `<p><button data-action="restore-copy" data-id="${i}" style="width:100%">${ui.confirmCopy === i ? "Tap again to restore. Entries made since then will be lost." : c.kind === "repair" ? "Restore the copy from before the repair" : i === 0 ? "Restore the copy from before the last update" : "Restore the copy from before the update before that"}</button></p><p class="note small">Saved ${esc(fullDate(c.at.slice(0, 10)))}, ${c.kind === "repair" ? "before past weekly counts were repaired." : "before your data was updated from format " + c.from_version + "."}</p>`).join("")}`;
   const reserveHtml = `    ${reserveExists ? `<h2>Card reserve</h2><label for="r-src">Reserve transfers come out of</label><select id="r-src" data-action-change="set-reserve-source"><option value="">Choose an account</option>${hosts.map((a) => `<option value="${esc(a.id)}"${ledger.settings.reserve_source_id === a.id ? " selected" : ""}>${esc(a.name)}</option>`).join("")}</select>` : ""}`;
   const flat = setupFlat();   // one long page, kept for the tests; the phone shows a short list of pages
   const blocks = {
@@ -2143,6 +2143,25 @@ function viewGoals() {
     <p><button class="primary" data-action="open-goal" style="margin-top:8px">Add a goal</button></p>`;
 }
 
+// Past weekly counts that still count a gap as spending (or as found money lowering it): the owner can put them right in one step (owner, Oct 29), with the months before and after.
+function repairCardHtml() {
+  if (!M.repairableGaps(S()).length) return "";
+  const p = M.planGapRepair(S(), {});
+  if (!p.ok || !p.count) return "";
+  const net = p.months.reduce((n, m) => n + m.change, 0);
+  return `<div class="card" style="margin-bottom:14px"><p><b>${net < 0 ? "Past counts booked " + peso(-net) + " as spending." : net > 0 ? "Past counts hid " + peso(net) + " of spending." : "Past weekly counts are counted as spending."}</b></p>
+    <p class="note small">${p.count} weekly ${p.count === 1 ? "count" : "counts"} counted a gap you did not explain as money spent, or as money found. You can put ${p.count === 1 ? "it" : "them"} right.</p>
+    <p><button class="primary" data-action="open-repair">Look at the repair</button></p></div>`;
+}
+// Held gaps that look like ONE move between two own accounts (a short and an equal extra, counted within 3 days): one tap makes the move and clears both.
+function pastMovesHtml() {
+  const list = M.matchHeldGaps(S());
+  if (!list.length) return "";
+  return `<h2 class="today">Past gaps that look like a move</h2>` + list.map((m, i) => `<div class="card"><p><b>${peso(m.amount)}</b> left ${esc(accountName(m.short.account_id))} and arrived in ${esc(accountName(m.extra.account_id))}.</p>
+    <p class="note small">Counted ${esc(listDate(m.short.date))}. Both gaps are cancelled and one move waits in Verify. Balances stay as they are.</p>
+    <p><button${i === 0 && !M.repairableGaps(S()).length ? ' class="primary"' : ""} data-action="past-move" data-id="${i}" style="width:100%">Moved to another account of mine</button></p></div>`).join("");
+}
+
 // ---------- weekly check-in ----------
 // The week is the 7 days ending today. Each account is counted against what the bank or wallet really shows.
 const thisWeek = () => M.weekEndingOn(today());
@@ -2199,7 +2218,7 @@ function viewCheckin() {
   const heldGaps = M.unexplainedGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }), matchedNote = heldGaps.length ? `<p class="note small">${heldGaps.length === 1 ? "1 gap is" : heldGaps.length + " gaps are"} not yet explained. ${heldGaps.length === 1 ? "It is" : "They are"} not counted as spending. Log what explains ${heldGaps.length === 1 ? "it" : "them"} when you can.</p>` : "";   // a quiet reminder, never a block
   const fix = `<h2 class="today">A mistake in something verified?</h2><p class="note">A verified entry is final. Here, and only here, you can cancel one from the last two weeks and enter it again.</p>
     <button class="choice" data-action="open-correct"${fixable ? "" : " disabled"}><span>Put right a verified entry</span><span class="bval">${fixable ? fixable + " can be put right" : "none to put right"}</span></button>`;
-  return `<h1>Weekly review</h1><p class="sub">Week of ${esc(longDate(w.week_start))} to ${esc(longDate(w.week_end))}</p>
+  return `<h1>Weekly review</h1>${repairCardHtml()}${pastMovesHtml()}<p class="sub">Week of ${esc(longDate(w.week_start))} to ${esc(longDate(w.week_end))}</p>
     <p class="note">Open each account, look at the real balance, and type it in. Count them all first; then you see every gap together. ${accts.length ? pairFig(done, accts.length, { fmt: (n) => String(n), tail: "counted", left: "to count", doneWord: "All counted" }) : ""}</p>${backupLine}${(() => { const l = M.picturesBackupLine((S().attachments ?? []).length, ledger.settings.last_pictures_backup_at ?? "", today()); return l ? `<p class="note">${esc(l)} <button class="link" data-action="tab" data-tab="setup" data-page="backup">Back up pictures</button></p>` : ""; })()}${rows}${reviewGapsHtml(accts, pend)}${gapNote}${matchedNote}${fix}${questions}
     ${why("A gap you do not explain is kept apart as Not yet explained and is not counted as spending. It never blocks anything.")}`;
 }
@@ -2647,6 +2666,15 @@ function renderSheet() {
       <p class="note">This is saved as a draft transfer. Verify it like any other entry.</p>
       ${REQNOTE}
       <p><button class="primary" id="f-save" data-action="save-deposit" style="margin-top:6px" disabled>Save</button></p>`;
+  } else if (sh.type === "repair") {
+    const p = M.planGapRepair(S(), {}), net = p.months.reduce((n, m) => n + m.change, 0);
+    body = p.ok && p.count ? `<h3>Repair past weekly counts</h3>
+      <p class="note">Each count is cancelled by a correction and counted again as not yet explained. Nothing is edited or deleted. No balance changes.</p>
+      <div class="group">${p.months.map((m) => `<div class="row"><div>${esc(M.monthLabel(m.month))}<small>${m.count} ${m.count === 1 ? "count" : "counts"}</small></div><div class="amt">${peso(m.before)} \u2192 ${peso(m.after)}<small style="display:block;text-align:right">${m.change < 0 ? "\u2212" : "+"}${peso(Math.abs(m.change))} ${m.change < 0 ? "less spending" : m.change > 0 ? "more spending" : ""}</small></div></div>`).join("")}</div>
+      <p class="note small">Spending in these months ${net < 0 ? "goes down by " + peso(-net) : net > 0 ? "goes up by " + peso(net) : "stays the same"} in total. Gaps that match as one move between your accounts are offered next, on the Weekly review.</p>
+      <p><button class="primary" data-action="repair-run">Repair ${p.count} ${p.count === 1 ? "count" : "counts"}</button></p>
+      <p class="note small">The app first keeps a copy of your data as it is now: Setup, About this app, "Restore the copy from before the repair".</p>
+      <p><button data-action="close-sheet" style="width:100%">Not now</button></p>` : `<h3>Nothing to repair</h3><p class="note">Every past weekly count is already right.</p><p><button class="primary" data-action="close-sheet">Got it</button></p>`;
   } else if (sh.type === "gap-big") {
     const a = S().accounts.find((x) => x.id === sh.id), r = pendingCounts()[sh.id], q = a && r ? pendingGap(a, r) : null;
     body = q ? `<h3>This is most of the balance</h3>
@@ -3181,8 +3209,8 @@ function renderSheet() {
       <p class="note">Anything entered since this backup was made will be gone.${sh.all ? "" : ` Pictures are not in a backup, so those entries will say "picture not on this phone".`}</p>
       <p><button class="primary" id="f-save" data-action="restore-now">${ui.form.confirmRestore ? "Tap again to replace" : "Replace this phone's data"}</button></p>`;
   }
-  const closer = sh.type === "notice" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
-  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""} data-action="close-sheet"></div><div class="sheet${opening ? " enter" : ""}${sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
+  const closer = sh.type === "notice" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
+  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""} data-action="close-sheet"></div><div class="sheet${opening ? " enter" : ""}${sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
   const box = document.querySelector("#sheet .sheet"); if (box && keepAt) box.scrollTop = keepAt;
   if (voiceListener && sh.type === "voice") { const b = $("v-mic"); if (b) b.innerHTML = micLabel("Listening in " + LANG_NAME[ui.form.lang ?? firstLanguage()] + "... tap to stop"); setWave(true); }
   refreshSave();
@@ -3640,6 +3668,27 @@ async function onClick(el) {
       ui.sheet = null; renderSheet();
       await commit(M.applyCorrection(S(), plan));
       showToast("The gap is cleared. The money counts once.");
+      break;
+    }
+    case "open-repair": ui.sheet = { type: "repair" }; ui.form = {}; renderSheet(); break;
+    case "repair-run": {   // past data is changed: the app first keeps a copy of the ledger by the same mechanism as before an upgrade, reads it back, and stops if it cannot
+      const plan = M.planGapRepair(S(), { now: new Date() });
+      if (!plan.ok || !plan.count) { ui.sheet = null; renderSheet(); showToast(plan.ok ? "Nothing to repair." : "Could not repair: " + plan.violations[0].message); break; }
+      const next = M.nextLedger(ledger, M.applyGapRepair(S(), plan), ledger.settings);
+      const r = await M.replaceWithCopy({ current: ledger, next, io: { readCopies, writeCopies, writeLedger: (text) => writeBoth(text) }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });
+      if (!r.ok) { ui.sheet = null; ui.error = r.message.replace("Your data was not replaced", "The repair was not made"); renderAll(); break; }
+      if (!M.saveOutcome(r.written).ok) { ui.sheet = null; ui.error = "The repair could not be saved. Nothing was changed, and the copy is kept."; renderAll(); break; }
+      ledger = next; ui.copies = await readCopies(); ui.sheet = null; renderAll();
+      showToast("Repaired " + plan.count + (plan.count === 1 ? " count" : " counts") + ". Your data from before is kept.");
+      break;
+    }
+    case "past-move": {
+      const m = M.matchHeldGaps(S())[Number(id)];
+      if (!m) break;
+      const r = M.planGapMove(S(), m, { move_id: newId("tx"), now: new Date() });
+      if (!r.ok) { showToast("Could not save: " + r.violations[0].message); break; }
+      await commit(r.state);
+      showToast(peso(m.amount) + " move from " + accountName(m.short.account_id) + " to " + accountName(m.extra.account_id) + " waits in Verify.");
       break;
     }
     case "gap-decide": await decideGap(id, el.dataset.why); break;
