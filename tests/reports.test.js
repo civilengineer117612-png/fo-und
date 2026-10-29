@@ -159,12 +159,15 @@ test("a day total counts that date only, drafts included and reported apart", ()
   assert.deepEqual(d, { total: 35000, verified: 30000, draft: 5000, drafts: 1 });
   assert.equal(dayTotal(s, "2026-03-12").total, 0);
 });
-test("a day total ignores check-in gaps and refunds reduce it", () => {
+test("a day total counts the same things the month does: refunds reduce it, a gap booked as spending counts, a gap held as not yet explained does not", () => {
   const s = base();
   spend(s, "a", "2026-03-10", "rent", 30000);
   spend(s, "r", "2026-03-10", "rent", -4000);
-  spend(s, "g", "2026-03-10", "unlogged", 70000, "chk", { ...VERIFIED, source: "reconciliation" });
-  assert.equal(dayTotal(s, "2026-03-10").total, 26000);
+  spend(s, "g", "2026-03-10", "unlogged", 70000, "chk", { ...VERIFIED, source: "reconciliation", adjustment: true });
+  assert.equal(dayTotal(s, "2026-03-10").total, 26000, "held: not spending");
+  spend(s, "h", "2026-03-10", "unlogged", 5000, "chk", { ...VERIFIED, source: "reconciliation" });
+  assert.equal(dayTotal(s, "2026-03-10").total, 31000, "booked as spending: counts, as in the month");
+  assert.equal(spendingByCategory(s, { month: "2026-03" }).total, 31000);
 });
 
 // ---------- any date range ----------
