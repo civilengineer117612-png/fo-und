@@ -2054,6 +2054,8 @@ const V1 = { v: 1, rev: 3, saved_at: "2026-10-01T08:00:00.000+08:00", settings: 
   await page.waitForSelector("#nav button"); await seen(page, "#toast", "updated to the newest format");
   led = JSON.parse((await stored(page)).local);
   check(led.state.transactions.length === 1 && led.v === LEDGER_V, "the copy is back (the later expense is gone) and it is updated again");
+  check(await seen(page, "#sheet", "Your data was replaced"), "and a window says what was kept, with a way back");
+  await page.click('#sheet button:has-text("Got it")');
   await menuGo(page, "Setup");
   check((await page.locator('button[data-action="restore-copy"]').count()) === 1, "restoring does not pile up copies of the same data");
   await ctx.close(); }
