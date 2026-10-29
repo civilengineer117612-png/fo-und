@@ -2,7 +2,7 @@
 // Plain and firm, never harsh: facts are stated once, nothing is red, nothing blocks logging.
 import * as M from "../src/model/index.js";
 import { requestStorageProtection, storageProtected } from "./protection.js";
-import { readBoth, writeBoth, putPhoto, getPhoto, deletePhoto, useTrialStorage, clearTrialStorage, readCopies, writeCopies } from "./store.js";
+import { readBoth, writeBoth, putPhoto, getPhoto, deletePhoto, useTrialStorage, clearTrialStorage, readCopies, writeCopies, readRestoreCopies, writeRestoreCopies } from "./store.js";
 import { preparePhoto, readPage, readPlain, evenedCopy } from "./ocr.js";
 import { speechSupported, listen, firstLanguage, other } from "./voice.js";
 import { readPdfPages, readPdfScan, PdfCancelled } from "./pdftext.js";
@@ -1426,6 +1426,7 @@ function viewSetup() {
     <p><button data-action="open-restore" data-all="1" style="width:100%">Restore</button></p>
     <p><button class="link" data-action="more-backup" aria-expanded="${Boolean(ui.moreBackup)}">${ui.moreBackup ? "Fewer options" : "More: only the ledger, or only the pictures"}</button></p>
     ${ui.moreBackup ? `${ledgerBtns(false)}${singles}` : ""}` : `${ledgerBtns(true)}${singles}`}
+    ${ui.restoreCopies?.[0] ? `<p><button class="link" data-action="undo-restore">${ui.confirmUndo ? "Tap again to put back. What is here now is kept." : ui.restoreCopies[0].kind === "put-back" ? "Undo put back" : "Undo last restore"}</button></p><p class="note small">Saved ${esc(fullDate(ui.restoreCopies[0].at.slice(0, 10)))}, before the data was replaced.</p>` : ""}
     ${ledger.settings.last_pictures_backup_at && pics ? `<p class="note">Pictures last backed up ${esc(longDate(ledger.settings.last_pictures_backup_at.slice(0, 10)))}.</p>` : ""}
     <h2>Spreadsheet</h2>
     <p class="note">A plain list of your entries, to open in Numbers or Excel.</p>
@@ -3013,6 +3014,16 @@ function renderSheet() {
           ${st.ignored ? `<p class="note small" style="margin:0 0 6px">${st.ignored} ${st.ignored === 1 ? "entry" : "entries"} dated before ${esc(longDate(st.from))} become history only: they stop counting in the balance.</p>` : ""}` : ""}
         <p style="margin:14px 0 0;text-align:center"><button class="link" data-action="close-sheet">Close</button></p>`;
     }
+  } else if (sh.type === "replaced") {
+    const kept = (() => { try { return M.summarizeLedger(JSON.parse((ui.restoreCopies ?? [])[0].text)); } catch { return null; } })();
+    const line = kept ? `${kept.accounts} ${kept.accounts === 1 ? "account" : "accounts"}, ${kept.transactions ? kept.transactions + (kept.transactions === 1 ? " entry" : " entries") : "no entries"}${kept.latest_date ? ", latest " + longDate(kept.latest_date) : ""}` : "";
+    const back = sh.kind === "put-back";
+    body = `<h3 class="wl-title">${back ? "Put back" : "Your data was replaced"}</h3>
+      <p class="note">${back ? "Your data is back as it was." : "It is now the data you chose."}</p>
+      ${kept ? `<div class="card" style="border:0;padding:0"><dl><dt>${back ? "Kept, in case you change your mind" : "Kept from before"}</dt><dd>${esc(line)}</dd></dl></div>` : ""}
+      ${sh.pictures ? `<p class="note small">The ${sh.pictures === 1 ? "picture" : sh.pictures + " pictures"} that came back with the restore ${sh.pictures === 1 ? "stays" : "stay"} on this phone.</p>` : ""}
+      <p><button class="primary" data-action="close-sheet">Got it</button></p>
+      ${back ? "" : `<p><button data-action="put-back" style="width:100%">Put it back</button></p><p class="note small">Puts back what was here before. What is here now is kept, so this can be undone too.</p>`}`;
   } else if (sh.type === "catcard") {
     body = `<h3 class="wl-title">New: edit your categories</h3>
       <p class="note">Rename them, change each one's bucket, hide one you no longer use, or remove one you never used.</p>
@@ -3058,8 +3069,8 @@ function renderSheet() {
       <p class="note">Anything entered since this backup was made will be gone.${sh.all ? "" : ` Pictures are not in a backup, so those entries will say "picture not on this phone".`}</p>
       <p><button class="primary" id="f-save" data-action="restore-now">${ui.form.confirmRestore ? "Tap again to replace" : "Replace this phone's data"}</button></p>`;
   }
-  const closer = sh.type === "notice" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
-  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""} data-action="close-sheet"></div><div class="sheet${opening ? " enter" : ""}${sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
+  const closer = sh.type === "notice" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
+  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""} data-action="close-sheet"></div><div class="sheet${opening ? " enter" : ""}${sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
   const box = document.querySelector("#sheet .sheet"); if (box && keepAt) box.scrollTop = keepAt;
   if (voiceListener && sh.type === "voice") { const b = $("v-mic"); if (b) b.innerHTML = micLabel("Listening in " + LANG_NAME[ui.form.lang ?? firstLanguage()] + "... tap to stop"); setWave(true); }
   refreshSave();
@@ -4244,8 +4255,12 @@ async function onClick(el) {
       const i = Number(id), c = (ui.copies ?? [])[i]; if (!c) break;
       if (ui.confirmCopy !== i) { ui.confirmCopy = i; renderScreen(); break; }
       ui.confirmCopy = null;
-      await writeBoth(JSON.stringify(M.restorableCopy(c, ledger.rev)));
-      location.reload(); break;   // the app starts again, upgrades the copy (keeping a copy of it first) and carries on
+      await replaceLedger(M.restorableCopy(c, ledger.rev), { kind: "upgrade-copy" }); break;   // the data now on the phone is kept first; then the app starts again, upgrades the copy (keeping a copy of it first) and carries on
+    }
+    case "put-back": await putBack(); break;
+    case "undo-restore": {
+      if (!ui.confirmUndo) { ui.confirmUndo = true; renderScreen(); break; }
+      ui.confirmUndo = false; await putBack(); break;
     }
     case "open-backup": if (ui.menu) { ui.menu = false; renderMenu(); } ui.sheet = { type: "backup", all: el.dataset.all === "1" }; ui.form = {}; renderSheet(); break;   // from the menu: it steps aside
     case "open-restore": ui.sheet = { type: "restore", all: el.dataset.all === "1" }; ui.form = {}; renderSheet(); break;
@@ -4621,11 +4636,29 @@ async function restoreNow() {
       for (const f of ui.form.picFiles) await M.openPictures(f, ui.form.pass, async (id, bytes) => { if (want.has(id) && !(await getPhoto(id).catch(() => null))) await putPhoto(id, new Blob([bytes], { type: "image/jpeg" })); });
     } catch (e) { working(false, "Could not put the pictures back, so nothing was replaced: " + e.message); return; }
   }
-  const next = M.restoreLedger(ledger, ui.form.restored);
-  const r = await writeBoth(JSON.stringify(next));
-  if (M.saveOutcome(r).ok) { location.reload(); return; }   // the mirror may be full; the main store holds the restore
-  ui.sheet = null; ui.error = "The restore could not be saved to " + [!r.local && "localStorage", !r.idb && "IndexedDB"].filter(Boolean).join(" and ") + ". Nothing else was changed.";
-  renderAll();
+  await replaceLedger(M.restoreLedger(ledger, ui.form.restored), { kind: "restore", pictures: ui.form.pictures?.missing ?? 0 });
+}
+
+// Replacing the whole ledger (a backup, the copy from before an update, or putting a restore back) always goes through here: the data on the phone is saved
+// as a restore copy first, read back and checked, and if that fails NOTHING is replaced (model/restorecopy.js). The window "Your data was replaced" is shown once
+// after the reload; sessionStorage carries the word across it and nothing else is saved.
+const RESTORED_FLAG = "financialTracker.justReplaced";
+const restoreIo = { readCopies: readRestoreCopies, writeCopies: writeRestoreCopies, writeLedger: (text) => writeBoth(text) };
+async function replaceLedger(next, { kind, pictures = 0 }) {
+  const r = await M.replaceWithCopy({ current: ledger, next, io: restoreIo, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind } });
+  if (!r.ok) { ui.sheet = null; ui.error = r.message; renderAll(); return false; }
+  if (!M.saveOutcome(r.written).ok) {   // the mirror may be full; the main store holds the new data
+    ui.sheet = null; ui.error = "The new data could not be saved to " + [!r.written.local && "localStorage", !r.written.idb && "IndexedDB"].filter(Boolean).join(" and ") + ". Nothing else was changed, and the safety copy is kept.";
+    renderAll(); return false;
+  }
+  if (r.copied) { try { sessionStorage.setItem(RESTORED_FLAG, JSON.stringify({ kind, pictures })); } catch { /* the window is a courtesy; the copy is saved either way */ } }
+  location.reload(); return true;
+}
+// Put back what was on the phone before the last replacement (the newest restore copy). It takes its own copy first, so this can be undone too.
+async function putBack() {
+  const c = (ui.restoreCopies ?? [])[0];
+  if (!c) { ui.sheet = null; renderSheet(); return; }
+  await replaceLedger(M.restorableCopy(c, ledger.rev), { kind: "put-back" });
 }
 
 async function addAccount() {
@@ -4896,7 +4929,12 @@ async function start() {
   }
   if (!device.allowEntry) ui.tab = "log";
   if (!ui.copies) ui.copies = await readCopies();
+  ui.restoreCopies = await readRestoreCopies();
+  let justReplaced = null;
+  try { justReplaced = JSON.parse(sessionStorage.getItem(RESTORED_FLAG) ?? "null"); sessionStorage.removeItem(RESTORED_FLAG); } catch { justReplaced = null; }
+  if (justReplaced && device.allowEntry && boot.status === "OK" && ui.restoreCopies[0] && !ui.sheet) ui.sheet = { type: "replaced", kind: justReplaced.kind, pictures: justReplaced.pictures ?? 0 };
   renderAll();
+  if (ui.sheet?.type === "replaced") renderSheet();
   if (ui.upgrade?.done) showToast("Your data was updated to the newest format. A copy of the old data is kept in Setup.");
   // A brand-new install shows the notice once: the moment is remembered in the settings, which are saved with the first save. Help shows it again on request.
   if (device.allowEntry && boot.status === "NONE" && !ledger.settings.notice_seen_at) { ledger.settings = { ...ledger.settings, notice_seen_at: M.phTimestamp(), welcome_pending: true, cat_card_seen: M.phTimestamp() }; ui.sheet = { type: "notice" }; renderSheet(); }

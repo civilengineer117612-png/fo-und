@@ -169,7 +169,7 @@ P0 (loses data, blocks logging or blocks a backup)
   six old PR descriptions are the owner's decision.
 - P0-2 Budget suggestions, second part: the order of funding (fixed payments, needs at their usual level, the savings floor, the
   buffer, then wants with a cap), "Short by X" wording when the suggestion passes the pay. Waits on decision 6 and a wording preview.
-- P0-3 A safety copy before Restore, kept silently like the pre-upgrade copies; "Put it back" only in the restore message. Preview first.
+- P0-3 A safety copy before Restore: BUILT in the open PR (restore, the copy from before an update, and Put it back all keep a copy first). Moves to done when that PR is merged.
 
 P1
 - P1-1 README: data version 9 -> 10.
