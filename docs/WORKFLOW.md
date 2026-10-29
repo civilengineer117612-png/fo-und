@@ -43,7 +43,7 @@ test catches it. That careful work happens in the build agent, so that is where 
 7. The build agent builds, tests, mutation-checks, opens the PR, and replies with the report (PART 4).
 8. The report always ends with a box "PASTE TO PROJECT CHAT", or with the line "Nothing to paste to the project chat."
    The owner pastes the box into the project chat only when there is one.
-9. Merging: the build agent merges on two green checks, except a migration or a backup/restore change (merge rule in PART 5).
+9. Merging: the build agent merges every PR automatically when BOTH checks are green on its current head (merge rule in PART 5). A PR that changes saved data or repairs past data takes its own safety copy first, with a test.
 
 The build agent may fix a bug it finds on the way WITHOUT going through the project chat only when ALL of these hold:
 it is a real defect (a wrong figure, lost data, a broken screen), it is reproduced by a failing test first, the fix changes no
@@ -109,7 +109,7 @@ The app stays free (fixed decision)
 
 Data safety
 - A change to the SHAPE of saved data is a migration: raise `LEDGER_VERSION`, add the step, add a hand-written backup of the old
-  version to `tests/migrate.test.js`, mutation-check. A migration never deletes or renames a field. A fresh encrypted backup before merge.
+  version to `tests/migrate.test.js`, mutation-check. A migration never deletes or renames a field. The app takes its own safety copy of the ledger before the change runs (see Merging and deploying).
 - A verified entry is final: never edited or deleted, only cancelled by a correction at the Weekly review.
 - The state is never edited in place (caches rely on new arrays). Never scan all entries inside a loop over lines or transactions.
 - Storage names stay as they are (`financialTracker`, `financialTracker.ledger`, ...). Renaming them orphans every saved ledger.
@@ -128,20 +128,24 @@ Building and checking
 - A new file under `src/model/` is added to the list in `app/sw.js`.
 - Every PR that changes what a user sees or does adds ONE sentence at the top of `CHANGES` in `src/model/whatsnew.js`, and
   updates `src/model/help.js` when a screen or feature changes.
-- PR message: starts with the MERGE CHECK block (six lines, see CLAUDE.md), ends with the "Merge PR n" box.
+- PR message: starts with the MERGE CHECK block (six lines, see CLAUDE.md). There is no "Merge PR n" box.
 - Look and words: Ledger Paper colours from the tokens only, one filled button per screen, red only for strictly-over-budget
   charts, plain short words, no row tints, tone firm never harsh.
 
 Merging and deploying
-- Merge rule (owner, Oct 29): the build agent merges a PR itself as soon as BOTH checks (test and e2e) are green on the PR's
-  current head; never on red, never before the checks have run. Two kinds wait for the owner's "Merge PR n": a data migration
-  (`LEDGER_VERSION` or the shape of saved data changes; the owner makes a fresh backup first) and anything touching backup or restore.
-  Visible changes are already held by the preview rule (the owner's yes comes before building). GitHub's own auto-merge stays off
-  while only "test" is a required check, because it would merge before e2e has run.
-- After a merge, the other open PRs are brought up to date (merge main in, keep both What's new lines) and their checks run again.
-- Deploys happen only through the GitHub Pages workflow on merge. No deploy by hand, no Vercel, no other host.
-- No scheduled checks or routines. Waiting for CI to merge: the GitHub app should send the events; while it cannot (see Owner-only
-  actions), the build agent waits with short timers and says so.
+- Merge rule (owner, Oct 29, FINAL; it replaces every earlier one): the build agent merges EVERY PR automatically as soon as BOTH
+  checks (test and e2e) are green on the PR's current head. Never on red, never on pending, never skip or disable a test. After a
+  merge it brings the other open PRs up to date (merge main in, keep both What's new lines), lets their checks run again, and
+  reports what was merged. Visible changes are already held by the preview rule (the owner's yes comes before building).
+- A PR that changes the SHAPE of saved data or REPAIRS past data makes the app take its own safety copy of the ledger BEFORE the
+  change runs, by the existing pre-upgrade copy mechanism (`rotateCopies` and `writeCopies`, read back and checked, as in
+  `upgradeSaved`), and carries a test that proves the copy exists and reads back. It then merges like any other PR: no owner
+  backup step.
+- GitHub's own auto-merge stays off while only "test" is a required check, because it would merge before e2e has run.
+- Deploys happen only through the GitHub Pages workflow, which waits for both checks on the same commit (#264). No deploy by hand,
+  no Vercel, no other host.
+- No scheduled checks or routines. While the GitHub app cannot send CI events (see Owner-only actions), the build agent waits for
+  checks with short timers and says so.
 
 How the owner wants to be talked to
 - Plain, short words; a one-line explanation for any jargon; no emojis; formal but human; direct, no praise.
@@ -169,12 +173,14 @@ P0 (loses data, blocks logging or blocks a backup)
   six old PR descriptions are the owner's decision.
 - P0-2 Budget suggestions, second part: the order of funding (fixed payments, needs at their usual level, the savings floor, the
   buffer, then wants with a cap), "Short by X" wording when the suggestion passes the pay. Waits on decision 6 and a wording preview.
-- P0-3 A safety copy before Restore: BUILT in the open PR (restore, the copy from before an update, and Put it back all keep a copy first). Moves to done when that PR is merged.
+- P0-3 A safety copy before Restore: DONE (#270).
+- P0-4 Weekly check-in gaps: #271 cancel-once is merged; the new check-in is #272 (count all first, held gaps, proposed moves); the repair of past months is next (owner approved: both directions, per-month before and after, proposed moves from old pairs).
 
 P1
 - P1-1 README: data version 9 -> 10.
 - P1-2 Payslip reader leftovers (repeated rows merged, 0.00 lines dropped, labels replaced, a mismatched payslip can still be saved as
   verified income, the duplicate check ignores the employer). The owner has not scanned his own payslip since #263.
+- P1-4 Duplicate transaction ids: `validateState` has no check for a repeated transaction id. First step, read-only: count (no values) whether the owner's data holds any, and find whether any code path can still create them (the cancel path is fixed in #271). If yes, its own PR with a failing test first.
 - P1-3 Flexible payslip lines (design agreed in principle, not approved to build; needs an additive migration).
 
 P2 (wait for "next"): WebKit e2e run; voice entry disclosure in Help and the first-run notice; library licence note; trim
