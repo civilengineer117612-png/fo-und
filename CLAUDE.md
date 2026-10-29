@@ -1,5 +1,9 @@
 # Notes for working on this repo
 
+TWO CHATS (owner, Oct 29): ideas and decisions live in a claude.ai PROJECT CHAT; this repo's session is the BUILD AGENT. How they hand work to each
+other, the task and report templates, the current backlog and the merge rule are in `docs/WORKFLOW.md`: read it first. Every report ends with a
+"PASTE TO PROJECT CHAT" box, or the line "Nothing to paste to the project chat."
+
 Personal finance app for one owner. A web app installed to the iPhone Home Screen. The ledger lives ONLY on that
 iPhone (local-first, no server, no sync). This repository is PUBLIC: never commit real financial data, screenshots,
 payslips, account numbers or balances, and never ship brand logos (account pictures are chosen on the phone).
@@ -21,7 +25,7 @@ payslips, account numbers or balances, and never ship brand logos (account pictu
   `python3 -m http.server 8124` first). A new file under `src/model/` must also be added to the list in `app/sw.js`;
   a test enforces it.
 - After writing a check, break the code on purpose and confirm the check fails (mutation check).
-- Deploys happen on merge to `main` (GitHub Pages). STANDING PERMISSION (owner, Oct 15): merge a PR yourself as soon as BOTH CI checks (test and e2e) are green on its head, without waiting for "Merge PR n"; never merge on red, and say what was merged afterwards (with the Backlog). Everything else that is outward-facing still needs the owner's yes.
+- Deploys happen on merge to `main` (GitHub Pages). MERGE RULE (owner, Oct 23; the Oct 15 standing permission is SUSPENDED until the owner confirms "e2e" is a required check): merge a PR ONLY when the owner says so ("Merge PR n", or "merge them once green" in the request) and BOTH CI checks (test and e2e) are green on its head; never on red; say what was merged afterwards (with the Backlog). Everything else that is outward-facing still needs the owner's yes.
 
 ## How the owner wants to work
 - FIXED DECISION (owner, no budget): the app stays free. Never add a paid or AI service, an API key, or a button that sends a
@@ -179,7 +183,7 @@ New ideas are NOT built the moment they are said. Every item has one level, and 
 - AUTOPILOT (owner, Oct 17, standing): when a PR is merged, report it with the Backlog (at most 5 lines, P1 first) and GO ON to the next pending item at once (P1, then the P2s in number order) without waiting for the owner's number. Stop only for what needs the owner: the screenshot-first drawing of a visible change, the write-up of a major change, and a question whose answer changes how the app behaves (one copy-paste box). Whenever the owner's yes or answers are needed, ALSO send a push notification to the owner's app (PushNotification tool, one short line saying what waits), not only the reply. While one item waits for a yes, prepare the next in a scratch copy; still one open PR at a time. The owner's own "yes" to a drawing approves the DESIGN, not the order of work.
 - "qq" side questions and Waiting-list notes are not backlog items.
 - The list lives here (owner keeps it short; remove an item when it is merged):
-  - P1: none. Everything from the Oct 17 and Oct 18 lists is merged (dark mode, search, account history, CSV export, net worth, goal pictures, and the audit fixes: past scheduled payments #230, Pay plan at 320 px #231, content-security line #233, polish #234, the eye on Goals and Cards #243). Open: the negative "Saved toward goals" total seen on the owner's phone (a goal whose account holds less than nothing; needs the owner to say which goal). The next idea becomes P2 and waits for the owner.
+  - The current backlog, open decisions and owner-only actions are in `docs/WORKFLOW.md` (PART 7). Keep that list current in the PR that merges an item.
 
 ARRANGE BY HAND (owner, Oct 17; data version unchanged, `src/model/order.js`): Setup's Categories and Accounts are A to Z (Cash first among accounts) until the owner arranges them. HOLD a row for half a second and drag it in the same touch (no handle or mark on the rows; the list sits in the same white card with the same rows before, during and after the hold: while arranging the rows keep their tiles, small lines and amounts (only dragging works, the buttons inside are off) and the held row lifts as a rounded tile, no shadow; only the heading line changes: Done, and one line of text); Done ends it. The small line under an account name is short: its kind (Cash, Bank or wallet, Savings pocket, Credit card), "covers X" for a reserve, "linked to X" only when the name does not start with the bank, and, on a line of its own at the bottom, the last four digits written "··1234" (no words) or the short link "add last 4" (none for Cash); no picture hint. The order is saved as plain lists of ids in settings `category_order` and `account_order` (`arranged`, `orderFrom`): arranged ones first in that order, anything never moved or new follows A to Z, unknown ids are ignored. The pickers (Category, Paid from, From, To) keep "Last used" on top and then follow this order (cards stay in their own group).
 
