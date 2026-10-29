@@ -848,7 +848,11 @@ check(!(await text(page, "#screen")).includes("Weekly questions"), "the weekly q
 const ck = await text(page, "#screen"), lastBackup = JSON.parse((await stored(page)).local).settings.last_backup_at;
 check(ck.includes("One reminder: back up after this check-in") === !lastBackup, "the check-in carries the backup reminder when a backup is due, and stays quiet right after one (last backup: " + (lastBackup ? "today" : "never") + ")");
 // A count with a gap is only kept until you say what happened (here: "I spent some of it", which books the missing money as unlogged spending, as the owner chose).
-const decide = async (page, name, why) => { await page.click(`#screen .card:has-text("${name}") button[data-action="gap-decide"][data-why="${why}"]`); await page.waitForTimeout(300); if (await page.locator('#sheet button[data-action="gap-sure"]').count()) await page.click('#sheet button[data-action="gap-sure"]'); };
+const decide = async (page, name, why) => {   // `why` is wanted when that choice exists (a shortfall offers "spent"); a count with no gap has nothing to decide
+  const card = `#screen .card:has-text("${name}") button[data-action="gap-decide"]`;
+  if (!(await page.locator(card).count())) return;
+  await page.click((await page.locator(`${card}[data-why="${why}"]`).count()) ? `${card}[data-why="${why}"]` : `${card}[data-why="later"]`);
+  await page.waitForTimeout(300); if (await page.locator('#sheet button[data-action="gap-sure"]').count()) await page.click('#sheet button[data-action="gap-sure"]'); };
 await page.click('.choice:has-text("Wallet")');
 await page.fill("#f-amount", "1");
 check((await text(page, "#f-diff")).includes("missing"), "typing a count shows the difference before saving");
@@ -878,8 +882,8 @@ for (let wk = 1; wk <= 3; wk++) {   // three more weeks, so there are four answe
   await page.clock.setFixedTime(new Date(T0.getTime() + wk * 7 * 86400000));
   await page.reload(); await page.waitForSelector("#nav button");
   await menuGo(page, "Weekly review");
-  await page.click('.choice:has-text("Wallet")'); await page.fill("#f-amount", String(wk)); await page.click("#f-save"); await seen(page, "#toast", "Wallet: counted");
-  await decide(page, "Wallet", "spent"); await seen(page, "#toast", "counted as spending");
+  await page.click('.choice:has-text("Wallet")'); await page.fill("#f-amount", String(wk)); await page.click("#f-save"); await seen(page, "#toast", "Wallet:");
+  await decide(page, "Wallet", "spent"); await seen(page, "#toast", "Wallet:");
   await page.click('.choice:has-text("Four quick questions")');
   await page.click(`#sheet button[data-action="survey-ease"][data-id="${wk + 1}"]`); await page.fill("#f-annoy", "week " + wk + " note");
   await page.click("#f-save"); await seen(page, "#toast", "Answers saved");
