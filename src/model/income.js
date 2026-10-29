@@ -62,12 +62,12 @@ export function payslipProblems(payslip, lines) {
   const gaps = [payslip.printed_gross - t.gross, payslip.printed_net - t.net, payslip.deposit - payslip.printed_net, payslip.printed_deductions > 0 ? payslip.printed_deductions - t.deductions : 0];
   return { flags, gap: Math.abs(gaps.find((g) => g !== 0) ?? 0) };
 }
-// A payslip kept as a draft cannot become verified income while its figures still do not add up: Verify asks for the payslip to be fixed first.
+// A payslip kept as a draft cannot become verified income while its figures still do not add up, unless the owner says "Verify anyway" (then the deposit is the money in and the paper's difference stays as a note).
 export function payslipDraftBlock(state, transactionId) {
   const p = (state.payslips ?? []).find((x) => x.transaction_id === transactionId);
   if (!p) return null;
   const { flags, gap } = payslipProblems(p, linesOf(state, p.id));
-  return flags.length ? { gap, message: "The payslip figures still differ" + (gap ? " by " + peso(gap) : "") + ". Change the payslip first (Edit), then verify it." } : null;
+  return flags.length ? { gap, message: "The payslip itself differs" + (gap ? " by " + peso(gap) : "") + "." } : null;
 }
 
 // Saves a payslip and the pay it brought: ONE verified entry for what arrived (copying a figure off paper is itself the
@@ -281,6 +281,8 @@ export const revisionsOf = (state, payslipId) => (state.payslipRevisions ?? []).
 export function payslipNotes(state, p) {
   const out = [], gap = Math.round((Date.parse(p.pay_date + "T00:00:00Z") - Date.parse(p.period_to + "T00:00:00Z")) / 86400000);
   if (gap > 7) out.push("Pay date is " + gap + " days after period end.");
+  const paper = payslipProblems(p, linesOf(state, p.id));   // a payslip whose paper does not add up keeps this note for good, even after "Verify anyway"
+  if (paper.flags.length) out.push("Paper differs by " + (paper.gap ? peso(paper.gap) : "the amount in words") + ".");
   if (p.printed_deductions > 0) {
     const diff = p.printed_deductions - payslipTotals(linesOf(state, p.id)).deductions;
     out.push(diff === 0 ? "Lines match paper." : "Lines differ from paper by " + peso(Math.abs(diff)) + ".");

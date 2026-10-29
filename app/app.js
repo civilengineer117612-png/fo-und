@@ -3113,6 +3113,12 @@ function renderSheet() {
           ${st.ignored ? `<p class="note small" style="margin:0 0 6px">${st.ignored} ${st.ignored === 1 ? "entry" : "entries"} dated before ${esc(longDate(st.from))} become history only: they stop counting in the balance.</p>` : ""}` : ""}
         <p style="margin:14px 0 0;text-align:center"><button class="link" data-action="close-sheet">Close</button></p>`;
     }
+  } else if (sh.type === "slip-verify") {
+    const slip = (S().payslips ?? []).find((p) => p.transaction_id === sh.id);
+    body = `<h3>The payslip itself differs${sh.gap ? " by " + esc(peso(sh.gap)) : ""}. Verify anyway?</h3>
+      <p class="note">${slip ? esc(peso(slip.deposit)) + " reached the account, so that is what counts as money in." : "What reached the account counts as money in."} The lines stay as they are, and the payslip keeps the note "Paper differs by${sh.gap ? " " + esc(peso(sh.gap)) : ""}".</p>
+      <p><button class="primary" data-action="verify-paper-gap">Verify anyway</button></p>
+      <p><button data-action="close-sheet" style="width:100%">Not now</button></p>`;
   } else if (sh.type === "replaced") {
     const kept = (() => { try { return M.summarizeLedger(JSON.parse((ui.restoreCopies ?? [])[0].text)); } catch { return null; } })();
     const line = kept ? `${kept.accounts} ${kept.accounts === 1 ? "account" : "accounts"}, ${kept.transactions ? kept.transactions + (kept.transactions === 1 ? " entry" : " entries") : "no entries"}${kept.latest_date ? ", latest " + longDate(kept.latest_date) : ""}` : "";
@@ -3175,8 +3181,8 @@ function renderSheet() {
       <p class="note">Anything entered since this backup was made will be gone.${sh.all ? "" : ` Pictures are not in a backup, so those entries will say "picture not on this phone".`}</p>
       <p><button class="primary" id="f-save" data-action="restore-now">${ui.form.confirmRestore ? "Tap again to replace" : "Replace this phone's data"}</button></p>`;
   }
-  const closer = sh.type === "notice" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
-  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""} data-action="close-sheet"></div><div class="sheet${opening ? " enter" : ""}${sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
+  const closer = sh.type === "notice" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
+  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""} data-action="close-sheet"></div><div class="sheet${opening ? " enter" : ""}${sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
   const box = document.querySelector("#sheet .sheet"); if (box && keepAt) box.scrollTop = keepAt;
   if (voiceListener && sh.type === "voice") { const b = $("v-mic"); if (b) b.innerHTML = micLabel("Listening in " + LANG_NAME[ui.form.lang ?? firstLanguage()] + "... tap to stop"); setWave(true); }
   refreshSave();
@@ -3262,7 +3268,7 @@ function refreshSave() {
     for (const [key, id, from] of [["e", "chk-e", marks.gross], ["d", "chk-d", marks.ded]]) { const note = $(id); if (note) { note.hidden = !from; note.textContent = from ? "\u25B2 Check this: " + from : ""; } }
     if (out) {
       const te = $("p-tot-e"), td = $("p-tot-d"); if (te) te.textContent = peso(t.gross); if (td) td.textContent = peso(t.deductions);
-      const flags = problems.flags.filter((x) => x.code === "WORDS");
+      const flags = problems.flags.filter((x) => x.code === "WORDS" || (x.code === "GROSS" && /leaves out the overtime/.test(x.message)));   // the two checks that name something no field mark can
       const matches = lines.length && p.printed_gross && p.printed_net && p.deposit && !problems.flags.length && !p.errors.length;
       const box = $("p-lines"), tap = $("p-match");
       if (box && tap) { const collapse = matches && !ui.linesOpen && !box.contains(document.activeElement); box.hidden = collapse; tap.hidden = !collapse; }
@@ -4368,9 +4374,18 @@ async function onClick(el) {
       break;
     }
     case "verify-ok": {
+      const blocked = M.payslipDraftBlock(S(), id);
+      if (blocked) { ui.sheet = { type: "slip-verify", id, gap: blocked.gap }; renderSheet(); break; }   // one explicit step, never silent
       const r = M.verifyDraft(S(), id);
       ui.confirmDelete = null;
       if (r.ok) await commit(r.state); else showToast("Could not verify: " + r.violations[0].message);
+      break;
+    }
+    case "verify-paper-gap": {
+      const r = M.verifyDraft(S(), ui.sheet.id, new Date(), { acceptPaperGap: true });
+      ui.sheet = null; renderSheet();
+      if (r.ok && await commit(r.state)) showToast("Verified. The payslip keeps its note: paper differs.");
+      else if (!r.ok) showToast("Could not verify: " + r.violations[0].message);
       break;
     }
     case "verify-edit": {

@@ -1,6 +1,7 @@
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planPayslip, updatePayslip, verifyDraft, payslipProblems, payslipDraftBlock, incomeBySource, incomeBreakdown, netPerPayday, employerHistory, deductionsByMonth, linesOf, matchPayslips, missingPayPeriods, ensureIncomeCategories } from "../src/model/index.js";
+import { planPayslip, updatePayslip, verifyDraft, payslipProblems, payslipDraftBlock, incomeBySource, incomeBreakdown, netPerPayday, employerHistory, deductionsByMonth, linesOf, matchPayslips, missingPayPeriods, payslipNotes, ensureIncomeCategories } from "../src/model/index.js";
 import { makeState, account } from "./fixtures.js";
 
 // Invented numbers. Hand-worked: earnings 9,000.00 + 1,000.00 = 10,000.00; deductions 700 + 300 + 100 + 100 = 1,200.00; net 8,800.00.
@@ -46,8 +47,8 @@ test("a payslip saved with passing checks is verified income exactly as before",
 test("VERIFY: a draft payslip that still does not add up cannot become verified; after the figures are put right it can", () => {
   const r = planPayslip(ledger(), WRONG({ status: "draft" }), NOW);
   const refused = verifyDraft(r.state, "tx-ps1");
-  assert.equal(refused.ok, false); assert.match(refused.violations[0].message, /still differ by .*1,000\.00/); assert.equal(refused.state.transactions.find((t) => t.id === "tx-ps1").status, "draft");
-  assert.match(payslipDraftBlock(r.state, "tx-ps1").message, /Change the payslip first/);
+  assert.equal(refused.ok, false); assert.match(refused.violations[0].message, /itself differs by .*1,000\.00/); assert.equal(refused.state.transactions.find((t) => t.id === "tx-ps1").status, "draft");
+  assert.equal(payslipDraftBlock(r.state, "tx-ps1").gap, 100000);
   const fixed = updatePayslip(r.state, "ps1", base({ status: "draft" }), NOW);
   assert.ok(fixed.ok, JSON.stringify(fixed.violations)); assert.equal(fixed.transaction.status, "draft", "editing keeps it a draft until it is verified");
   const v = verifyDraft(fixed.state, "tx-ps1");
@@ -71,4 +72,42 @@ test("a payslip kept as a draft does not hide a missing pay period", () => {
   assert.deepEqual(missingPayPeriods(live, null, "2026-06-10"), [{ from: "2026-05-16", to: "2026-05-31" }]);
   const draft = mk(["2026-03-01", "2026-03-15"], ["2026-03-16", "2026-03-31"], ["2026-04-01", "2026-04-15"], ["2026-04-16", "2026-04-30", "draft"], ["2026-05-01", "2026-05-15"]);
   assert.deepEqual(missingPayPeriods(draft, null, "2026-06-10"), [{ from: "2026-04-16", to: "2026-04-30" }, { from: "2026-05-16", to: "2026-05-31" }], "the draft half still shows as missing");
+});
+
+// Owner's decision (Oct 29): paper that does not add up can still be verified after one explicit step. Hand-worked: earnings 14,000.00 + 900.00 = 14,900.00 against
+// a printed gross of 15,000.00 (100.00 more); deductions 3,000.00; printed net 12,000.00; the deposit that reached the account is 12,000.00.
+test("VERIFY ANYWAY: paper that does not add up: no without a yes, then the deposit is the money in, the note stays, nothing else changes", () => {
+  const input = { printed_gross: 1500000, printed_net: 1200000, deposit: 1200000, earnings: [{ kind: "basic", amount: 1400000 }, { kind: "rice", amount: 90000 }], deductions: [{ kind: "tax", amount: 300000 }], status: "draft" };
+  const r = planPayslip(ledger(), base(input), NOW);
+  assert.ok(r.ok, JSON.stringify(r.violations));
+  assert.equal(payslipDraftBlock(r.state, "tx-ps1").gap, 10000, "the paper differs by 100.00");
+  const no = verifyDraft(r.state, "tx-ps1");
+  assert.equal(no.ok, false, "without the yes it is refused"); assert.equal(no.state.transactions.find((t) => t.id === "tx-ps1").status, "draft");
+  assert.equal(incomeBySource(r.state, RANGE).total, 0, "and still no income");
+  const yes = verifyDraft(r.state, "tx-ps1", NOW, { acceptPaperGap: true });
+  assert.ok(yes.ok, JSON.stringify(yes.violations));
+  const s = yes.state;
+  assert.equal(s.transactions.find((t) => t.id === "tx-ps1").status, "verified");
+  assert.equal(incomeBySource(s, RANGE).total, 1200000, "money in is the deposit, 12,000.00 exactly");
+  assert.equal(s.entries.filter((e) => e.transaction_id === "tx-ps1" && e.account_id === "chk").reduce((n, e) => n + e.amount, 0), 1200000);
+  assert.deepEqual(payslipNotes(s, s.payslips[0]).filter((n) => /Paper differs/.test(n)), ["Paper differs by \u20B1100.00."], "the note shows 100.00");
+  assert.deepEqual(linesOf(s, "ps1"), linesOf(r.state, "ps1"), "no line was invented or changed");
+  assert.deepEqual(s.payslips, r.state.payslips, "the payslip's own figures are unchanged");
+  assert.deepEqual(s.entries, r.state.entries, "no entry changed");
+  assert.equal(s.transactions.length, r.state.transactions.length, "nothing else was added");
+});
+
+test("a payslip that adds up has no paper note", () => {
+  const ok = planPayslip(ledger(), base(), NOW);
+  assert.deepEqual(payslipNotes(ok.state, ok.state.payslips[0]).filter((n) => /Paper differs/.test(n)), []);
+});
+
+test("the screen asks before verifying a payslip that differs, and only the yes passes acceptPaperGap", () => {
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  const ok = app.slice(app.indexOf('case "verify-ok": {'), app.indexOf('case "verify-paper-gap": {'));
+  assert.match(ok, /payslipDraftBlock\(S\(\), id\);\s*if \(blocked\) \{ ui\.sheet = \{ type: "slip-verify"[^]*?break;[^]*?M\.verifyDraft\(S\(\), id\);/, "a plain tap on Verify asks first and never passes the override");
+  const yes = app.slice(app.indexOf('case "verify-paper-gap": {'), app.indexOf('case "verify-edit": {'));
+  assert.match(yes, /acceptPaperGap: true/);
+  assert.equal(app.split("acceptPaperGap").length - 1, 1, "the override is used in exactly one place");
+  assert.match(app, /Verify anyway\?/);
 });

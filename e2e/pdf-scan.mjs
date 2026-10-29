@@ -159,15 +159,25 @@ try {
     assert.equal(after.v, seed.v);
     console.log(`ok: inconsistent ${name} fills the form, marks the figure, and Save keeps a draft (no verified income)`);
   }
-  // The draft waits in Verify: verifying it is refused while the figures differ; Edit opens the payslip window; once it adds up, Save makes it verified income.
+  // The draft waits in Verify: a tap asks "Verify anyway?"; "Not now" changes nothing; the yes makes the DEPOSIT verified money in and the payslip keeps its note.
   { const l = await ledgerNow();
     await page.locator('#nav [data-tab="verify"]').click();
-    const row = page.locator('#screen').getByText('Example Employer Ltd').first(); await row.waitFor();
+    await page.locator('#screen').getByText('Example Employer Ltd').first().waitFor();
     await page.locator('#screen [data-action="verify-ok"]').first().click();
-    await page.waitForFunction(() => /still differ by/.test(document.getElementById('toast').innerText));
-    assert.equal(verifiedPay(await ledgerNow()), verifiedPay(l), 'verifying was refused: no payslip became verified');
-    console.log('ok: a payslip draft with figures that differ cannot be verified');
+    await page.locator('#sheet').getByText(/The payslip itself differs by .*Verify anyway\?/).waitFor();
+    await page.locator('#sheet [data-action="close-sheet"]').last().click();
+    assert.equal(verifiedPay(await ledgerNow()), verifiedPay(l), 'Not now: no payslip became verified');
+    await page.locator('#screen [data-action="verify-ok"]').first().click();
+    await page.locator('#sheet [data-action="verify-paper-gap"]').click();
+    await page.waitForFunction((n) => JSON.parse(localStorage.getItem('financialTracker.ledger')).state.transactions.filter(t => t.status === 'verified').length > n, l.state.transactions.filter(t => t.status === 'verified').length);
+    const after = await ledgerNow(), tx = after.state.transactions.find(t => t.status === 'verified' && !l.state.transactions.find(o => o.id === t.id && o.status === 'verified'));
+    const slip = after.state.payslips.find(x => x.transaction_id === tx.id);
+    assert.equal(after.state.entries.filter(e => e.transaction_id === tx.id && e.account_id === 'example-bank').reduce((n, e) => n + e.amount, 0), slip.deposit, 'money in is the deposit exactly');
+    assert.deepEqual(after.state.payslipLines.filter(x => x.payslip_id === slip.id), l.state.payslipLines.filter(x => x.payslip_id === slip.id), 'no line was changed');
+    await page.locator('#menuBtn').click(); await page.locator('#menu [data-tab="money"]').click(); await page.locator('#top [data-tab="income"]').click();
+    console.log('ok: Verify anyway makes the deposit verified money in, and the lines stay as read');
   }
+
   const bankDomains = new Set(BANKS.flatMap((bank) => [bank.domain, ...(bank.alt ?? [])]));
   for (const request of external) {
     const host = new URL(request.url).hostname.replace(/^www\./, "");

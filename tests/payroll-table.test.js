@@ -78,3 +78,8 @@ test('nothing the old refusal covered returns an error or empties the form',()=>
   const cases=[a=>{a.find(i=>i.y===640&&i.str==='17,000.00').str='18,000.00';},a=>{a.find(i=>i.str==='12,000.00').str='12,OOO.OO';},a=>{a.find(i=>i.str==='Tax Deductions').str='Unclear heading';}];
   for(const change of cases){const r=read({change});assert.equal(r.error,undefined);assert.ok(r.earnings.length>0&&r.deductions.length>0&&r.printed_net>0&&r.deposit>0);}
 });
+test('an unreadable printed gross is replaced by what the earnings add up to, and said',()=>{
+  const r=read({change:a=>{a.find(i=>i.y===640&&i.str==='17,000.00').str='17,0O0.00';}});
+  assert.equal(r.error,undefined);assert.equal(r.printed_gross,1700000);assert.equal(sum(r.earnings),1700000);
+  assert.deepEqual(flagOf(r,'gross'),['the printed gross could not be read']);
+});
