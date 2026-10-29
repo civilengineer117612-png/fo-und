@@ -2156,7 +2156,7 @@ function viewCheckin() {
   const age = M.daysSinceBackup(ledger.settings, today());
   const backupLine = age === null || age >= 6 ? `<p class="note"><b>One reminder:</b> back up after this check-in. ${esc(backupAgeText())} ${esc(M.picturesNote((S().attachments ?? []).length))} <button class="link" data-action="tab" data-tab="setup" data-page="backup">Back up now</button></p>` : "";
   const fixable = M.correctable(S(), today()).length;
-  const gapNote = fixable && accts.some((a) => { const c = countedThisWeek(a.id); return c && c.difference !== 0; })
+  const gapNote = fixable && accts.some((a) => { const c = countedThisWeek(a.id); return (c && c.difference !== 0) || (pend[a.id] && pendingGap(a, pend[a.id]).difference !== 0); })
     ? `<p class="note">A gap can come from a wrong entry. <button class="link" data-action="open-correct">Look through the last two weeks</button></p>` : "";
   const heldGaps = M.unexplainedGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }), matchedNote = heldGaps.length ? `<p class="note small">${heldGaps.length === 1 ? "1 gap is" : heldGaps.length + " gaps are"} not yet explained. ${heldGaps.length === 1 ? "It is" : "They are"} not counted as spending. Log what explains ${heldGaps.length === 1 ? "it" : "them"} when you can.</p>` : "";   // a quiet reminder, never a block
   const fix = `<h2 class="today">A mistake in something verified?</h2><p class="note">A verified entry is final. Here, and only here, you can cancel one from the last two weeks and enter it again.</p>

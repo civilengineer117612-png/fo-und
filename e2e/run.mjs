@@ -847,12 +847,16 @@ check((await text(page, "#top")).includes("Weekly review") && (await text(page, 
 check(!(await text(page, "#screen")).includes("Weekly questions"), "the weekly questions wait until something is counted");
 const ck = await text(page, "#screen"), lastBackup = JSON.parse((await stored(page)).local).settings.last_backup_at;
 check(ck.includes("One reminder: back up after this check-in") === !lastBackup, "the check-in carries the backup reminder when a backup is due, and stays quiet right after one (last backup: " + (lastBackup ? "today" : "never") + ")");
+// A count with a gap is only kept until you say what happened (here: "I spent some of it", which books the missing money as unlogged spending, as the owner chose).
+const decide = async (page, name, why) => { await page.click(`#screen .card:has-text("${name}") button[data-action="gap-decide"][data-why="${why}"]`); await page.waitForTimeout(300); if (await page.locator('#sheet button[data-action="gap-sure"]').count()) await page.click('#sheet button[data-action="gap-sure"]'); };
 await page.click('.choice:has-text("Wallet")');
 await page.fill("#f-amount", "1");
 check((await text(page, "#f-diff")).includes("missing"), "typing a count shows the difference before saving");
 await shot(page, "21-checkin-count");
-await page.click("#f-save");
-check(await seen(page, "#toast", "Wallet:") && (await text(page, ".choice:has-text('Wallet')")).includes("missing"), "a count that is short is recorded and says how much is missing");
+await page.click("#f-save"); await seen(page, "#toast", "Wallet: counted");
+check((await text(page, ".choice:has-text('Wallet')")).includes("missing") && JSON.parse((await stored(page)).local).state.checkIns.length === 0, "a count that is short is kept, not posted yet, and says how much is missing");
+await decide(page, "Wallet", "spent"); await seen(page, "#toast", "Wallet:");
+check((await text(page, ".choice:has-text('Wallet')")).includes("missing"), "after the choice it is recorded and says how much is missing");
 ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.state.checkIns.length === 1 && ledgerNow.state.transactions.some((t) => t.source === "reconciliation" && t.status === "verified"), "the count is kept, with a verified Unlogged entry for the gap");
 await page.click('.choice:has-text("Four quick questions")');
@@ -874,7 +878,8 @@ for (let wk = 1; wk <= 3; wk++) {   // three more weeks, so there are four answe
   await page.clock.setFixedTime(new Date(T0.getTime() + wk * 7 * 86400000));
   await page.reload(); await page.waitForSelector("#nav button");
   await menuGo(page, "Weekly review");
-  await page.click('.choice:has-text("Wallet")'); await page.fill("#f-amount", String(wk)); await page.click("#f-save"); await seen(page, "#toast", "Wallet:");
+  await page.click('.choice:has-text("Wallet")'); await page.fill("#f-amount", String(wk)); await page.click("#f-save"); await seen(page, "#toast", "Wallet: counted");
+  await decide(page, "Wallet", "spent"); await seen(page, "#toast", "counted as spending");
   await page.click('.choice:has-text("Four quick questions")');
   await page.click(`#sheet button[data-action="survey-ease"][data-id="${wk + 1}"]`); await page.fill("#f-annoy", "week " + wk + " note");
   await page.click("#f-save"); await seen(page, "#toast", "Answers saved");
