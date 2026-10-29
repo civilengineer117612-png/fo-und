@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-10-29-not-yet-explained", date: "2026-10-29", text: "The weekly count no longer books a gap as spending unless you say so: \"I'll explain later\" keeps it apart under Not yet explained, and Spent today now agrees with the month." },
   { id: "2026-10-29-restore-safety-copy", date: "2026-10-29", text: "Restoring a backup now keeps a copy of what was on your phone first, and you can put it back (Backup and restore, Undo last restore)." },
   { id: "2026-10-29-card-due-paid", date: "2026-10-29", text: "Fixed: the card's due-day payment draft no longer treats a posted purchase, a count or a cancelled payment as money already paid." },
   { id: "2026-10-29-budget-short", date: "2026-10-29", text: "Fixed: Suggest a budget no longer lowers Food or other needs to hide a shortage; it now says how much the suggestion is over your pay." },

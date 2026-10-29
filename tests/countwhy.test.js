@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planExpense, applyDrafts, verifyDraft, planCheckIn, planCheckInWithMove, spendingByCategory, spendingByAccount, dailySpending, naturalBalance, countedEntries } from "../src/model/index.js";
+import { planExpense, applyDrafts, verifyDraft, planCheckIn, planCheckInWithMove, unexplainedGaps, spendingByCategory, spendingByAccount, dailySpending, naturalBalance, countedEntries } from "../src/model/index.js";
 import { spendingByPayee } from "../src/model/payees.js";
 import { makeState } from "./fixtures.js";
 
@@ -33,10 +33,22 @@ test("without just match it, MORE money still lowers spending (the old behaviour
   assert.equal(spent(apply(s, p)), 0);
 });
 
-test("just match it, with LESS money than the ledger: still unlogged spending, and the count says it was matched", () => {
-  const s = ledger(), p = count(s, 70000, "match");   // 700.00 counted, 880.00 in the ledger
-  assert.equal(p.checkIn.difference, -18000); assert.equal(p.checkIn.matched, true); assert.equal(p.transaction.adjustment, undefined);
-  assert.equal(spent(apply(s, p)), 12000 + 18000, "the 180.00 that left is spending nobody logged");
+test("I'll explain later, with LESS money than the ledger: the balance is right and the 180.00 is held, NOT spending (it used to be booked as unlogged spending)", () => {
+  const s = ledger(), p = count(s, 70000, "later");   // 700.00 counted, 880.00 in the ledger
+  assert.equal(p.checkIn.difference, -18000); assert.equal(p.checkIn.matched, true); assert.equal(p.transaction.adjustment, true);
+  const next = apply(s, p);
+  assert.equal(spent(next), 12000, "spending is still the lunch");
+  assert.equal(naturalBalance(next.accounts.find((a) => a.id === "chk"), countedEntries(next)), 70000, "the balance matches the count");
+  assert.deepEqual(unexplainedGaps(next, { from: "2026-10-01", to: "2026-10-31" }).map((g) => [g.kind, g.amount, g.account_id]), [["short", 18000, "chk"]], "and it is listed as not yet explained");
+});
+test("\"I spent some of it\" (a plain count) still books the missing money as spending", () => {
+  const s = ledger(), p = count(s, 70000, undefined);
+  assert.equal(p.transaction.adjustment, undefined);
+  assert.equal(spent(apply(s, p)), 12000 + 18000);
+});
+test("the old word \"match\" means the same as \"later\"", () => {
+  const s = ledger();
+  assert.equal(count(s, 70000, "match").transaction.adjustment, true);
 });
 
 test("a gap explained as a move makes a move DRAFT and the count then matches: no gap entry, no spending change", () => {

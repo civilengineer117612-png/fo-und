@@ -1679,6 +1679,16 @@ function paintLine() {
   $("tlstep").textContent = `By ${stepWord} · ${series.length} ${series.length === 1 ? "point" : "points"}`;
   for (const b of document.querySelectorAll("#tlbox .tlranges button")) b.setAttribute("aria-pressed", String(b.dataset.id === t.key));
 }
+
+// Weekly check-in gaps the owner has not explained (owner, Oct 29): kept out of spending and listed apart, so the total above says only what was spent.
+function unexplainedHtml(from, to) {
+  const list = M.unexplainedGaps(S(), { from, to, unlogged_category_id: M.UNLOGGED_CATEGORY_ID });
+  if (!list.length) return "";
+  const word = (g) => { const card = S().accounts.find((x) => x.id === g.account_id)?.class === "liability"; return g.kind === "short" ? (card ? "owes more than logged" : "missing") : (card ? "owes less than logged" : "more than logged"); };
+  return `<h2 class="today">Not yet explained</h2><div class="group">${list.map((g) => `<div class="row"><div>${esc(accountName(g.account_id))}<small>${esc(word(g))}, counted ${esc(listDate(g.date))}. Not part of what you spent.</small></div><div class="amt">${peso(g.amount)}</div></div>`).join("")}</div>
+    <p class="note small">Log what explains it and you are offered "This explains the gap". Until then it stays out of the total above.</p>`;
+}
+
 function viewMoney() {
   const p = period(), [from, to] = periodBounds(p), maps = S().categoryMaps, asOf = today(), nowM = M.monthOf(today()), nowY = Number(today().slice(0, 4));
   const cat = M.spendingByRange(SV(), { from, to, categoryMaps: maps, asOf });
@@ -1698,7 +1708,8 @@ function viewMoney() {
   const hero = `<h1>Spending</h1>${stepper}<div class="hero">${peso(cat.total)}</div><p class="sub">${esc(sub)}</p>${delta}${pendingNote(cat.pending)}${moneyViews()}${ui.view === "category" ? "" : modeBar()}`;
   // A list is tapped to go back to the chart, the same way a chart is tapped to go to its list.
   const done = (html) => hero + (ui.asList ? `<div class="flip" data-action="chart-mode" data-mode="chart" role="button" tabindex="0" aria-label="The list. Tap to show the chart.">${html}</div>` : html);
-  const empty = () => hero + (p.kind === "month" ? emptyMoney() : `<p class="note">Nothing verified in this period.</p>`);
+  const gapsHtml = ui.view === "category" ? unexplainedHtml(from, to) : "";
+  const empty = () => hero + (p.kind === "month" ? emptyMoney() : `<p class="note">Nothing verified in this period.</p>`) + gapsHtml;
 
   if (ui.view === "month") {
     const endMonth = p.kind === "month" ? p.month : p.kind === "year" ? p.year + "-12" : M.monthOf(to);
@@ -1734,7 +1745,7 @@ function viewMoney() {
   // A row below zero (a count that found money) is shown last with its minus and no bar, so the rows add up to the total.
   const minus = rows.filter((r) => r.amount < 0).map((r) => ({ id: r.id, action: "spending-category", name: r.label, sub: "brings the total down", fig: "\u2212" + peso(-r.amount) }));
   return hero + barCard(rows.filter((r) => r.amount > 0).map((r) => ({ id: r.id, action: "spending-category", name: r.label, fig: peso(r.amount), pct: Math.max(2, Math.round((r.amount * 100) / top)), label: `${r.name}: ${Math.round((r.amount * 100) / top)}% of the largest` })).concat(minus)) + `
-    <p class="entrylink"><button class="link" data-action="open-entries">See every entry</button></p>`;
+    <p class="entrylink"><button class="link" data-action="open-entries">See every entry</button></p>` + gapsHtml;
 }
 
 // Each budget as a meter: how much of it is used, with a mark for how far through the month we are.
@@ -2122,7 +2133,7 @@ function viewCheckin() {
   const fixable = M.correctable(S(), today()).length;
   const gapNote = fixable && accts.some((a) => { const c = countedThisWeek(a.id); return c && c.difference !== 0; })
     ? `<p class="note">A gap can come from a wrong entry. <button class="link" data-action="open-correct">Look through the last two weeks</button></p>` : "";
-  const matchedNote = accts.some((a) => countedThisWeek(a.id)?.matched) ? `<p class="note small">Matched to your bank. Log the moves when you can.</p>` : "";   // after "just match it": a quiet reminder, never a block
+  const heldGaps = M.unexplainedGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }), matchedNote = heldGaps.length ? `<p class="note small">${heldGaps.length === 1 ? "1 gap is" : heldGaps.length + " gaps are"} not yet explained. ${heldGaps.length === 1 ? "It is" : "They are"} not counted as spending. Log what explains ${heldGaps.length === 1 ? "it" : "them"} when you can.</p>` : "";   // a quiet reminder, never a block
   const fix = `<h2 class="today">A mistake in something verified?</h2><p class="note">A verified entry is final. Here, and only here, you can cancel one from the last two weeks and enter it again.</p>
     <button class="choice" data-action="open-correct"${fixable ? "" : " disabled"}><span>Put right a verified entry</span><span class="bval">${fixable ? fixable + " can be put right" : "none to put right"}</span></button>`;
   return `<h1>Weekly review</h1><p class="sub">Week of ${esc(longDate(w.week_start))} to ${esc(longDate(w.week_end))}</p>
@@ -2573,6 +2584,13 @@ function renderSheet() {
       <p class="note">This is saved as a draft transfer. Verify it like any other entry.</p>
       ${REQNOTE}
       <p><button class="primary" id="f-save" data-action="save-deposit" style="margin-top:6px" disabled>Save</button></p>`;
+  } else if (sh.type === "checkin" && ui.form.bigSure === "ask") {
+    const a = S().accounts.find((x) => x.id === sh.id), q = M.planCheckIn(S(), { ...checkInInput(a, M.parsePesos(ui.form.amount).centavos), id: "probe", transaction_id: "probe" }).checkIn;
+    body = `<h3>This is most of the balance</h3>
+      <p>You counted <b>${peso(q.counted_balance)}</b>. The ledger says <b>${peso(q.ledger_balance)}</b>.</p>
+      <p class="note">Did you move it, or mistype the count?</p>
+      <p><button class="primary" data-action="count-sure">The count is right</button></p>
+      <p><button data-action="count-change" style="width:100%">Change the count</button></p>`;
   } else if (sh.type === "checkin") {
     const a = S().accounts.find((x) => x.id === sh.id);
     body = `<h3>Count ${esc(a.name)}</h3>
@@ -3024,6 +3042,13 @@ function renderSheet() {
       ${sh.pictures ? `<p class="note small">The ${sh.pictures === 1 ? "picture" : sh.pictures + " pictures"} that came back with the restore ${sh.pictures === 1 ? "stays" : "stay"} on this phone.</p>` : ""}
       <p><button class="primary" data-action="close-sheet">Got it</button></p>
       ${back ? "" : `<p><button data-action="put-back" style="width:100%">Put it back</button></p><p class="note small">Puts back what was here before. What is here now is kept, so this can be undone too.</p>`}`;
+  } else if (sh.type === "explain-gap") {
+    const g = M.unexplainedGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }).find((x) => x.transaction_id === sh.gapId), e = S().transactions.find((x) => x.id === sh.entryId);
+    body = g && e ? `<h3 class="wl-title">This explains the gap?</h3>
+      <p>${esc(e.payee || "This entry")}, ${peso(g.amount)} on ${esc(accountName(g.account_id))}, is the same amount as the gap found at the check-in on ${esc(listDate(g.date))}.</p>
+      <p class="note">The gap is cancelled, so the money counts once, in this entry. The balance stays what you counted.</p>
+      <p><button class="primary" data-action="explain-gap">This explains the gap</button></p>
+      <p><button data-action="close-sheet" style="width:100%">Not the same</button></p>` : `<h3>Already done</h3><p class="note">That gap is no longer waiting.</p><p><button class="primary" data-action="close-sheet">Got it</button></p>`;
   } else if (sh.type === "catcard") {
     body = `<h3 class="wl-title">New: edit your categories</h3>
       <p class="note">Rename them, change each one's bucket, hide one you no longer use, or remove one you never used.</p>
@@ -3069,8 +3094,8 @@ function renderSheet() {
       <p class="note">Anything entered since this backup was made will be gone.${sh.all ? "" : ` Pictures are not in a backup, so those entries will say "picture not on this phone".`}</p>
       <p><button class="primary" id="f-save" data-action="restore-now">${ui.form.confirmRestore ? "Tap again to replace" : "Replace this phone's data"}</button></p>`;
   }
-  const closer = sh.type === "notice" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
-  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""} data-action="close-sheet"></div><div class="sheet${opening ? " enter" : ""}${sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
+  const closer = sh.type === "notice" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
+  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""} data-action="close-sheet"></div><div class="sheet${opening ? " enter" : ""}${sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
   const box = document.querySelector("#sheet .sheet"); if (box && keepAt) box.scrollTop = keepAt;
   if (voiceListener && sh.type === "voice") { const b = $("v-mic"); if (b) b.innerHTML = micLabel("Listening in " + LANG_NAME[ui.form.lang ?? firstLanguage()] + "... tap to stop"); setWave(true); }
   refreshSave();
@@ -3092,20 +3117,25 @@ function refreshSave() {
     const a = M.parsePesos(f.amount);
     btn.disabled = !a.ok;
   } else if (type === "checkin") {
-    const a = M.parsePesos(f.amount), acct = S().accounts.find((x) => x.id === ui.sheet.id);
-    const gap = a.ok && acct?.class === "asset" ? M.planCheckIn(S(), { ...checkInInput(acct, a.centavos), id: "probe", transaction_id: "probe" }).checkIn.difference : 0;
-    const why = gap > 0 ? (f.why === "spent" ? "match" : f.why ?? "match") : gap < 0 ? (f.why === "income" ? "match" : f.why ?? "match") : null;
-    btn.disabled = !a.ok || a.centavos < 0 || (why === "move" && !f.other_id);
+    const a = M.parsePesos(f.amount), acct = S().accounts.find((x) => x.id === ui.sheet.id), card = acct?.class === "liability";
+    const q = a.ok && acct ? M.planCheckIn(S(), { ...checkInInput(acct, a.centavos), id: "probe", transaction_id: "probe" }) : null;
+    const gap = q ? q.checkIn.difference : 0, why = gap !== 0 ? f.why : null;   // nothing is chosen for you (owner, Oct 29): the old default "just match it" booked the gap as spending
+    btn.disabled = !a.ok || a.centavos < 0 || (gap !== 0 && !why) || (why === "move" && !f.other_id);
     const out = $("f-diff");
-    if (out) { const q = a.ok && acct ? M.planCheckIn(S(), { ...checkInInput(acct, a.centavos), id: "probe", transaction_id: "probe" }) : null; out.textContent = !q ? "" : acct.class === "liability" ? "Ledger: " + peso(q.checkIn.ledger_balance) + (q.checkIn.difference === 0 ? " \u00b7 matches" : " \u00b7 " + peso(Math.abs(q.checkIn.difference)) + (q.checkIn.difference > 0 ? " more" : " less")) : "The ledger says " + peso(q.checkIn.ledger_balance) + ". " + differenceText(q.checkIn.difference) + ".";
+    if (out) out.textContent = !q ? "" : card ? "Ledger: " + peso(q.checkIn.ledger_balance) + (gap === 0 ? " \u00b7 matches" : " \u00b7 " + peso(Math.abs(gap)) + (gap > 0 ? " more" : " less")) : "The ledger says " + peso(q.checkIn.ledger_balance) + ". " + differenceText(gap) + ".";
+    const box = $("f-paid");
+    if (box) {
       // a card that owes LESS than the ledger says was usually paid and the payment is not logged yet: one button logs it (owner, Oct 20), so it is not counted as money found
-      const pay = $("f-paid"); if (pay) { const less = q && acct.class === "liability" && q.checkIn.difference < 0 ? -q.checkIn.difference : 0; pay.hidden = !less; pay.innerHTML = less ? `<button data-action="count-paid" style="width:100%">I paid the card: log ${peso(less)}</button>` : ""; } }
-      { const box = $("f-paid"); if (box && why) { const more = gap > 0, amt = peso(Math.abs(gap));   // a bank or wallet count with a gap: where did it go? (owner, Oct 20) "Not sure: just match it" is the default
-        const opts = more ? [["move", "Moved in from another account of mine"], ["income", "Money I received"], ["match", "Not sure: just match it"]] : [["move", "Moved to another account of mine"], ["spent", "I spent some of it"], ["match", "Not sure: just match it"]];
-        const others = S().accounts.filter((x) => x.class === "asset" && !x.archived && x.id !== acct.id);
-        box.hidden = false; box.innerHTML = `<h4 class="dayhead">${more ? "Where did the extra " + amt + " come from?" : "Where did the missing " + amt + " go?"}</h4>` + opts.map(([v, t]) => `<button class="chip wide" data-action="count-why" data-id="${v}" aria-pressed="${why === v}">${t}</button>`).join("")
-          + (why === "move" ? `<label>${more ? "From" : "To"}${REQ}</label>${accountPicker(others, f.other_id, "pick-count-other", "countother", "Choose an account")}` : "")
-          + `<p class="note small">${why === "match" ? (more ? "Matching it does not count as spending." : "Not sure counts as spending you did not log.") : ""}</p>`; } }
+      const less = card && gap < 0 ? -gap : 0, more = gap > 0, amt = peso(Math.abs(gap));
+      const opts = card ? (more ? [["spent", "I spent some of it"], ["later", "I'll explain later"]] : [["later", "I'll explain later"]])
+        : more ? [["move", "Moved in from another account of mine"], ["income", "Money I received"], ["later", "I'll explain later"]] : [["move", "Moved to another account of mine"], ["spent", "I spent some of it"], ["later", "I'll explain later"]];
+      const others = S().accounts.filter((x) => x.class === "asset" && !x.archived && x.id !== acct.id);
+      const head = card ? (more ? `Where did the extra ${amt} owed come from?` : `The card owes ${amt} less than logged.`) : more ? `Where did the extra ${amt} come from?` : `Where did the missing ${amt} go?`;
+      box.hidden = gap === 0;
+      box.innerHTML = gap === 0 ? "" : (less ? `<button data-action="count-paid" style="width:100%">I paid the card: log ${peso(less)}</button>` : "") + `<h4 class="dayhead">${head}</h4>` + opts.map(([v, t2]) => `<button class="chip wide" data-action="count-why" data-id="${v}" aria-pressed="${why === v}">${t2}</button>`).join("")
+        + (why === "move" ? `<label>${more ? "From" : "To"}${REQ}</label>${accountPicker(others, f.other_id, "pick-count-other", "countother", "Choose an account")}` : "")
+        + `<p class="note small">${why === "later" ? `Your balance is corrected. The ${amt} is kept apart as not yet explained and is not counted as spending.` : why === "spent" ? "Counts as spending you did not log." : ""}</p>`;
+    }
   } else if (type === "survey") {
     const c = (f.q1c ?? "").trim(), a = M.parsePesos(f.q1a ?? "");
     btn.disabled = !(f.ease && /^\d{1,4}$/.test(c) && a.ok);
@@ -3331,8 +3361,37 @@ async function logExpense(input, label) {
   if (ok && !drafts[0].transaction.schedule_id) {   // a due scheduled payment of about the same name and amount: offer to link, so it is counted once
     const t0 = drafts[0].transaction, due = M.matchDueDraft(S(), { payee: t0.payee || label, amount: input.amount, date: t0.date, category_id: input.category_id });
     if (due) setTimeout(() => { if (!ui.sheet) { ui.sheet = { type: "linkdue", newId: t0.id, dueId: due }; renderSheet(); } }, 60);
+    // the same money as a weekly check-in gap that is not yet explained (same account, exact amount, that check-in's week): offer to clear the gap, so it counts once
+    else { const gap = M.findOpenGap(S(), { account_id: input.account_id, amount: input.amount, date: t0.date, exclude_id: t0.id, unlogged_category_id: M.UNLOGGED_CATEGORY_ID });
+      if (gap) setTimeout(() => { if (!ui.sheet) { ui.sheet = { type: "explain-gap", gapId: gap.transaction_id, entryId: t0.id }; renderSheet(); } }, 60); }
   }
   return ok;
+}
+
+// One count. A gap the owner has not explained is held as "not yet explained" (not spending); the count window makes them choose, and asks first when the gap is most of the balance.
+async function saveCheckin() {
+  const amount = M.parsePesos(ui.form.amount), acct = S().accounts.find((x) => x.id === ui.sheet.id);
+  if (!amount.ok) { showToast("Enter the balance like 1250.50"); return; }
+  const probe = M.planCheckIn(S(), { ...checkInInput(acct, amount.centavos), id: "probe", transaction_id: "probe" }).checkIn;
+  const gap = probe.difference, why = gap !== 0 ? ui.form.why : null;
+  if (gap !== 0 && !why) { showToast("Choose what happened to the difference."); return; }
+  if (gap !== 0 && M.bigGap(probe.ledger_balance, amount.centavos) && ui.form.bigSure !== true) { ui.form.bigSure = "ask"; renderSheet(); return; }   // most of the balance, or a count of 0: moved, or mistyped?
+  if (why === "income") { ui.sheet = { type: "income" }; ui.form = { amount: (gap / 100).toFixed(2), date: today(), account_id: acct.id, category_id: null }; renderSheet(); showToast("Log the money received, then count again"); return; }
+  if (why === "move") {
+    const r = M.planCheckInWithMove(S(), { ...checkInInput(acct, amount.centavos), id: newId("chk"), transaction_id: newId("tx") }, { account_id: ui.form.other_id, move_id: newId("tx") }, new Date());
+    if (!r.ok) { showToast("Could not save: " + r.violations[0].message); return; }
+    ui.sheet = null; renderSheet();
+    await commit({ ...r.state, checkIns: [...S().checkIns, r.plan.checkIn] });
+    showToast("Counted. The move waits in Verify."); return;
+  }
+  const plan = M.planCheckIn(S(), { ...checkInInput(acct, amount.centavos), id: newId("chk"), transaction_id: newId("tx"), posting_transaction_id: newId("tx"), ...(why === "later" ? { why: "later" } : {}) }, new Date());   // "spent": a plain count, unlogged spending
+  if (!plan.ok) { showToast("Could not save: " + plan.violations[0].message); return; }
+  const next = { ...S(), checkIns: [...S().checkIns, plan.checkIn] };
+  const made = [plan.posting, plan.transaction ? { transaction: plan.transaction, entries: plan.entries } : null].filter(Boolean);   // the posting pair first, then the count's own entry
+  if (made.length) { next.transactions = [...S().transactions, ...made.map((m) => m.transaction)]; next.entries = [...S().entries, ...made.flatMap((m) => m.entries)]; }
+  ui.sheet = null; renderSheet();
+  await commit(next);
+  showToast(acct.name + ": " + (why === "later" ? differenceText(plan.checkIn.difference, acct.class === "liability") + ", not yet explained" : differenceText(plan.checkIn.difference, acct.class === "liability")));
 }
 
 async function onClick(el) {
@@ -3457,32 +3516,17 @@ async function onClick(el) {
       break;
     }
     case "open-checkin": ui.sheet = { type: "checkin", id }; ui.form = { amount: "" }; renderSheet(); break;
-    case "save-checkin": {
-      const amount = M.parsePesos(ui.form.amount), acct = S().accounts.find((x) => x.id === ui.sheet.id);
-      if (!amount.ok) { showToast("Enter the balance like 1250.50"); break; }
-      let base = S(), why = null;
-      if (acct.class === "asset") {   // a bank, wallet or cash count with a gap: what happened to the difference? (owner, Oct 20)
-        const gap = M.planCheckIn(S(), { ...checkInInput(acct, amount.centavos), id: "probe", transaction_id: "probe" }).checkIn.difference;
-        why = gap > 0 ? (ui.form.why === "spent" ? "match" : ui.form.why ?? "match") : gap < 0 ? (ui.form.why === "income" ? "match" : ui.form.why ?? "match") : null;
-        if (why === "income") { ui.sheet = { type: "income" }; ui.form = { amount: (gap / 100).toFixed(2), date: today(), account_id: acct.id, category_id: null }; renderSheet(); showToast("Log the money received, then count again"); break; }
-        if (why === "move") {
-          const r = M.planCheckInWithMove(S(), { ...checkInInput(acct, amount.centavos), id: newId("chk"), transaction_id: newId("tx") }, { account_id: ui.form.other_id, move_id: newId("tx") }, new Date());
-          if (!r.ok) { showToast("Could not save: " + r.violations[0].message); break; }
-          ui.sheet = null; renderSheet();
-          await commit({ ...r.state, checkIns: [...S().checkIns, r.plan.checkIn] });
-          showToast("Counted. The move waits in Verify."); break;
-        }
-      }
-      const plan = M.planCheckIn(base, { ...checkInInput(acct, amount.centavos), id: newId("chk"), transaction_id: newId("tx"), posting_transaction_id: newId("tx"), ...(why ? { why } : {}) }, new Date());
-      if (!plan.ok) { showToast("Could not save: " + plan.violations[0].message); break; }
-      const next = { ...S(), checkIns: [...S().checkIns, plan.checkIn] };
-      const made = [plan.posting, plan.transaction ? { transaction: plan.transaction, entries: plan.entries } : null].filter(Boolean);   // the posting pair first, then the count's own entry
-      if (made.length) { next.transactions = [...S().transactions, ...made.map((m) => m.transaction)]; next.entries = [...S().entries, ...made.flatMap((m) => m.entries)]; }
+    case "save-checkin": await saveCheckin(); break;
+    case "explain-gap": {
+      const gapId = ui.sheet?.gapId, plan = M.planCorrection(S(), { id: gapId, redo_id: newId("fix"), today: today() }, new Date());
+      if (!plan.ok) { ui.sheet = null; renderSheet(); showToast("Could not clear the gap: " + plan.violations[0].message); break; }
       ui.sheet = null; renderSheet();
-      await commit(next);
-      showToast(acct.name + ": " + differenceText(plan.checkIn.difference, acct.class === "liability"));
+      await commit(M.applyCorrection(S(), plan));
+      showToast("The gap is cleared. The money counts once.");
       break;
     }
+    case "count-sure": ui.form.bigSure = true; await saveCheckin(); break;
+    case "count-change": ui.form.bigSure = null; renderSheet(); break;
     case "count-basis": ui.form.basis = id; renderSheet(); break;
     case "count-why": ui.form.why = id; renderSheet(); break;
     case "pick-count-other": ui.form.other_id = id; if (ui.sheet) ui.sheet.pick = null; renderSheet(); break;

@@ -65,9 +65,10 @@ export function planCheckIn(state, input, now = new Date()) {
   }
   const ledger = isCard && input.basis === "owed" ? cardOutstanding(account, countedEntries(basisState)).total : ledgerBalanceFor(account, countedEntries(basisState));
   const difference = input.counted_balance - ledger;   // + means you hold more than the ledger says
-  // "Not sure: just match it" (owner, Oct 20): a bank or wallet count with a gap nobody explained. Found money (more than the ledger) is never
-  // spending going down, so that entry is an `adjustment` the spending reports skip; money missing stays unlogged spending, as before.
-  const matched = !isCard && input.why === "match" && difference !== 0;
+  // "I'll explain later" (owner, Oct 29; it replaces "Not sure: just match it", which booked a missing amount as unlogged spending): the count still corrects the
+  // balance, but the gap is HELD, so it is not spending, up or down. This is the `adjustment` flag the spending reports skip, for a gap in either direction
+  // and for cards too. "match" is the old word for the same thing.
+  const matched = (input.why === "later" || input.why === "match") && difference !== 0;
   const checkIn = {
     id: input.id, date: input.date, account_id: account.id,
     counted_balance: input.counted_balance, ledger_balance: ledger, difference,
@@ -87,7 +88,7 @@ export function planCheckIn(state, input, now = new Date()) {
     memo: "Reconciliation: counted " + input.counted_balance + ", ledger " + ledger,
     // Counting the money is the owner's deliberate look (spec 8.2), so it is verified.
     status: "verified", source: "reconciliation", created_at: stamp, verified_at: stamp,
-    ...(matched && difference > 0 ? { adjustment: true } : {}),
+    ...(matched ? { adjustment: true } : {}),
   };
   const entries = [
     { transaction_id: transaction.id, account_id: account.id, amount: accountLeg,

@@ -5,6 +5,7 @@
 // still in Unlogged is SHOWN under its payee's category in the reports (`withPayeeBook`), and the stored entry stays as it was. Drafts are changed for real.
 // Pure logic; amounts are centavos.
 import { UNLOGGED_CATEGORY_ID } from "./seed.js";
+import { heldIds } from "./held.js";
 
 // One key per payee: lower case, punctuation and extra spaces dropped ("BDO Unibank, Inc. ending 1234" and "bdo unibank inc ending 1234" are one).
 export const payeeKey = (text) => String(text ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -41,11 +42,11 @@ export function withPayeeBook(state, book) {
 export function spendingByPayee(state, book, { from, to }) {
   const expense = new Set(state.categories.filter((c) => c.kind === "expense").map((c) => c.id));
   const tx = new Map(state.transactions.map((t) => [t.id, t]));
-  const byKey = new Map();
+  const byKey = new Map(), held = heldIds(state);
   for (const e of state.entries) {
     if (!e.category_id || !expense.has(e.category_id)) continue;
     const t = tx.get(e.transaction_id);
-    if (!t || t.adjustment || t.status !== "verified" || t.date < from || t.date > to) continue;
+    if (!t || held.has(t.id) || t.status !== "verified" || t.date < from || t.date > to) continue;
     const key = payeeKey(t.payee) || "(no name)";
     const m = byKey.get(key) ?? { key, label: payeeLabel(t.payee), total: 0, count: 0, txs: new Set(), cats: new Map() };
     m.total += e.amount;
