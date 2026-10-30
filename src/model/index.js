@@ -1,7 +1,7 @@
 // Entry points. A "save" is validated against the state as it WOULD be after the save;
 // nothing is written here. The caller persists only if result.ok is true.
 import { validateShape } from "./schema.js";
-import { checkEntriesBalance, checkReferences, checkReserve, checkDuplicate, checkRulesAppendOnly } from "./invariants.js";
+import { checkEntriesBalance, checkReferences, checkReserve, checkDuplicate, checkEntryFinal, checkRulesAppendOnly } from "./invariants.js";
 import { countedEntries } from "./balances.js";
 
 export { SCHEMAS, validateShape } from "./schema.js";
@@ -16,7 +16,7 @@ export { SUGGEST_DEFAULTS, resolveSettings } from "./suggest-settings.js";
 export { APP_BUILD, APP_BUILT_ON, isDevBuild } from "./version.js";
 export { overdrawOf, naturalBalance, cardOutstanding, reserveShortfalls, reserveCover, netPosition, countedEntries, earlyEntryChanges } from "./balances.js";
 export { paceAhead } from "./budget.js";
-export { countsTowardBudget, splitByBudgetStatus } from "./invariants.js";
+export { countsTowardBudget, splitByBudgetStatus, repeatedIds, repeatsLine } from "./invariants.js";
 export { phTimestamp, isPhDate, isPhTimestamp, isCentavos } from "./util.js";
 
 const result = (violations) => ({ ok: !violations.some((v) => v.severity === "error"), violations });
@@ -39,6 +39,7 @@ export function checkTransactionSave(state, { transaction, entries }) {
     ...checkReferences(state, transaction, entries),
     ...checkReserve(state.accounts, countedEntries(state), countedEntries(after)),
     ...checkDuplicate(state, transaction, entries),
+    ...checkEntryFinal(state, transaction),
   ]);
 }
 
