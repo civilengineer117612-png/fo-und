@@ -3,6 +3,7 @@
 // It is not part of `npm test`; CI runs it as its own job, "e2e", in the Tests workflow (.github/workflows/test.yml).
 import { createRequire } from "node:module";
 import { protectionChecks } from "./protection.mjs";
+import { appLockChecks } from "./applock.mjs";
 import { execSync } from "node:child_process";
 import { readFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -2366,7 +2367,7 @@ console.log("Setup as pages");
   ({ ctx, page, errors } = await open({ blockSw: true, setupFlat: false, seed: { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acct] } } }));
   await page.click("#menuBtn"); await page.click('#menu .item[data-tab="setup"]'); await page.waitForFunction(() => !document.querySelector("#menu .drawer")); await page.waitForTimeout(300);
   const rowsText = await page.locator(".setrow").allInnerTexts();
-  check(rowsText.length === 6 && rowsText[0].includes("Accounts") && rowsText[0].includes("1 account") && rowsText[1].includes("Categories") && rowsText[2].includes("Backup and restore") && rowsText[2].includes("No backup yet") && rowsText[3].includes("Statements") && rowsText[4].includes("Appearance") && rowsText[4].includes("Match my phone") && rowsText[5].includes("About this app"), "Setup is six rows, each with a one-line status: " + rowsText.map((x) => x.split("\n")[0]).join(", "));
+  check(rowsText.length === 7 && rowsText[0].includes("Accounts") && rowsText[0].includes("1 account") && rowsText[1].includes("Categories") && rowsText[2].includes("Backup and restore") && rowsText[2].includes("No backup yet") && rowsText[3].includes("Statements") && rowsText[4].includes("Appearance") && rowsText[4].includes("Match my phone") && rowsText[5].includes("App lock") && rowsText[5].includes("Off") && rowsText[6].includes("About this app"), "Setup is six rows, each with a one-line status: " + rowsText.map((x) => x.split("\n")[0]).join(", "));
   check(await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 2), "the whole Setup list fits on one screen: nothing to scroll");
   check(await page.locator("#a-bank").count() === 0 && await page.locator("#add-account-open").count() === 0, "no long form on the list");
   for (const [row, title, mark] of [["Accounts", "Accounts", "#add-account-open"], ["Categories", "Categories", 'button[data-action="add-cat"]'], ["Backup and restore", "Backup and restore", 'button[data-action="open-backup"]'], ["About this app", "About this app", "text=Your data format"]]) {
@@ -2374,11 +2375,11 @@ console.log("Setup as pages");
     check((await text(page, "#top")).includes(title) && await page.locator(mark).count() >= 1 && await page.locator('.back button:has-text("Setup")').count() === 1, `${row} opens its own page, with a way back`);
     if (row === "About this app") check(/Your ledger: \d+ KB\. Saved twice: a main copy and a spare\./.test(await text(page, "#screen")), "About this app shows the ledger's size and that it is saved twice");
     await page.click('.back button:has-text("Setup")'); await page.waitForTimeout(200);
-    check(await page.locator(".setrow").count() === 6, `back from ${row} returns to the list`);
+    check(await page.locator(".setrow").count() === 7, `back from ${row} returns to the list`);
   }
   await page.click(".scrim, #menu .scrim").catch(() => {});
   await page.click('#nav button[data-tab="log"]'); await page.click("#menuBtn"); await page.click('#menu .item[data-tab="setup"]'); await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
-  check(await page.locator(".setrow").count() === 6, "leaving Setup and coming back opens the list again");
+  check(await page.locator(".setrow").count() === 7, "leaving Setup and coming back opens the list again");
   check(errors.length === 0, "no script errors with the Setup pages");
   await ctx.close();
   ({ ctx, page, errors } = await open({ blockSw: true, setupFlat: false, styled: false }));
@@ -4511,6 +4512,7 @@ console.log("\n-- Repair of past counts --");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 await protectionChecks({ browser, base: BASE, open, addAccount, menuGo, check });
+await appLockChecks({ browser, base: BASE, open, menuGo, check, seen, text, stored, OWNER_STYLE, ANDROID });
 
 await browser.close();
 console.log(failures ? "\n" + failures + " check(s) FAILED" : "\nAll checks passed");

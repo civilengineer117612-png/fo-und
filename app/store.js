@@ -134,3 +134,35 @@ export async function claimPersistenceRequest() {
     });
   } finally { db.close(); }
 }
+
+// The APP LOCK record (src/model/applock.js): device-only, in its own key of the same key-value store plus a spare in localStorage. It is never part of the
+// ledger text, so no backup carries it and a restore neither brings a lock nor removes one. (A trial copy never reads it: the caller does not ask.)
+const LOCK_KEY = "applock", LOCK_LS = "financialTracker.applock";
+export async function readLock() {
+  let ls = null, idb = null;
+  try { ls = JSON.parse(localStorage.getItem(LOCK_LS) ?? "null"); } catch { ls = null; }
+  try {
+    const db = await openDb();
+    try { idb = await new Promise((resolve, reject) => { const r = db.transaction(STORE).objectStore(STORE).get(LOCK_KEY); r.onsuccess = () => resolve(r.result ?? null); r.onerror = () => reject(r.error); }); }
+    finally { db.close(); }
+  } catch { idb = null; }
+  return idb ?? ls;   // either store alone is enough to keep the lock
+}
+export async function writeLock(rec) {
+  const result = { local: false, idb: false };
+  try { localStorage.setItem(LOCK_LS, JSON.stringify(rec)); result.local = true; } catch { /* reported below */ }
+  try {
+    const db = await openDb();
+    try { await new Promise((resolve, reject) => { const tx = db.transaction(STORE, "readwrite"); tx.objectStore(STORE).put(rec, LOCK_KEY); tx.oncomplete = resolve; tx.onerror = tx.onabort = () => reject(tx.error); }); result.idb = true; }
+    finally { db.close(); }
+  } catch { /* reported below */ }
+  return result;
+}
+export async function clearLock() {
+  try { localStorage.removeItem(LOCK_LS); } catch { /* nothing to remove */ }
+  try {
+    const db = await openDb();
+    try { await new Promise((resolve, reject) => { const tx = db.transaction(STORE, "readwrite"); tx.objectStore(STORE).delete(LOCK_KEY); tx.oncomplete = resolve; tx.onerror = tx.onabort = () => reject(tx.error); }); }
+    finally { db.close(); }
+  } catch { /* nothing to remove */ }
+}

@@ -111,4 +111,5 @@ export { RANGES, dailySpending, firstSpendingDate, rangeFor, stepFor, seriesFor,
 export { payerFor, nextDue, lastStatementDate, cardStatement, setCardDetails, planCardPayment, makeCardDueDrafts, DUE_CATCH_UP_DAYS } from "./cardpay.js";
 
 export { arranged, orderFrom } from "./order.js";
+export { PIN_LENGTH, AWAY_MS, FREE_TRIES, FIRST_WAIT, LONGEST_WAIT, validPin, lockOn, newSalt, hashPin, makeRecord, checkPin, waitSeconds, secondsLeft, afterWrong, afterRight, shouldLock } from "./applock.js";
 export { KNOWN_WORDS, maskText, maskedLayout, layoutReport } from "./layoutreport.js";

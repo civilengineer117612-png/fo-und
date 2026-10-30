@@ -2,7 +2,8 @@
 // Plain and firm, never harsh: facts are stated once, nothing is red, nothing blocks logging.
 import * as M from "../src/model/index.js";
 import { requestStorageProtection, storageProtected } from "./protection.js";
-import { readBoth, writeBoth, putPhoto, getPhoto, deletePhoto, useTrialStorage, clearTrialStorage, readCopies, writeCopies, readRestoreCopies, writeRestoreCopies } from "./store.js";
+import { readBoth, writeBoth, putPhoto, getPhoto, deletePhoto, useTrialStorage, clearTrialStorage, readCopies, writeCopies, readRestoreCopies, writeRestoreCopies, readLock, writeLock, clearLock } from "./store.js";
+import { createPasskey, verifyPasskey } from "./lock.js";
 import { preparePhoto, readPage, readPlain, evenedCopy } from "./ocr.js";
 import { speechSupported, listen, firstLanguage, other } from "./voice.js";
 import { readPdfPages, readPdfScan, PdfCancelled } from "./pdftext.js";
@@ -44,6 +45,8 @@ const ui = {
   period: null, periodDraft: null, view: "category", shape: "bars", asList: false, sel: null,   // the Money tab
 };
 let toastTimer = null;
+// App lock (src/model/applock.js): while `ui.locked` is true NOTHING is rendered and the page holds no ledger content at all.
+let lockRec = null, lockActive = false, lockMode = null, lockHiddenAt = null, lockWaiter = null, lockTick = null, lockBusy = false;
 
 // ---------- reading helpers ----------
 const S = () => ledger.state;
@@ -256,7 +259,7 @@ async function commit(state, settings = ledger.settings, { quiet = false } = {})
 }
 
 // ---------- rendering ----------
-function renderAll() { renderBanner(); renderScreen(); renderNav(); renderSheet(); renderMenu(); }
+function renderAll() { if (ui.locked) return; renderBanner(); renderScreen(); renderNav(); renderSheet(); renderMenu(); }
 
 // Everything that is not Log or Verify lives in the menu at the upper left, so new screens (and later photo
 // and audio capture beside Log and Verify) can be added without crowding the bottom bar.
@@ -280,6 +283,7 @@ const why = (html, label = "Why?") => `<details class="why"><summary>${label}</s
 // Setup normally shows a short list of pages. The tests ask for the old one long page with a flag in sessionStorage.
 const setupFlat = () => { try { return sessionStorage.getItem("setupFlat") === "1"; } catch { return false; } };
 const ICONS = {
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   statements: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 14l2 2 4-4"/>',
   tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8zM7.5 7.5h.01"/>',
   backup: '<path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
@@ -324,6 +328,7 @@ function renderTop(title) {
 
 let menuTimer = null;
 function renderMenu() {
+  if (ui.locked) return;
   const el = $("menu"), reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (!ui.menu || !device.allowEntry) {
     // closing slides the panel away first, then removes it; a reopen during that slide cancels it
@@ -344,6 +349,7 @@ function renderMenu() {
 }
 
 function renderBanner() {
+  if (ui.locked) return;
   const bars = [];
   if (ui.error) bars.push(`<div class="bar" role="alert">${esc(ui.error)}</div>`);
   if (ui.upgrade?.failed) bars.push(`<div class="bar" role="alert">${esc(ui.upgrade.failed)}</div>`);
@@ -357,6 +363,7 @@ function renderBanner() {
 }
 
 function renderNav() {
+  if (ui.locked) return;
   const n = device.allowEntry ? dueDrafts().length : 0;
   const pic = { log: '<path d="M7 17 17 7M8 7h9v9"/>', verify: '<path d="M20 6 9 17l-5-5"/>' };   // money going out, and a tick
   const tab = (id, label) => `<button data-action="tab" data-tab="${id}" data-howto="${id}"${ui.tab === id ? ' aria-current="page"' : ""}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${pic[id]}</svg>${label}</button>`;   // hold for its how-to
@@ -385,6 +392,7 @@ function groupRows(root) {
 
 let lastTabSig = null, lastViewSig = null, swapTimer = null;
 function renderScreen() {
+  if (ui.locked) return;
   applyAppearance();
   if (ui.tab === "cards" && lastTabSig !== "cards") { ui.cardsShown = false; ui.pocketsOpen = {}; }   // Cards opens with every amount hidden and every pocket folded; nothing is remembered
   if (ui.tab !== "log") ui.arrange = false;
@@ -1499,12 +1507,13 @@ function viewSetup() {
     ["backup", "backup", "Backup and restore", (() => { const d = M.daysSinceBackup(ledger.settings, today()); return d === null ? "No backup yet" : d === 0 ? "Backed up today" : "Last backup " + d + (d === 1 ? " day ago" : " days ago"); })()],
     ["statements", "statements", "Statements", stmSub()],
     ["appearance", "appearance", "Appearance", look === "auto" ? "Match my phone" : look === "dark" ? "Dark" : "Light"],
+    ...(device.status === "TRIAL" ? [] : [["lock", "lock", "App lock", lockActive ? "Locks when opened and after 1 minute away" : "Off", lockActive ? "On" : "Off"]]),
     ["about", "info", "About this app", M.isDevBuild() ? "Development copy" : "Version " + M.APP_BUILD],
   ];
   if (flat) return `<h1>Setup</h1><p class="sub">Accounts. The ledger is on this phone only.</p>${blocks.accounts}${blocks.categories}${blocks.budget}${blocks.backup}${blocks.about}`;
   const page = ui.setupPage && Object.hasOwn(blocks, ui.setupPage) ? ui.setupPage : null;   // hasOwn does not build the block
   if (page) return `<h1>${esc(rowsHome.find((r) => r[0] === page)[2])}</h1><p class="back"><button class="link" data-action="setup-page" data-id="">\u2039 Setup</button></p>${blocks[page]}`;
-  return `<h1>Setup</h1><p class="sub">The ledger is on this phone only.</p><div class="setlist">${rowsHome.map(([id, icon, title, sub]) => `<button class="setrow" data-action="setup-page" data-id="${id}"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[icon]}</svg><span class="st"><b>${title}</b><small>${esc(sub)}</small></span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>`).join("")}</div>`;
+  return `<h1>Setup</h1><p class="sub">The ledger is on this phone only.</p><div class="setlist">${rowsHome.map(([id, icon, title, sub, chip]) => `<button class="setrow" data-action="${chip ? "lock-toggle" : "setup-page"}" data-id="${id}"${chip ? ` aria-pressed="${chip === "On"}"` : ""}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[icon]}</svg><span class="st"><b>${title}</b><small>${esc(sub)}</small></span>${chip ? `<span class="chipsw${chip === "On" ? " on" : ""}">${chip}</span>` : `<svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>`}</button>`).join("")}</div>`;
 }
 
 // ---------- Money: where it goes ----------
@@ -2422,6 +2431,7 @@ async function finishSchedule(r, form, paidKeys) {
   if (await commit(first.state, { ...ledger.settings, last_account_id: form.account_id })) showToast(r.schedule.name + " is scheduled." + (waiting ? " Its payment is waiting in Verify." : ""));
 }
 function renderSheet() {
+  if (ui.locked) return;
   const sh = ui.sheet;
   if (!sh) { $("sheet").innerHTML = ""; lastSheetKey = null; lockPage(false); return; }
   const key = [sh.type, sh.id ?? "", sh.queueId ?? ""].join(":"), opening = lastSheetKey !== key, keepAt = lastSheetKey === key ? document.querySelector("#sheet .sheet")?.scrollTop ?? 0 : 0;
@@ -3148,6 +3158,14 @@ function renderSheet() {
       <p class="note">${slip ? esc(peso(slip.deposit)) + " reached the account, so that is what counts as money in." : "What reached the account counts as money in."} The lines stay as they are, and the payslip keeps the note "Paper differs by${sh.gap ? " " + esc(peso(sh.gap)) : ""}".</p>
       <p><button class="primary" data-action="verify-paper-gap">Verify anyway</button></p>
       <p><button data-action="close-sheet" style="width:100%">Not now</button></p>`;
+  } else if (sh.type === "lock-on") {
+    body = `<h3>Turn on app lock</h3><p class="note">Step 1: this phone makes a passkey for Face ID. Nothing is sent anywhere.</p><p class="note">Step 2: choose a 6-digit PIN for when Face ID does not work.</p>
+      <label for="l-pin">PIN${REQ}</label><input id="l-pin" data-field="lpin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" value="${esc(ui.form.lpin ?? "")}">
+      <label for="l-pin2">PIN again${REQ}</label><input id="l-pin2" data-field="lpin2" type="password" inputmode="numeric" maxlength="6" autocomplete="off" value="${esc(ui.form.lpin2 ?? "")}">
+      ${ui.form.lockError ? `<p class="note flag" role="alert">\u25B2 ${esc(ui.form.lockError)}</p>` : ""}
+      <p class="note small">It keeps someone who picks up your unlocked phone out of the app. It does not encrypt your data.</p><p class="note small">Forgot the PIN and lost the passkey? Only a restore from a backup gets you back in.</p>
+      ${REQNOTE}
+      <p><button class="primary" id="f-save" data-action="lock-enable" disabled>Turn on</button></p>`;
   } else if (sh.type === "replaced") {
     const kept = (() => { try { return M.summarizeLedger(JSON.parse((ui.restoreCopies ?? [])[0].text)); } catch { return null; } })();
     const line = kept ? `${kept.accounts} ${kept.accounts === 1 ? "account" : "accounts"}, ${kept.transactions ? kept.transactions + (kept.transactions === 1 ? " entry" : " entries") : "no entries"}${kept.latest_date ? ", latest " + longDate(kept.latest_date) : ""}` : "";
@@ -3282,6 +3300,8 @@ function refreshSave() {
   } else if (type === "budget-income") {
     const a = M.parsePesos(f.amount ?? "");
     btn.disabled = !(a.ok && a.centavos > 0);
+  } else if (type === "lock-on") {
+    btn.disabled = !(M.validPin(f.lpin ?? "") && f.lpin === f.lpin2);
   } else if (type === "otfree") {
     btn.disabled = !f.account_id;
   } else if (type === "payslip") {
@@ -3386,6 +3406,7 @@ function refreshSave() {
 
 // ---------- toast ----------
 function showToast(text, undoId, extra, undoAction = "undo") {
+  if (ui.locked) return;
   clearTimeout(toastTimer);
   $("toast").innerHTML = `${extra ? `<div class="extra">${esc(extra)}</div>` : ""}<div class="bar"><span>${esc(text)}</span>${undoId ? `<button data-action="${undoAction}" data-id="${esc(undoId)}">Undo</button>` : ""}</div>`;
   toastTimer = setTimeout(() => { $("toast").innerHTML = ""; }, 8000);
@@ -3707,6 +3728,19 @@ async function onClick(el) {
       await commit(r.state, { ...ledger.settings, checkin_pending: cur });
       showToast(peso(sh.amount) + " move from " + A.name + " to " + B.name + " waits in Verify.");
       break;
+    }
+    case "lock-toggle": {
+      if (lockActive) { enterLocked("off"); break; }   // turning it off needs the PIN or Face ID first
+      ui.sheet = { type: "lock-on" }; ui.form = { lpin: "", lpin2: "" }; renderSheet(); break;
+    }
+    case "lock-enable": {   // both steps must work, or the lock stays off
+      const f = ui.form;
+      if (!(M.validPin(f.lpin ?? "") && f.lpin === f.lpin2)) { ui.form = { ...f, lockError: "The two PINs must be the same 6 digits. The lock stays off." }; renderSheet(); break; }
+      const pk = await createPasskey();
+      if (!pk.ok) { ui.form = { ...f, lockError: pk.message + " The lock stays off." }; renderSheet(); break; }
+      const rec = await M.makeRecord({ pin: f.lpin, cred: pk.cred }), saved = await writeLock(rec), back = await readLock();
+      if (!(saved.local || saved.idb) || !M.lockOn(back)) { await clearLock(); ui.form = { ...f, lockError: "The lock could not be saved on this phone. It stays off." }; renderSheet(); break; }
+      lockRec = back; lockActive = true; ui.sheet = null; renderSheet(); renderScreen(); showToast("App lock is on."); break;
     }
     case "count-basis": ui.form.basis = id; renderSheet(); break;
     case "pick-count-other": ui.form.other_id = id; if (ui.sheet) ui.sheet.pick = null; renderSheet(); break;
@@ -5143,6 +5177,82 @@ function applyAppearance() {
   if (a === "light" || a === "dark") root.dataset.theme = a; else delete root.dataset.theme;
   if (a === "light" || a === "dark") for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.setAttribute("content", getComputedStyle(root).getPropertyValue("--ground").trim());   // the phone's status bar follows the page
 }
+
+// ---------- App lock ----------
+// A privacy screen (owner, Oct 29): the iPhone's own app lock is not offered to a Home Screen web app, so the app locks itself. Face ID is a passkey made on
+// this phone (swipe up on the lock), the fallback is a 6-digit PIN kept only as a salted hash. Wrong PINs wait longer; nothing is ever erased.
+const lockEl = () => document.getElementById("lockscreen");
+function lockHtml() {
+  const wait = M.secondsLeft(lockRec, Date.now()), off = lockMode === "off", pin = ui.lockPin ?? "";
+  const line = wait > 0 ? "Try again in " + wait + " second" + (wait === 1 ? "" : "s") : ui.lockMsg || (lockRec?.cred ? "Swipe up for Face ID" : "");
+  const dots = `<div class="pindots" role="img" aria-label="${pin.length} of 6 digits typed">${Array.from({ length: 6 }, (_, i) => `<span${i < pin.length ? ' class="on"' : ""}></span>`).join("")}</div>`;
+  const dis = wait > 0 || lockBusy ? " disabled" : "";
+  const keys = `<div class="keypad">${["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", ""].map((k) => k ? `<button data-lock="key" data-k="${k}" aria-label="${k}"${dis}>${k}</button>` : "<span></span>").join("")}</div>`;
+  return `<div class="lockmid"><p class="locktext" id="lock-title">${off ? "Enter PIN to turn off" : "Enter PIN"}</p>${dots}${lockRec?.cred ? `<button class="lockquiet" data-lock="face">${esc(line)}</button>` : `<p class="lockquiet">${esc(line)}</p>`}${keys}</div>
+    <div class="lockfoot split"><span>${off ? `<button class="link" data-lock="cancel">Cancel</button>` : ""}</span><button class="link" data-lock="del"${pin ? "" : " disabled"}>Delete</button></div>`;
+}
+function drawLock() {
+  const el = lockEl(); if (!el) return;
+  el.innerHTML = lockHtml();
+  const waiting = M.secondsLeft(lockRec, Date.now()) > 0;
+  if (waiting && !lockTick) lockTick = setInterval(drawLock, 1000);
+  if (!waiting && lockTick) { clearInterval(lockTick); lockTick = null; }
+}
+function blankApp() {   // every part of the page that holds ledger content is emptied, not hidden
+  for (const id of ["top", "banner", "screen", "sheet", "warn", "toast", "menu", "nav"]) { const el = $(id); if (el) el.innerHTML = ""; }
+  ui.sheet = null; ui.menu = false; lockPage(false);
+}
+function closeLock() { lockEl()?.remove(); lockMode = null; if (lockTick) { clearInterval(lockTick); lockTick = null; } }
+function enterLocked(mode) {
+  closeLock(); lockMode = mode; ui.lockPin = ""; ui.lockMsg = "";
+  if (mode === "open") { ui.locked = true; blankApp(); }
+  const el = document.createElement("div"); el.id = "lockscreen"; el.className = "lockscreen"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "App lock"); document.body.appendChild(el);
+  el.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-lock]"); if (!b || b.disabled) return;
+    const k = b.dataset.lock;
+    if (k === "key") lockKey(b.dataset.k); else if (k === "del") { ui.lockPin = (ui.lockPin ?? "").slice(0, -1); drawLock(); } else if (k === "face") lockFace(false); else if (k === "cancel") closeLock();
+  });
+  let t0 = null;
+  el.addEventListener("touchstart", (e) => { t0 = e.touches[0] ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { passive: true });
+  el.addEventListener("touchend", (e) => { const t = e.changedTouches[0]; if (t0 && t && t0.y - t.clientY > 60 && Math.abs(t.clientX - t0.x) < 90) lockFace(false); t0 = null; }, { passive: true });
+  drawLock();
+  if (mode === "open") lockFace(true);   // tried once at the start; iOS may want a tap or a swipe first, and then the PIN pad is already there
+}
+async function lockKey(k) {
+  if (lockBusy || M.secondsLeft(lockRec, Date.now()) > 0 || (ui.lockPin ?? "").length >= M.PIN_LENGTH) return;
+  ui.lockPin = (ui.lockPin ?? "") + k; ui.lockMsg = ""; drawLock();
+  if (ui.lockPin.length < M.PIN_LENGTH) return;
+  lockBusy = true; drawLock();
+  const right = await M.checkPin(lockRec, ui.lockPin);
+  lockBusy = false; ui.lockPin = "";
+  if (right) return lockSuccess();
+  lockRec = M.afterWrong(lockRec, Date.now()); await writeLock(lockRec);   // only the count and the wait change: nothing else is touched, ever
+  ui.lockMsg = M.secondsLeft(lockRec, Date.now()) > 0 ? "" : "That PIN was not right."; drawLock();
+}
+async function lockFace(quiet) {
+  if (lockBusy || !lockRec?.cred) return;
+  lockBusy = true;
+  const r = await verifyPasskey(lockRec.cred);
+  lockBusy = false;
+  if (r.ok) return lockSuccess();
+  if (!quiet) { ui.lockMsg = "Face ID did not work. Use your PIN."; }
+  drawLock();
+}
+async function lockSuccess() {
+  if (lockRec.fails || lockRec.until) { lockRec = M.afterRight(lockRec); await writeLock(lockRec); }
+  if (lockMode === "off") { await clearLock(); lockRec = null; lockActive = false; closeLock(); renderScreen(); showToast("App lock is off."); return; }
+  closeLock(); ui.locked = false;
+  if (lockWaiter) { const go = lockWaiter; lockWaiter = null; go(); } else renderAll();
+}
+// When the app goes to the background its content is covered at once, so the phone's app switcher shows nothing; away for more than a minute locks it again.
+function coverOn() { if (!lockActive || document.getElementById("lockcover")) return; const c = document.createElement("div"); c.id = "lockcover"; c.className = "lockscreen blank"; document.body.appendChild(c); }
+function coverOff() { document.getElementById("lockcover")?.remove(); }
+function appShown() {
+  if (lockActive && !ui.locked && M.shouldLock(lockHiddenAt, Date.now())) enterLocked("open");
+  else if (ui.locked) lockFace(true);
+  lockHiddenAt = null; coverOff();
+}
+function appHidden() { if (!ui.locked && lockHiddenAt === null) lockHiddenAt = Date.now(); coverOn(); }
 async function start() {
   const platform = M.detectPlatform(navigator.userAgent);
   const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
@@ -5174,6 +5284,10 @@ async function start() {
   let justReplaced = null;
   try { justReplaced = JSON.parse(sessionStorage.getItem(RESTORED_FLAG) ?? "null"); sessionStorage.removeItem(RESTORED_FLAG); } catch { justReplaced = null; }
   if (justReplaced && device.allowEntry && boot.status === "OK" && ui.restoreCopies[0] && !ui.sheet) ui.sheet = { type: "replaced", kind: justReplaced.kind, pictures: justReplaced.pictures ?? 0 };
+  if (!trial) {   // the lock is read AFTER the data is checked but BEFORE anything is drawn; a trial copy never has one
+    lockRec = await readLock();
+    if (M.lockOn(lockRec)) { lockActive = true; applyAppearance(); await new Promise((go) => { lockWaiter = go; enterLocked("open"); }); }
+  }
   renderAll();
   if (ui.sheet?.type === "replaced") renderSheet();
   if (ui.upgrade?.done) showToast("Your data was updated to the newest format. A copy of the old data is kept in Setup.");
@@ -5201,5 +5315,10 @@ async function start() {
   }
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && device.allowEntry) { processScanQueue(); setTimeout(shrinkOldPictures, 8000); runSchedules().then((made) => { if (made) renderAll(); }); } });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") { appHidden(); return; }
+  appShown();
+  if (document.visibilityState === "visible" && device.allowEntry && !ui.locked) { processScanQueue(); setTimeout(shrinkOldPictures, 8000); runSchedules().then((made) => { if (made) renderAll(); }); } });
+addEventListener("pagehide", appHidden);
+addEventListener("pageshow", (e) => { if (e.persisted) appShown(); else coverOff(); });
 start();
