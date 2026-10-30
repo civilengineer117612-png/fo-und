@@ -1808,6 +1808,7 @@ const slipPng = await page.evaluate(() => {   // an invented payslip, drawn in t
 await menuGo(page, "Scan");
 await page.setInputFiles("input[data-scan]:not([capture])", { name: "payslip.png", mimeType: "image/png", buffer: Buffer.from(slipPng, "base64") });
 check(await seen(page, "#sheet", "Add a payslip", 180000), "a payslip photo opens the payslip window, not a one-line pay entry");
+check(await page.locator("#sheet .pagepeek").count() === 0 && await page.locator('#sheet img.shot[alt="Your payslip photo"]').count() === 1, "a photo payslip keeps its picture at the top and has no page fold");
 const val = (id) => page.inputValue("#" + id);
 check((await text(page, "#sheet")).includes("Check each figure against the paper"), "the payslip window says, in one short line, that every figure was read from the photo and must be checked");
 check(/Total earnings[\s\S]*?₱11,500\.00/.test(await text(page, "#sheet")) && /Total deductions[\s\S]*?₱1,200\.00/.test(await text(page, "#sheet")), "the total earnings and total deductions are shown right away");

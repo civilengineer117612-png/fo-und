@@ -2811,7 +2811,7 @@ function renderSheet() {
     const chk = (key) => `<p class="note small" id="chk-${key}" hidden></p>`;
     const pm = payslipMarks(f);
     body = `<h3>${sh.editId ? "Change this payslip" : "Add a payslip"}</h3>
-      ${sh.scanBlob ? `${f.fromPdf ? "" : `<button class="shotbtn enlarge" data-action="view-shot" aria-label="Open the photo full size to compare it with the figures"><img class="shot" src="${esc(pendingPhoto?.url ?? "")}" alt="Your payslip photo" style="max-height:18vh;object-fit:contain"></button>`}${(f.notes ?? []).map((n) => `<p class="note small">${esc(n)}</p>`).join("")}` : ""}
+      ${sh.scanBlob ? `${f.fromPdf ? `<details class="pagepeek" data-keep="pg"${ui.pdet?.pg === false ? "" : " open"}><summary><span class="pg-show">Show the page</span><span class="pg-hide">Hide the page</span></summary><button class="shotbtn enlarge" data-action="view-shot" aria-label="Open the page full size to compare it with the figures"><img class="shot" src="${esc(pendingPhoto?.url ?? "")}" alt="Your payslip, every page" style="max-height:32vh;object-fit:contain"></button></details>` : `<button class="shotbtn enlarge" data-action="view-shot" aria-label="Open the photo full size to compare it with the figures"><img class="shot" src="${esc(pendingPhoto?.url ?? "")}" alt="Your payslip photo" style="max-height:18vh;object-fit:contain"></button>`}${(f.notes ?? []).map((n) => `<p class="note small">${esc(n)}</p>`).join("")}` : ""}
       <p id="p-match" hidden><button class="link" data-action="open-lines">Matches paper. Tap to open.</button></p>
       <div id="p-lines">
       <details class="tot" data-keep="e"${open("e")}><summary><span class="tl">Total earnings<small>Tap to see the lines</small></span><b id="p-tot-e" class="tv"></b><span class="tchev" aria-hidden="true">\u203A</span></summary>
@@ -2838,7 +2838,6 @@ function renderSheet() {
       </details>
       <div id="p-flags" role="status"></div>
       <p id="p-fold" hidden><button class="link" data-action="fold-lines">Checked against the photo? Fold the fields.</button></p>
-      ${sh.scanBlob && f.fromPdf ? `<details class="pagepeek" data-keep="pg"${open("pg")}><summary>Show the page</summary><button class="shotbtn enlarge" data-action="view-shot" aria-label="Open the page full size to compare it with the figures"><img class="shot" src="${esc(pendingPhoto?.url ?? "")}" alt="Your payslip, every page" style="max-height:60vh;object-fit:contain"></button></details>` : ""}
       ${f.layoutText ? `<p class="note small"><button class="link" data-action="copy-layout">Copy layout report</button> It hides every digit and every name.</p>` : ""}
       <p class="note">Do not type any employee, tax or account number.</p>
       ${REQNOTE}
