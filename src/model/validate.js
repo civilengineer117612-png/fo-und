@@ -7,7 +7,7 @@ const COLLECTIONS = {
   accounts: "Account", goals: "Goal", envelopes: "Envelope", transactions: "Transaction", entries: "Entry",
   categories: "Category", categoryMaps: "CategoryMap", rules: "Rule", templates: "Template", presets: "Preset",
   payeeRules: "PayeeRule", subscriptions: "Subscription", checkIns: "CheckIn", attachments: "Attachment",
-  tags: "Tag", foreignAmounts: "ForeignAmount", surveyResponses: "SurveyResponse", payslips: "Payslip", payslipLines: "PayslipLine", payslipRevisions: "PayslipRevision",
+  tags: "Tag", foreignAmounts: "ForeignAmount", surveyResponses: "SurveyResponse", payslips: "Payslip", payslipLines: "PayslipLine", payslipRevisions: "PayslipRevision", payslipItems: "PayslipItem", payslipItemChanges: "PayslipItemChange",
   schedules: "Schedule", scheduleChanges: "ScheduleChange",
   statementRecords: "StatementRecord", statementLines: "StatementLine", statementAccepts: "StatementAccept",
 };

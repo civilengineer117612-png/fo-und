@@ -17,6 +17,7 @@ export { APP_BUILD, APP_BUILT_ON, isDevBuild } from "./version.js";
 export { overdrawOf, naturalBalance, cardOutstanding, reserveShortfalls, reserveCover, netPosition, countedEntries, earlyEntryChanges } from "./balances.js";
 export { paceAhead } from "./budget.js";
 export { countsTowardBudget, splitByBudgetStatus, repeatedIds, repeatsLine } from "./invariants.js";
+export * from "./payslipitems.js";
 export { phTimestamp, isPhDate, isPhTimestamp, isCentavos } from "./util.js";
 
 const result = (violations) => ({ ok: !violations.some((v) => v.severity === "error"), violations });
@@ -89,7 +90,7 @@ export { MOVE_KINDS, CHOOSE_MESSAGE, FEE_PREFIX, BANK_FEES_ROLE, isFeeId, feeIdO
 export { findDuplicate } from "./invariants.js";
 export { INTEREST_ROLE, SCHEDULE_WINDOW_DAYS, CATCH_UP_DAYS, draftIdFor, isScheduleDraftId, monthsAfter, historyOf, paymentsOf, paymentState, makeDueDrafts, draftFor, reserveForPlan, reserveIdFor, payKey, suggestInputs, skippedOf, nextOpenPayment, ensureInterestCategory, addSchedule, setNewAmount, skipPayment, pastPayments, madeAfterAnswers, markAlreadyPaid, endSchedule, markPaidOff, markNextDue, payNext, skipOnDelete, viewOf, dueSoon, daysText, planLine, committedIn, matchDueDraft, linkToDue, planInText, linkedEntry, detailsAt, findLogged, linkPayment, setDueDay, setDetail, removeSchedule, statusOf } from "./schedules.js";
 export { KINDS, kindById, wordsToCentavos, readScan, readPayslip, linesFromWords, linesFromBoxes, snapEmployer, categoryFromHistory } from "./scan.js";
-export { EARNINGS, DEDUCTIONS, GOVERNMENT, LOST, SOURCES, OVERTIME_SHARE, linesOf, payslipTotals, payslipChecks, payslipProblems, payslipDraftBlock, liveSlips, planPayslip, overtimeDraft, overtimeFreeDraft, incomeBySource, incomeMonths, slipDate, deletePayslip, updatePayslip, incomeWithoutPayslip, removeIncomeEntry, incomeByMonth, netPerPayday, raiseHistory, deductionsByMonth, employerHistory, PAYSLIP_VERSION, revisionsOf, payslipNotes, missingPayPeriods, samePeriodPayslips, markPayslipChecked, revisionChanges, incomeBreakdown } from "./income.js";
+export { incomeByCategory, wordingKept, ORIGINAL_NOT_KEPT, EARNINGS, DEDUCTIONS, GOVERNMENT, LOST, SOURCES, OVERTIME_SHARE, linesOf, payslipTotals, payslipChecks, payslipProblems, payslipDraftBlock, liveSlips, planPayslip, overtimeDraft, overtimeFreeDraft, incomeBySource, incomeMonths, slipDate, deletePayslip, updatePayslip, incomeWithoutPayslip, removeIncomeEntry, incomeByMonth, netPerPayday, raiseHistory, deductionsByMonth, employerHistory, PAYSLIP_VERSION, revisionsOf, payslipNotes, missingPayPeriods, samePeriodPayslips, markPayslipChecked, revisionChanges, incomeBreakdown } from "./income.js";
 export { homeSummary } from "./summary.js";
 export { parseSpoken } from "./speech.js";
 export { BUCKETS, CHOICES, BUCKET_LABELS, INVESTED_LABEL, DEFAULT_TARGETS, TARGET_SOURCE, resolveTargets, parseTargets, bucketOf, bucketMap, unclear, renameConflict, withBucket, starterFromTargets, bucketRows } from "./buckets.js";

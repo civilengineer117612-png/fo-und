@@ -78,6 +78,17 @@
   details[data-keep="t"] > summary { font-size: 15px; color: var(--mid); }
   input.chk, select.chk { outline: 2px solid var(--ink); outline-offset: 1px; border-radius: 8px; }   /* a figure the arithmetic did not prove: an outline and words, never red */
   .unread { display: grid; grid-template-columns: 1fr; gap: 4px; padding: 6px 0; border-top: 1px dashed var(--dashed); }
+  /* payslip lines (P1-3): one row per printed line, the label as printed at the left, its figure at the right; a plain small line under it. No chips, no colour of its own. */
+  .pl { border-top: 1px solid var(--line); padding: 8px 0; } .pl:first-of-type { border-top: 0; }
+  button.pl-main { display: flex; align-items: baseline; gap: 10px; width: 100%; background: none; border: 0; padding: 4px 0; text-align: left; color: var(--ink); font-size: 17px; min-height: 0; border-radius: 0; }
+  .pl-n { color: var(--muted); font-size: 13px; min-width: 20px; font-variant-numeric: tabular-nums; } .pl-label { flex: 1; min-width: 0; overflow-wrap: anywhere; } .pl-amt { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .pl.zero .pl-label, .pl.zero .pl-amt { color: var(--muted); font-weight: 400; }
+  .pl-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-left: 30px; }
+  button.pl-cat { background: none; border: 0; padding: 4px 0; color: var(--muted); font-size: 14px; min-height: 0; width: auto; border-radius: 0; text-align: left; }
+  button.pl-cat.need { color: var(--ink); border: 1px dashed var(--dashed); border-radius: 8px; padding: 4px 10px; }
+  .pl-t { font-size: 13px; color: var(--muted); }
+  button.pl-add { background: none; border: 0; color: var(--accent); padding: 10px 0; font-size: 16px; min-height: 0; width: auto; border-radius: 0; margin-right: 18px; }
+  .pl-quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 14px; }
   .pagepeek { margin-top: 10px; } .pagepeek summary { cursor: pointer; padding: 8px 0; } .pagepeek[open] .pg-show, .pagepeek:not([open]) .pg-hide { display: none; }
   .slipask { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
   .shotbtn.enlarge { position: relative; } .shotbtn.enlarge::after { content: "Tap to enlarge"; position: absolute; right: 8px; bottom: 8px; background: var(--ink); color: var(--paper); font-size: 13px; padding: 4px 8px; border-radius: 6px; }
@@ -271,6 +282,7 @@
   .clabs { display: flex; gap: 6px; margin-top: 4px; }
   .clabs span { flex: 1; text-align: center; color: var(--mid); font-size: 13px; }
   .mrow > summary, .mrow.mtotal { display: flex; align-items: center; gap: 10px; min-height: 52px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .crow > summary { display: flex; align-items: center; gap: 10px; min-height: 52px; border-bottom: 1px solid var(--line); cursor: pointer; } .crow .tchev { width: 18px; text-align: center; } .clist > .crow:last-child > summary { border-bottom: 0; }   /* a category of printed payslip lines */
   .mrow.mtotal { font-weight: 700; cursor: default; } .mrow .tchev { width: 18px; text-align: center; } .mrow.mtotal .mv { margin-right: 28px; }
   .mrow.mline { display: flex; align-items: center; gap: 10px; min-height: 52px; border-bottom: 1px solid var(--line); } .mrow.mline .mv { margin-right: 28px; }
   .notes { margin: 0; padding-left: 22px; } .notes li { margin: 10px 0; line-height: 1.4; }
@@ -663,7 +675,7 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   button.link { padding-top: 12px; padding-bottom: 12px; margin-top: -12px; margin-bottom: -12px; }
   .seg button, .seg[aria-label="What to show"] button { min-height: 44px; }
   /* ---- layers: lists sit on white cards over the warm ground; quiet headings ---- */
-  .group, .mlist { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 14px; margin: 8px 0 14px; }
+  .group, .mlist, .clist { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 14px; margin: 8px 0 14px; }
   .group > .row:last-child, .group > .choice:last-child, .mlist > .mrow:last-child { border-bottom: 0; }
   .group > table.tbl { margin: 4px 0; } .group > table.tbl tr:last-child td { border-bottom: 0; }
   h2 { font-size: 12px; letter-spacing: .08em; margin: 22px 2px 6px; }

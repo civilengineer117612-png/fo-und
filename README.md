@@ -27,7 +27,7 @@ or AI service. This repository is public, so it holds no real money data, screen
 - `app/app.js` draws the screens and handles taps. It only calls the model.
 - `app/store.js` is the only file that touches storage (localStorage and IndexedDB, repaired by `src/model/persist.js`).
 - `app/sw.js` makes the app open offline. A new file under `src/model/` must be listed there (a test enforces it).
-- The saved data has a version (now 10). A change of its shape is a migration in `src/model/migrate.js`: additive only,
+- The saved data has a version (now 11). A change of its shape is a migration in `src/model/migrate.js`: additive only,
   with a copy kept before it runs and a self-check after it. See `HANDOVER.md`.
 
 **Checks**

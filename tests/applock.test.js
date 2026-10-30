@@ -49,7 +49,7 @@ test("away for MORE than a minute locks again; a minute or less does not", () =>
 
 test("the lock is not part of the ledger, its settings, its backup or its data version", async () => {
   const rec = await makeRecord({ pin: "654321", cred: "c" });
-  const l = emptyLedger(); assert.equal(l.v, LEDGER_VERSION); assert.equal(LEDGER_VERSION, 10, "no change to the saved data");
+  const l = emptyLedger(); assert.equal(l.v, LEDGER_VERSION); assert.equal(LEDGER_VERSION, 11, "the lock adds nothing to the saved data (the version is the payslip lines' step, 10 to 11)");
   const text = JSON.stringify(l); for (const word of ["applock", "passkey", "salt", "hash", rec.hash]) assert.ok(!text.includes(word), word);
   const store = readFileSync(new URL("../app/store.js", import.meta.url), "utf8");
   assert.match(store, /const LOCK_KEY = "applock", LOCK_LS = "financialTracker\.applock"/, "the lock has its own keys");

@@ -42,13 +42,13 @@ const cleanDigitsOnce = (s) => s.replace(/(?<=\d)[Oo]+(?=[\d/.,-])|(?<=[\d/.,-])
 const cleanDigits = (s) => { let t = s; for (let i = 0; i < 4; i++) { const n = cleanDigitsOnce(t); if (n === t) break; t = n; } return t; };   // "7oo.00" needs more than one pass
 const AMOUNT_RE = /(?:₱|php|\bp\b|#|£)?\s*(\d{1,3}(?:,\d{3})+|\d+)\.(\d{2})\b(?![:\d])/gi;   // "2026.01:00" is a year and a time, not a figure
 
-export function amountsIn(line) {
+export function amountsIn(line, { zero = false } = {}) {   // zero: a printed 0.00 counts too (a payslip line printed as 0.00 is kept)
   const out = [];
   // "1.750.32" (dots as thousands) is 1,750.32; "0.00 x 114.00" is a count times a rate: only the rate is a figure
   const plain = cleanDigits(line).replace(/(\d)\.(\d{3})\.(\d{2})\b/g, "$1,$2.$3").replace(/\d+(?:\.\d+)?\s*[x×]\s*(?=\d)/gi, "");
   for (const m of plain.matchAll(AMOUNT_RE)) {
     const c = Number(m[1].replace(/,/g, "")) * 100 + Number(m[2]);
-    if (Number.isSafeInteger(c) && c > 0) out.push(c);
+    if (Number.isSafeInteger(c) && (c > 0 || (zero && c === 0))) out.push(c);
   }
   return out;
 }
@@ -277,9 +277,15 @@ const DEDUCTION_LABELS = [["loan", /\bloans?\b|advance/], ["tax", /with\w*ding|w
   ["pagibig", /p[a-z]{1,2}\s*-?\s*[il1]?\s*b[il1]g|pagibig|hdmf/], ["absences", /a[bh]sen|1\/2\s*day|half\s*-?\s*day/], ["lates", /\blates?\b|undertime|tardi/]];
 const SKIP_LINE = /total\s*(earnings|deductions|pay)|taxable|net\s*taxable|ytd|year\s*-?\s*to\s*-?\s*date|balance|leave/;
 
+const INFO_LABELS = [["pay_rate", /\bpay\s*rate\b|\brate\s*of\s*pay\b/i], ["pay_basis", /\b(?:pay|rate)\s*basis\b/i], ["period_type", /\b(?:pay\s*)?period\s*type\b|\bpay\s*frequency\b/i]];
+const SECTION_HEADINGS = [["employer", /^\s*employer'?s?\s+(?:share|contributions?)\b/i], ["earning", /^\s*(?:earnings?|income|gross\s+earnings|hours\s+and\s+earnings)\b/i], ["deduction", /^\s*(?:deductions?|less\b|pre-?tax|after-?tax)/i]];
+// "Basic Salary   15,000.00   30,000.00" -> "Basic Salary": the printed words, with the figures and the currency sign taken off.
+const labelOf = (line) => line.replace(/(?:₱|php|\bp\b|#|£)?\s*(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}\b/gi, " ").replace(/\s+/g, " ").replace(/^[\s:.\-–]+|[\s:.\-–]+$/g, "").trim();
+
 export function readPayslip(text, today, { allowHistorical = false } = {}) {
   const lines = String(text ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const notes = [], earnings = [], deductions = [];
+  const notes = [], earnings = [], deductions = [], items = [], info = {};
+  let section = null, unplaced = 0;
   let printed_gross = null, printed_net = null, total_salary = null, printed_deductions = null;
   const end = lines.findIndex((l) => /year\s*-?\s*to\s*-?\s*date|\bytd\b/i.test(l) && !amountsIn(l).length);
   const body = end >= 0 ? lines.slice(0, end) : lines;
@@ -292,6 +298,18 @@ export function readPayslip(text, today, { allowHistorical = false } = {}) {
     if (/total\s*salary/.test(low)) { total_salary ??= first(); return; }
     if (/total\s*deductions?/.test(low)) { printed_deductions ??= first(); return; }
     if (SKIP_LINE.test(low)) return;
+    // EVERY printed line is kept as printed (data version 11): its label, its section, its first figure (0.00 too). The section comes from the heading above it
+    // (Earnings, Deductions, Employer share); a line the old kind words recognise is placed by them. The owner adds what could not be placed.
+    const infoHit = INFO_LABELS.find(([, re]) => re.test(line));
+    if (infoHit) { const v = line.replace(infoHit[1], "").replace(/^[\s:=-]+|[\s:=-]+$/g, ""); if (v && !(infoHit[0] in info)) info[infoHit[0]] = v; return; }
+    if (!amountsIn(line, { zero: true }).length) { const h = SECTION_HEADINGS.find(([, re]) => re.test(line)); if (h) section = h[0]; }
+    else {
+      const label = labelOf(line), figure = amountsIn(line, { zero: true })[0];
+      if (label && /[a-z]{2}/i.test(label)) {
+        const place = section === "employer" ? "employer" : DEDUCTION_LABELS.some(([, re]) => re.test(low)) ? "deduction" : EARNING_LABELS.some(([, re]) => re.test(low)) ? "earning" : section;
+        if (place) items.push({ section: place, label, amount: figure, position: items.length }); else unplaced++;
+      }
+    }
     const ded = DEDUCTION_LABELS.find(([, re]) => re.test(low)), earn = EARNING_LABELS.find(([, re]) => re.test(low));
     const hit = ded ? ["deduction", ded[0]] : earn ? ["earning", earn[0]] : null;
     if (!hit || seen.has(hit.join(":"))) return;
@@ -299,6 +317,7 @@ export function readPayslip(text, today, { allowHistorical = false } = {}) {
     if (amount) { seen.add(hit.join(":")); (hit[0] === "earning" ? earnings : deductions).push({ kind: hit[1], amount }); }
   });
   printed_gross ??= total_salary;
+  if (unplaced) notes.push(unplaced + (unplaced === 1 ? " line" : " lines") + " on the page could not be placed under Earnings or Deductions. Add " + (unplaced === 1 ? "it" : "them") + " with + Add a line.");
   if (amountsIn(lines.join("\n")).length && lines.some((l) => amountsIn(l).length > 1)) notes.push("Where a line shows two figures I took the first (this pay period). Check them.");
   if (printed_gross === null) notes.push("I could not find the printed gross pay. Type it from the payslip.");
   if (printed_net === null) notes.push("I could not find the printed net pay. Type it from the payslip.");
@@ -346,7 +365,7 @@ export function readPayslip(text, today, { allowHistorical = false } = {}) {
   const named = top.map(clean).find((l) => letters(l) >= 5 && letters(l) >= l.length * 0.6 && l.length <= 45);
   const employer = (labelled ? clean(labelled) : null) || company || named || null;
   const table = lines.includes("Payslip table") ? readPayrollTable(lines) : null;
-  return { employer, period_from, period_to, pay_date, printed_gross, printed_net, printed_deductions, earnings, deductions, notes, ...(table ?? {}), ...(table ? { notes: [...notes, ...table.notes] } : {}) };
+  return { employer, period_from, period_to, pay_date, printed_gross, printed_net, printed_deductions, earnings, deductions, items, info, notes, ...(table ?? {}), ...(table ? { notes: [...notes, ...table.notes] } : {}) };
 }
 
 // PDF text has positions but no reading order. Keep the two sides of a payslip
@@ -424,12 +443,30 @@ function payrollTableText(rows, headersIn) {
   if (!pre) return out.join("\n");
   const split = pre.x;
   const emit = (key, value) => out.push(key + "\t" + value);
+  const seenInfo = new Set();
   for (let n = 0; n < start; n++) {
     const row = rows[n], next = rows[n + 1], headers = headersIn(row);
     const employer = find(row.items, /^Employer Name$/i);
     if (employer) out.push("Employer: " + row.items.slice(employer.end + 1).map(i => i.str).join(" "));
     const summary = headers.some(h => /^gross$/i.test(h.str)) && headers.some(h => /^net pay$/i.test(h.str));
     const dates = ["payment date", "pay begin date", "pay end date"].every(k => headers.some(h => h.str.toLowerCase() === k));
+    // Pay rate, pay basis and period type, as printed (text, never worked out). The value sits under its heading ("Pay Rate", "Pay Period" over "Bi-Week") or to the
+    // right of its label on the same row ("Pay Basis  Monthly").
+    for (const [name, re, how] of [["pay_rate", /^Pay Rate$/i, "below"], ["pay_basis", /^(?:Pay|Rate) Basis$/i, "right"], ["period_type", /^(?:Pay )?Period Type$|^Pay Frequency$|^Pay Period$/i, "below-words"]]) {
+      const h = find(row.items, re);
+      if (!h || seenInfo.has(name)) continue;
+      let v = null;
+      if (how === "right") {   // the words right after the label, as far as they run together (a value printed as several text pieces is one value)
+        const after = row.items.slice(h.end + 1).filter((i) => i.x >= h.x + h.w - 1), run = [];
+        for (const i of after) { const last = run[run.length - 1]; if (!last || i.x - (last.x + last.w) <= 12) run.push(i); else break; }
+        if (run.length) v = { ...run[0], str: run.map((i) => i.str.trim()).join(" ") };
+      }
+      if (!v && next && row.y - next.y <= 30) {
+        const mid = h.x + h.w / 2, near = [...next.items].sort((a, b) => Math.abs(a.x + a.w / 2 - mid) - Math.abs(b.x + b.w / 2 - mid))[0];
+        if (near && Math.abs(near.x + near.w / 2 - mid) <= Math.max(60, h.w) && (how !== "below-words" || (/[A-Za-z]/.test(near.str) && !/\d/.test(near.str)))) v = near;
+      }
+      if (v && v.str.trim()) { seenInfo.add(name); emit("Info " + name, v.str.trim()); }
+    }
     if ((!summary && !dates) || !next || row.y - next.y > 30) continue;
     const cells = new Map();
     for (const v of next.items) {
@@ -451,7 +488,7 @@ function payrollTableText(rows, headersIn) {
       if (!items.length) continue;
       const title = items.map(i => i.str.trim()).join(" ");
       if (/^(Accruals|Absences|Net Pay Distribution|Other Information)\b/i.test(title)) break;
-      const key = /^Hours and Earnings$/i.test(title) ? "earning" : /^Pre[- ]Tax Deductions$/i.test(title) ? "pre-tax" : /^Tax Deductions$/i.test(title) ? "taxes" : /^After Tax Deductions$/i.test(title) ? "deductions" : null;
+      const key = /^Hours and Earnings$/i.test(title) ? "earning" : /^Pre[- ]Tax Deductions$/i.test(title) ? "pre-tax" : /^Tax Deductions$/i.test(title) ? "taxes" : /^After Tax Deductions$/i.test(title) ? "deductions" : /^Employer(?:'s)? (?:Share|Contributions?)$/i.test(title) ? "employer" : null;
       if (key) { section = key; amount = hours = null; emit("Section", key); continue; }
       const hs = headersIn({items});
       if (hs.some(h => /^amount$/i.test(h.str))) { amount = hs.find(h => /^amount$/i.test(h.str)); hours = hs.find(h => /^hours$/i.test(h.str)); continue; }
@@ -460,7 +497,9 @@ function payrollTableText(rows, headersIn) {
       const value = [...items].sort((a,b) => Math.abs(right(a)-right(amount)) - Math.abs(right(b)-right(amount)))[0];
       const label = items.filter(i => i !== value && (!hours || right(i) < hours.x)).map(i => i.str).join(" ").trim();
       if (!label || Math.abs(right(value)-right(amount)) > 20) { emit("Unreadable", "table row"); continue; }
-      out.push(["Line " + section, label, value.str.trim()].join("\t"));
+      // The hours printed on the line stay with that line (shown per line, never added up: night differential hours overlap the regular hours).
+      const hourCell = hours ? items.find(i => i !== value && Math.abs(right(i) - right(hours)) <= 20 && /^\d[\d,]*(?:\.\d+)?$/.test(i.str.trim())) : null;
+      out.push(["Line " + section, label, value.str.trim(), hourCell ? hourCell.str.trim() : ""].join("\t"));
     }
   }
   const dist = rows.findIndex(r => /^Net Pay Distribution$/i.test(joined(r)));
@@ -490,10 +529,12 @@ function readPayrollTable(lines) {
   const money = s => /^(?:\d{1,3}(?:,\d{3})*|\d+)\.\d{2}$/.test(s ?? "") ? amountsIn(s)[0] ?? (s === "0.00" ? 0 : null) : null;
   if (lines.filter(l => l === "Payslip table").length !== 1) flag("structure", "more than one payroll table was found, so figures may be mixed");
   const summary = new Map(), sections = new Set(), amounts = { earning: 0, "pre-tax": 0, taxes: 0, deductions: 0 }, earnings = new Map(), deductions = new Map();
+  const items = [], info = {};
   let deposit = 0, distributions = 0, here = null;
   const lost = (section) => { unread[section === "earning" ? "earning" : "deduction"]++; };
   for (const line of lines) {
-    const [key, label, value] = line.split("\t");
+    const [key, label, value, hoursText] = line.split("\t");
+    if (key.startsWith("Info ")) { if (label) info[key.slice(5)] = label; continue; }
     if (key === "Unreadable") { if (label === "distribution row") flag("deposit", "a net pay distribution row could not be read"); else lost(here ?? "earning"); continue; }
     if (key === "Section") { if (sections.has(label)) flag("structure", "a payroll section appears twice"); sections.add(label); here = label; continue; }
     if (key.startsWith("Summary ")) {
@@ -505,8 +546,14 @@ function readPayrollTable(lines) {
     if (key === "Distribution") { const n = money(label); if (n === null) flag("deposit", "a net pay distribution amount could not be read"); else { deposit += n; distributions++; } continue; }
     if (key.startsWith("Line ")) {
       const section = key.slice(5), n = money(value);
+      if (section === "employer") {   // the employer's own share: kept and shown, never part of the earnings or the deductions
+        if (n === null) { lost("deductions"); continue; }
+        items.push({ section: "employer", label, amount: n, position: items.length, ...(hoursText ? { hours: hoursText } : {}) });
+        continue;
+      }
       if (n === null || !(section in amounts)) { lost(section); continue; }
       amounts[section] += n;
+      items.push({ section: section === "earning" ? "earning" : "deduction", label, amount: n, position: items.length, ...(hoursText ? { hours: hoursText } : {}) });
       const earning = section === "earning", low = label.toLowerCase();
       // Back pay is included in Other earnings, not today's basic rate or an
       // overtime transfer. All other unclassified lines are included as Other.
@@ -529,7 +576,7 @@ function readPayrollTable(lines) {
   const entries = m => [...m].filter(([,amount]) => amount > 0).map(([kind,amount]) => ({kind,amount}));
   // The best reading: the printed figure when there is one, else what the lines add to.
   const earned = amounts.earning, printedNet = net ?? (gross ?? earned) - totalDed;
-  return { earnings: entries(earnings), deductions: entries(deductions), printed_gross: gross ?? (earned || null), printed_net: printedNet > 0 ? printedNet : null, printed_deductions: totalDed || (summary.get("pre-tax") ?? 0) + (summary.get("taxes") ?? 0) + (summary.get("deductions") ?? 0) || null, deposit: distributions ? deposit : (printedNet > 0 ? printedNet : null), notes: [], flags, unread };
+  return { earnings: entries(earnings), deductions: entries(deductions), printed_gross: gross ?? (earned || null), printed_net: printedNet > 0 ? printedNet : null, printed_deductions: totalDed || (summary.get("pre-tax") ?? 0) + (summary.get("taxes") ?? 0) + (summary.get("deductions") ?? 0) || null, deposit: distributions ? deposit : (printedNet > 0 ? printedNet : null), items, info, notes: [], flags, unread };
 }
 
 

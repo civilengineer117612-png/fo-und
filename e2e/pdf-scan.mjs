@@ -24,13 +24,14 @@ const scan = async (name) => {
   await page.locator('input[data-scan="quick"]:not([capture])').setInputFiles(fixture(name));
 };
 const unlock = async (password) => { await visible("#pdf-pw"); await page.locator("#pdf-pw").fill(password); await page.locator('[data-action="pdf-open"]').click(); };
+// The printed lines the form holds, by section: [[label, amount text, category text, notes]], read from the page (the section may be folded).
+const lines = (key) => page.evaluate((k) => [...document.querySelectorAll(`#sheet details.tot[data-keep="${k}"] .pl`)].map((r) => [r.querySelector(".pl-label").textContent, r.querySelector(".pl-amt").textContent, r.querySelector(".pl-cat").textContent.replace(/\s*\u203A$/, ""), [...r.querySelectorAll(".pl-t")].map((t) => t.textContent)]), key);
 const checkPayslip = async () => {
   await page.locator("#p-net").waitFor({ state: "attached", timeout: 30000 });
   assert.equal(await page.locator("#p-net").inputValue(), "7400.00");
   assert.equal(await page.locator("#p-gross").inputValue(), "8000.00");
-  assert.equal(await page.locator('[data-field="e_basic"]').inputValue(), "8000.00");
-  assert.equal(await page.locator('[data-field="d_sss"]').inputValue(), "400.00");
-  assert.equal(await page.locator('[data-field="d_tax"]').inputValue(), "200.00");
+  assert.deepEqual((await lines("e")).map((l) => l.slice(0, 2)), [["Regular", "\u20B18,000.00"]], "the printed earnings line, as printed");
+  assert.deepEqual((await lines("d")).map((l) => l.slice(0, 3)), [["SSS", "\u20B1400.00", "SSS"], ["Tax Deduction", "\u20B1200.00", "Choose a category"]], "the printed deduction lines, as printed; SSS is matched by its word");
   assert.equal(await page.locator('[data-field="period_from"]').inputValue(), "2026-10-01");
   assert.equal(await page.locator('[data-field="period_to"]').inputValue(), "2026-10-15");
   assert.equal(await page.locator('[data-field="pay_date"]').inputValue(), "2026-10-20");
@@ -115,9 +116,14 @@ try {
   console.log('ok: a text payroll PDF uses its text layer, counts every earnings line, and reads the distribution independently');
   await payrollScan();
   await page.locator('#p-net').waitFor({state:'attached'});
-  for (const [field, expected] of [['gross','17000.00'],['net','15200.00'],['ded','1800.00'],['deposit','15200.00'],['e_basic','12000.00'],['e_other','2500.00'],['e_overtime','2500.00']]) {
+  for (const [field, expected] of [['gross','17000.00'],['net','15200.00'],['ded','1800.00'],['deposit','15200.00']]) {
     assert.equal(await page.locator(`[data-field="${field}"]`).inputValue(),expected);
   }
+  // EVERY printed line is on the form as printed (nothing squeezed into "Other earnings"), with its hours; Retro is back pay, Non Taxable a flag, exact "Overtime" only suggested
+  assert.deepEqual(await lines('e'), [['Regular','\u20B112,000.00','Choose a category',['64.00 hours']], ['Allowance Non Taxable','\u20B11,500.00','Choose a category',['Not taxable','0.00 hours']],
+    ['Overtime','\u20B12,500.00','Choose a category',['Overtime (suggested)','8.00 hours']], ['Retro Regular','\u20B11,000.00','Choose a category',['Back pay','8.00 hours']]]);
+  assert.deepEqual((await lines('d')).map((l) => l.slice(0, 3)), [['HDMF','\u20B1100.00','Pag-IBIG'], ['PhilHealth','\u20B1400.00','PhilHealth'], ['SSS','\u20B1700.00','SSS'], ['Tax Deduction','\u20B1600.00','Choose a category']]);
+  assert.deepEqual([await page.locator('[data-field="pay_rate"]').inputValue(), await page.locator('[data-field="pay_basis"]').inputValue(), await page.locator('[data-field="period_type"]').inputValue()], ['34,000.00','Monthly Non Exempt','Bi-Week'], 'pay rate, basis and period type as printed');
   assert.equal(await page.locator('#p-emp').inputValue(),'Example Employer Ltd');
   // The layout report: one tap copies a skeleton of the PDF's text with every digit as 9 and every word that is not an app heading as x's; the real
   // name, employer and figures never reach the clipboard.
@@ -157,8 +163,8 @@ try {
     await payrollScan({change});
     await page.locator('#p-net').waitFor({state:'attached'});
     assert.doesNotMatch(await page.locator('#sheet').innerText(),/Nothing was filled in/);
-    assert.equal(await page.locator('[data-field="e_basic"]').inputValue(),'12000.00', name + ': the lines are filled as read');
-    assert.equal(await page.locator('[data-field="d_tax"]').inputValue(),'600.00');
+    assert.equal((await lines('e'))[0][1],'\u20B112,000.00', name + ': the lines are filled as read');
+    assert.equal((await lines('d')).at(-1)[1],'\u20B1600.00');
     assert.ok(await page.locator(field).evaluate(el => el.classList.contains('chk')), name + ': the figure is outlined');
     const mark = await page.locator(field.replace('#p-gross','#chk-gross').replace('#p-net','#chk-net').replace('#p-dep','#chk-deposit')).first();
     assert.match(await mark.innerText(), new RegExp('Check this: ' + reason));

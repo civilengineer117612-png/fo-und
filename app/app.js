@@ -591,6 +591,23 @@ function earlierFigures(p) {
 }
 // "Apr 16\u201330" for a pay period that has no payslip (the year only when it is not this year).
 const gapText = (g) => periodText({ period_from: g.from, period_to: g.to }).replace(new RegExp(", " + today().slice(0, 4) + "$"), "");
+// Every line printed on a payslip, as printed, in print order (tap one to change its category). An old payslip has none: it says so and invents nothing.
+function printedLines(p) {
+  const items = M.itemsOf(S(), p.id);
+  if (!items.length) return `<p class="note small">${esc(M.ORIGINAL_NOT_KEPT)}</p>`;
+  const sec = (section, title) => {
+    const rows = items.filter((i) => i.section === section);
+    return rows.length ? `<h4 class="dayhead">${title}</h4>${rows.map((i, n) => plRow({ n: n + 1, label: i.label, amount: i.amount, zero: i.amount === 0, catText: i.category ? M.categoryName(i.section, i.category) : "No category yet", need: !i.category, notes: slipNotes(i), action: "open-itemcat", id: i.id })).join("")}` : "";
+  };
+  return `<details class="earlier"><summary>Printed lines (${items.length})</summary>${sec("earning", "Earnings")}${sec("deduction", "Deductions")}${sec("employer", "Employer share (not taken from your pay)")}</details>`;
+}
+// Printed lines grouped by their category for a period (tap a category to see its lines; a line with none counts under Other). Older payslips are counted apart.
+function categoryBlock(sections, range) {
+  const g = M.incomeByCategory(S(), range), title = { earning: "Earnings by category", deduction: "Deductions by category", employer: "Employer share (not taken from your pay)" };
+  const one = (section) => g[section].length ? `<h2>${title[section]}</h2><div class="clist">${g[section].map((c) => `<details class="crow"><summary><span class="mn">${esc(c.name)}</span><b class="mv">${peso(c.total)}</b><span class="tchev" aria-hidden="true">\u203A</span></summary>${c.items.map((i, n) => plRow({ n: n + 1, label: i.label, amount: i.amount, zero: i.amount === 0, catText: i.employer + " \u00B7 " + fullDate(i.pay_date), notes: [i.overtime ? "Overtime" : "", i.back_pay ? "Back pay" : "", i.tax === "non_taxable" ? "Not taxable" : i.tax === "taxable" ? "Taxable" : "", i.hours ? i.hours + " hours" : ""].filter(Boolean), action: "open-itemcat", id: i.id })).join("")}</details>`).join("")}</div>` : "";
+  const old = g.original.count ? `<p class="note small">${g.original.count === 1 ? "1 payslip was" : g.original.count + " payslips were"} saved before every printed line was kept: ${esc(M.ORIGINAL_NOT_KEPT.toLowerCase())}. Their figures are in the totals above.</p>` : "";
+  return sections.map(one).join("") + old;
+}
 function payslipRows(range) {
   const slips = slipsIn(range);
   if (!slips.length) return `<p class="note">No payslips in this period.</p>`;
@@ -599,7 +616,7 @@ function payslipRows(range) {
     const lines = M.linesOf(S(), p.id), flags = M.payslipChecks(p, lines), t = M.payslipTotals(lines);
     const shot = M.attachmentsFor(S(), p.transaction_id)[0];
     const draft = S().transactions.some((x) => x.id === "ot-" + p.id), freeDone = S().transactions.some((x) => x.id === "otf-" + p.id);
-    return `<div class="row"><div>${esc(p.employer)}<small>${esc(periodText(p))} · paid ${esc(fullDate(p.pay_date))} · gross ${peso(t.gross)} · deductions ${peso(t.deductions)}</small></div><div class="amt">${peso(p.deposit)}</div></div>${shot ? `<p class="note"><button class="link" data-action="open-photo" data-id="${esc(shot.id)}">View the photo</button></p>` : ""}${flags.map(flagLine).join("")}${M.payslipNotes(S(), p).map((n) => `<p class="note small">${esc(n)}${!(p.version >= M.PAYSLIP_VERSION) && n.startsWith("Saved before") ? ` <button class="link" data-action="check-slip" data-id="${esc(p.id)}">Mark as checked</button>` : ""}</p>`).join("")}${earlierFigures(p)}${t.overtime > 0 && !draft ? `<p class="note"><button class="link" data-action="ot-draft" data-id="${esc(p.id)}">Make the Emergency Fund draft for the overtime</button></p>` : ""}${t.overtime > 0 && !freeDone ? `<p class="note">The free ${peso(t.overtime - Math.round((t.overtime * M.OVERTIME_SHARE.num) / M.OVERTIME_SHARE.den))} of the overtime stays in the account the pay landed in. <button class="link" data-action="open-otfree" data-id="${esc(p.id)}">Move it somewhere else</button></p>` : ""}${ui.confirmDelSlip === p.id ? `<p class="note">Remove this payslip and the pay it recorded? <button class="link" data-action="del-slip-yes" data-id="${esc(p.id)}">Yes, remove it</button></p>` : `<p class="note"><button class="link" data-action="edit-slip" data-id="${esc(p.id)}">Change this payslip</button> · <button class="link" data-action="del-slip" data-id="${esc(p.id)}">Remove this payslip</button></p>`}`;
+    return `<div class="row"><div>${esc(p.employer)}<small>${esc(periodText(p))} · paid ${esc(fullDate(p.pay_date))} · gross ${peso(t.gross)} · deductions ${peso(t.deductions)}</small></div><div class="amt">${peso(p.deposit)}</div></div>${shot ? `<p class="note"><button class="link" data-action="open-photo" data-id="${esc(shot.id)}">View the photo</button></p>` : ""}${flags.map(flagLine).join("")}${printedLines(p)}${M.payslipNotes(S(), p).map((n) => `<p class="note small">${esc(n)}${!(p.version >= M.PAYSLIP_VERSION) && n.startsWith("Saved before") ? ` <button class="link" data-action="check-slip" data-id="${esc(p.id)}">Mark as checked</button>` : ""}</p>`).join("")}${earlierFigures(p)}${t.overtime > 0 && !draft ? `<p class="note"><button class="link" data-action="ot-draft" data-id="${esc(p.id)}">Make the Emergency Fund draft for the overtime</button></p>` : ""}${t.overtime > 0 && !freeDone ? `<p class="note">The free ${peso(t.overtime - Math.round((t.overtime * M.OVERTIME_SHARE.num) / M.OVERTIME_SHARE.den))} of the overtime stays in the account the pay landed in. <button class="link" data-action="open-otfree" data-id="${esc(p.id)}">Move it somewhere else</button></p>` : ""}${ui.confirmDelSlip === p.id ? `<p class="note">Remove this payslip and the pay it recorded? <button class="link" data-action="del-slip-yes" data-id="${esc(p.id)}">Yes, remove it</button></p>` : `<p class="note"><button class="link" data-action="edit-slip" data-id="${esc(p.id)}">Change this payslip</button> · <button class="link" data-action="del-slip" data-id="${esc(p.id)}">Remove this payslip</button></p>`}`;
   }).join("")}`;
 }
 
@@ -644,8 +661,8 @@ function viewIncome() {
   const pv = plan ? [M.planIncome(S(), plan, today())].map((v) => `<h2>Plan against what arrived</h2><table class="tbl"><tr><th>Payday</th><th class="n">Plan</th><th class="n">Received</th><th class="n">Difference</th></tr><tr><td>${esc(v.label)}<small> ${esc(longDate(v.period.start))}</small></td><td class="n">${peso(v.planned)}</td><td class="n">${peso(v.actual)}</td><td class="n">${esc(ivar(v.variance))}</td></tr></table><p class="note">The plan is never edited; the difference is only shown.</p>`)[0] : "";
   const bodies = {
     overview: `<h2>Gross, deductions and net, ${esc(label)}</h2><div class="mlist">${mline("Gross", peso(bd.earned))}${mline("Deductions", (bd.deductions ? "-" : "") + peso(bd.deductions))}<div class="mrow mtotal"><span class="mn">Net</span><b class="mv">${peso(y.ytd.total)}</b></div></div>${loose.length ? `<p class="note">${peso(loose.reduce((n, r) => n + r.amount, 0))} of this was added without a payslip (${loose.length} ${loose.length === 1 ? "entry" : "entries"}). <button class="link" data-action="open-payslips">See them</button></p>` : ""}${pv}`,
-    earnings: `<h2>Earnings by month</h2>${monthTable}${paydays}`,
-    deductions: dedTable || `<p class="note">No deductions in this period.</p>`,
+    earnings: `${categoryBlock(["earning"], range)}<h2>Earnings by month</h2>${monthTable}${paydays}`,
+    deductions: categoryBlock(["deduction", "employer"], range) + (dedTable || `<p class="note">No deductions in this period.</p>`),
   };
   return `${head}${bodies[view]}`;
 }
@@ -653,6 +670,7 @@ function viewIncome() {
 const payslipDefaults = () => ({
   employer: ledger.settings.last_employer ?? "", period_from: today(), period_to: today(), pay_date: today(), account_id: ledger.settings.last_account_id ?? accountsFor(null)[0]?.id ?? null,
   ot_month: M.addMonths(M.monthOf(today()), -1), gross: "", net: "", deposit: "", words: "",
+  items: [], nextK: 0, pay_rate: "", pay_basis: "", period_type: "",   // the lines printed on the payslip (a typed payslip starts with none)
 });
 // A payslip photo, read line by line: opens the payslip window already filled in. The owner checks every figure (the same four checks as
 // for a typed payslip point out what does not add up), chooses where it landed, and saves. The photo stays with the pay.
@@ -668,15 +686,17 @@ function openPayslipFromPhoto(blob, text, queueId, source = "photo", layout = nu
   f.period_from = r.period_from ?? ""; f.period_to = r.period_to ?? ""; f.pay_date = r.pay_date ?? "";
   if (!r.period_from && r.pay_date) f.notes = [...f.notes, "I could not find the pay period. Choose the dates."];
   f.ot_month = f.pay_date ? M.addMonths(M.monthOf(f.pay_date), -1) : d.ot_month;
-  for (const l of r.earnings) f["e_" + l.kind] = two(l.amount);
-  for (const l of r.deductions) f["d_" + l.kind] = two(l.amount);
+  // EVERY printed line, as printed, in print order (nothing squeezed into fixed boxes). The reader's guesses are only suggestions the form shows as such.
+  f.items = (r.items ?? []).map((i) => { f.nextK += 1; const { amount, ...d } = M.draftItem({ section: i.section, label: i.label, amount: i.amount, hours: i.hours, employer: f.employer, settings: ledger.settings }); return { ...d, k: "k" + f.nextK, amt: two(amount) }; });
+  f.pay_rate = r.info?.pay_rate ?? ""; f.pay_basis = r.info?.pay_basis ?? ""; f.period_type = r.info?.period_type ?? "";
+  { const lost = (r.unread?.earning ?? 0) + (r.unread?.deduction ?? 0); f.unread_e = f.unread_d = 0; if (lost) f.notes = [...f.notes.filter((n) => !/Empty rows are waiting/.test(n)), "I could not read " + lost + " row" + (lost === 1 ? "" : "s") + ". Add " + (lost === 1 ? "it" : "them") + " with + Add a line."]; }
   if (r.printed_gross) f.gross = two(r.printed_gross);
   if (r.printed_net) { f.net = two(r.printed_net); f.deposit = r.deposit != null ? two(r.deposit) : f.net; }
   if (r.printed_deductions) f.ded = two(r.printed_deductions);
   ui.linesOpen = true;   // a photo's figures are unconfirmed: they stay in view to be checked against the paper
   if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.url);
   pendingPhoto = { blob, url: URL.createObjectURL(blob) };
-  ui.pdet = { e: f.unread_e > 0 || r.flags?.some((x) => x.field === "gross"), d: f.unread_d > 0 || r.flags?.some((x) => x.field === "deductions"), t: (r.flags ?? []).length > 0 };   // what needs a look starts open
+  ui.pdet = { e: Boolean(r.flags?.some((x) => x.field === "gross")), d: Boolean(r.flags?.some((x) => x.field === "deductions")), t: (r.flags ?? []).length > 0 };   // what needs a look starts open
   ui.form = f; ui.sheet = { type: "payslip", scanBlob: blob, queueId }; renderSheet();
 }
 
@@ -754,7 +774,20 @@ function viewShot(url) {
 }
 
 // What the sheet holds, as the model wants it. `errors` names every typed amount that is not an amount.
+// The new form (owner, Oct 30): the payslip's own printed lines, as the owner sees them. The generated lines (what the old checks and every report read) come from them.
+function payslipFromItems(f) {
+  const errors = [], items = [], money = (raw) => { const a = M.parsePesos(raw ?? ""); return a.ok && a.centavos > 0 ? a.centavos : null; };
+  for (const it of f.items) {
+    const label = (it.label ?? "").trim(), raw = (it.amt ?? "").trim(), a = raw === "" ? null : M.parsePesos(raw);
+    if (!label || !a || !a.ok) { errors.push(label || "a line with no name"); continue; }
+    const { k, amt, via, via_overtime, chosen, label: _l, ...rest } = it;
+    items.push({ ...rest, label, amount: a.centavos });
+  }
+  const made = M.linesFromItems(items, f.ot_month), part = (side) => made.filter((l) => l.side === side).map(({ side: _s, ...l }) => l);
+  return { errors, items, earnings: part("earning"), deductions: part("deduction"), printed_gross: money(f.gross), printed_net: money(f.net), deposit: money(f.deposit), printed_deductions: money(f.ded) };
+}
 function payslipFromForm(f) {
+  if (f.items) return payslipFromItems(f);
   const errors = [], pick = (prefix, kinds) => kinds.flatMap(([kind]) => {
     const raw = (f[prefix + kind] ?? "").trim(); if (!raw) return [];
     const a = M.parsePesos(raw); if (!a.ok || a.centavos <= 0) { errors.push(kind); return []; }
@@ -779,7 +812,12 @@ function savePayslipReady(f) {
 function openSlipEdit(p) {
   const id = p.id, two = (c) => (c / 100).toFixed(2), f = { employer: p.employer, period_from: p.period_from, period_to: p.period_to, pay_date: p.pay_date, account_id: p.account_id,
     gross: two(p.printed_gross), net: two(p.printed_net), deposit: two(p.deposit), ded: p.printed_deductions ? two(p.printed_deductions) : "", words: p.net_words ?? "", ot_month: payslipDefaults().ot_month };
-  for (const l of M.linesOf(S(), id)) { f[(l.side === "earning" ? "e_" : "d_") + l.kind] = two(l.amount); if (l.earned_month) f.ot_month = l.earned_month; }
+  const stored = M.itemsOf(S(), id);
+  if (stored.length) {   // a payslip saved with its printed lines opens as its lines; an older one keeps the old form (its original wording was not kept)
+    f.items = stored.map((i, n) => { const { id: itemId, payslip_id: _p, position: _q, amount, ...rest } = i; return { ...rest, item_id: itemId, k: "k" + (n + 1), amt: two(amount) }; }); f.nextK = stored.length;
+    f.pay_rate = p.pay_rate ?? ""; f.pay_basis = p.pay_basis ?? ""; f.period_type = p.period_type ?? "";
+    for (const l of M.linesOf(S(), id)) if (l.earned_month) f.ot_month = l.earned_month;
+  } else for (const l of M.linesOf(S(), id)) { f[(l.side === "earning" ? "e_" : "d_") + l.kind] = two(l.amount); if (l.earned_month) f.ot_month = l.earned_month; }
   ui.pdet = { e: true, d: true, t: true }; ui.linesOpen = false; ui.form = f; ui.sheet = { type: "payslip", editId: id }; renderSheet();
 }
 // The checks on what the form holds now (owner, Oct 29): a mark with a one-line reason for each figure the arithmetic does not prove, and the problems
@@ -798,6 +836,90 @@ function payslipMarks(f) {
   const problems = p.printed_gross && p.printed_net && p.deposit && lines.length ? M.payslipProblems({ printed_gross: p.printed_gross, printed_net: p.printed_net, deposit: p.deposit, printed_deductions: p.printed_deductions ?? undefined, net_words: (f.words ?? "").trim() || undefined }, lines) : { flags: [], gap: 0 };
   return { p, ready, lines, t, marks, problems };
 }
+// ---------- the payslip form as its printed lines (owner, Oct 30) ----------
+// Only the lines printed on that payslip, in print order: no fixed boxes, no 0.00 placeholders for what the employer did not print. A line printed as 0.00 stays, in lighter
+// text. Earnings and deductions fold like the old form; "Employer share" shows only when the payslip has such lines and never reduces net.
+const slipItem = (f, k) => f.items.find((i) => i.k === k);
+const slipCatList = (section) => [{ id: "", name: "No category yet" }, ...M.categoriesFor(section).map(([id, name]) => ({ id, name }))];
+function plRow({ n, label, amount, zero = false, catText, need = false, notes = [], action, id }) {
+  return `<div class="pl${zero ? " zero" : ""}"><button class="pl-main" type="button" data-action="${action}" data-id="${esc(id)}"><span class="pl-n">${n}</span><span class="pl-label">${esc(label || "(no name)")}</span><b class="pl-amt">${amount === null ? "" : peso(amount)}</b></button>
+    <div class="pl-sub"><button class="pl-cat${need ? " need" : ""}" type="button" data-action="${action}" data-id="${esc(id)}">${esc(catText)}<span aria-hidden="true"> ›</span></button>${notes.map((t) => `<span class="pl-t">${esc(t)}</span>`).join("")}</div></div>`;
+}
+const slipNotes = (it) => [it.via_overtime === "suggested" ? "Overtime (suggested)" : it.overtime ? "Overtime" : "", it.back_pay ? "Back pay" : "", it.tax === "non_taxable" ? "Not taxable" : it.tax === "taxable" ? "Taxable" : "", it.hours ? it.hours + " hours" : ""].filter(Boolean);
+function slipRowHtml(it, n) {
+  const a = M.parsePesos(it.amt ?? ""), cents = a.ok ? a.centavos : null, cat = it.category ? M.categoryName(it.section, it.category) : "";
+  return plRow({ n, label: it.label, amount: cents, zero: cents === 0, catText: it.category ? (it.via === "suggested" ? cat + " (suggested)" : cat) : "Choose a category", need: !it.category, notes: slipNotes(it), action: "slip-line", id: it.k });
+}
+function slipSectionHtml(f, section, open) {
+  const rows = f.items.filter((i) => i.section === section), key = { earning: "e", deduction: "d", employer: "r" }[section];
+  const total = rows.reduce((n, i) => { const a = M.parsePesos(i.amt ?? ""); return n + (a.ok ? a.centavos : 0); }, 0);
+  const title = { earning: "Total earnings", deduction: "Total deductions", employer: "Employer share" }[section], count = rows.length + (rows.length === 1 ? " line" : " lines");
+  const sub = section === "employer" ? count + " · not taken from your pay" : rows.length ? count + " · tap to see them" : "No lines yet · tap to add";
+  const none = rows.filter((i) => !i.category).length, word = { earning: "Other earnings", deduction: "Other deductions", employer: "Other deductions" }[section];
+  const months = Array.from({ length: 7 }, (_, i) => M.addMonths(M.monthOf(today()), -i));
+  return `<details class="tot" data-keep="${key}"${open}><summary><span class="tl">${title}<small>${sub}</small></span><b id="p-tot-${key}" class="tv">${peso(total)}</b><span class="tchev" aria-hidden="true">›</span></summary>
+    <p class="note small" id="chk-${key}" hidden></p>${rows.map((it) => slipRowHtml(it, f.items.filter((i) => i.section === section).indexOf(it) + 1)).join("")}
+    <p><button class="pl-add" type="button" data-action="slip-add" data-id="${section}">+ Add ${section === "earning" ? "an earnings" : section === "deduction" ? "a deduction" : "an employer"} line</button></p>
+    ${none && section !== "employer" ? `<p class="note small">${none === 1 ? "1 line has" : none + " lines have"} no category. ${none === 1 ? "It counts" : "They count"} under ${word} until you choose.</p>${section === "earning" ? `<div class="pickwrap">${picker("rest", [["", slipCatList("earning").filter((c) => c.id)]], null, "slip-rest", "Same for the rest")}</div>` : ""}` : ""}
+    ${section === "earning" && f.items.some((i) => i.section === "earning" && i.overtime) ? `<label for="p-otm">Overtime was earned in</label><select id="p-otm" data-field="ot_month">${months.map((m) => `<option value="${m}"${f.ot_month === m ? " selected" : ""}>${esc(M.monthLabel(m))}</option>`).join("")}</select>` : ""}
+  </details>`;
+}
+function slipFormHtml(f, sh, pm) {
+  if (sh.line) return slipLineHtml(f, sh);
+  if (sh.adding) return slipAddHtml(f, sh);
+  const open = (k) => (ui.pdet?.[k] ? " open" : ""), chk = (key) => `<p class="note small" id="chk-${key}" hidden></p>`;
+  const pic = sh.scanBlob ? `${f.fromPdf ? `<details class="pagepeek" data-keep="pg"${ui.pdet?.pg === false ? "" : " open"}><summary><span class="pg-show">Show the page</span><span class="pg-hide">Hide the page</span></summary><button class="shotbtn enlarge" data-action="view-shot" aria-label="Open the page full size to compare it with the figures"><img class="shot" src="${esc(pendingPhoto?.url ?? "")}" alt="Your payslip, every page" style="max-height:32vh;object-fit:contain"></button></details>` : `<button class="shotbtn enlarge" data-action="view-shot" aria-label="Open the photo full size to compare it with the figures"><img class="shot" src="${esc(pendingPhoto?.url ?? "")}" alt="Your payslip photo" style="max-height:18vh;object-fit:contain"></button>`}${(f.notes ?? []).map((n) => `<p class="note small">${esc(n)}</p>`).join("")}` : "";
+  return `<h3>${sh.editId ? "Change this payslip" : "Add a payslip"}</h3>${pic}
+    <div id="p-lines">${slipSectionHtml(f, "earning", open("e"))}${slipSectionHtml(f, "deduction", open("d"))}${f.items.some((i) => i.section === "employer") ? slipSectionHtml(f, "employer", open("r")) : ""}</div>
+    <label>Landed in${REQ}</label>${paidChips(f.account_id)}
+    <label for="p-emp">Employer${REQ}</label><input id="p-emp" data-field="employer" value="${esc(f.employer ?? "")}" autocomplete="off">
+    <label for="p-from">Pay period from${REQ}</label><input id="p-from" data-field="period_from" type="date" value="${esc(f.period_from)}">
+    <label for="p-to">Pay period to${REQ}</label><input id="p-to" data-field="period_to" type="date" value="${esc(f.period_to)}">
+    <label for="p-date">Pay date${REQ}</label><input id="p-date" data-field="pay_date" type="date" value="${esc(f.pay_date)}">
+    <details data-keep="t"${open("t")}><summary>As printed on the payslip</summary>
+      <label for="p-gross">Gross pay (₱)${REQ}</label><input id="p-gross" data-field="gross" inputmode="decimal" value="${esc(f.gross ?? "")}" autocomplete="off">${chk("gross")}
+      <label for="p-net">Net pay (₱)${REQ}</label><input id="p-net" data-field="net" inputmode="decimal" value="${esc(f.net ?? "")}" autocomplete="off">${chk("net")}
+      <label for="p-ded">Total deductions (₱), if printed (optional)</label><input id="p-ded" data-field="ded" inputmode="decimal" value="${esc(f.ded ?? "")}" autocomplete="off">${chk("ded")}
+      <label for="p-dep">What really arrived in the account (₱)${REQ}</label><input id="p-dep" data-field="deposit" inputmode="decimal" value="${esc(f.deposit ?? "")}" autocomplete="off">${chk("deposit")}
+      <label for="p-words">Net pay in words, if written (optional)</label><input id="p-words" data-field="words" value="${esc(f.words ?? "")}" autocomplete="off" autocapitalize="off">
+      <label for="p-rate">Pay rate, as printed (optional)</label><input id="p-rate" data-field="pay_rate" value="${esc(f.pay_rate ?? "")}" autocomplete="off">
+      <label for="p-basis">Pay basis, as printed (optional)</label><input id="p-basis" data-field="pay_basis" value="${esc(f.pay_basis ?? "")}" autocomplete="off">
+      <label for="p-ptype">Period type, as printed (optional)</label><input id="p-ptype" data-field="period_type" value="${esc(f.period_type ?? "")}" autocomplete="off">
+    </details>
+    <div id="p-flags" role="status"></div>
+    ${f.layoutText ? `<p class="note small"><button class="link" data-action="copy-layout">Copy layout report</button> It hides every digit and every name.</p>` : ""}
+    <p class="note">Do not type any employee, tax or account number.</p>
+    ${REQNOTE}
+    <div id="p-ask" class="slipask"${sh.askDraft && pm.problems.flags.length ? "" : " hidden"}><p><b id="p-askq">The figures differ${pm.problems.gap ? " by " + esc(peso(pm.problems.gap)) : ""}. Save as a draft to check later?</b></p><p class="note small">It waits in Verify and is not income until it is verified.</p>
+      <p><button class="primary" data-action="save-payslip-draft">Save as a draft</button></p><p><button data-action="keep-editing-slip" style="width:100%">Keep editing</button></p></div>
+    <p id="p-savebox"${sh.askDraft && pm.problems.flags.length ? " hidden" : ""}><button class="primary" id="f-save" data-action="save-payslip" style="margin-top:14px" disabled>${sh.editId ? "Save changes" : "Save payslip"}</button></p>
+    ${sh.queueId ? `<p><button data-action="discard-scan" data-id="${esc(sh.queueId)}" style="width:100%">Throw this photo away</button></p>` : ""}`;
+}
+// "+ Add a line": the quick labels, or any label typed.
+function slipAddHtml(f, sh) {
+  const section = sh.adding, name = { earning: "an earnings line", deduction: "a deduction line", employer: "an employer line" }[section];
+  return `<h3>Add ${name}</h3><p class="note">Choose a label, or type the words as they are printed.</p>
+    <div class="pl-quick">${M.QUICK_LABELS[section].map(([label], i) => `<button class="chip" type="button" data-action="slip-quick" data-id="${i}">${esc(label)}</button>`).join("")}</div>
+    <label for="p-addlabel">Or type it</label><input id="p-addlabel" data-field="add_label" value="${esc(f.add_label ?? "")}" autocomplete="off">
+    <p><button class="primary" data-action="slip-add-typed" style="margin-top:12px">Add this line</button></p>
+    <p><button data-action="slip-back" style="width:100%">Back</button></p>`;
+}
+// One line: what it says, its figure, where it belongs, and what the owner can say about it.
+function slipLineHtml(f, sh) {
+  const it = slipItem(f, sh.line);
+  if (!it) { sh.line = null; return slipFormHtml(f, sh, payslipMarks(f)); }
+  const cats = it.section === "earning" ? slipCatList("earning") : slipCatList("deduction"), notes = slipNotes(it);
+  return `<h3>${it.fresh ? "Add a line" : "Change this line"}</h3>
+    <label for="p-il">Printed as${REQ}</label><input id="p-il" data-field="i:${it.k}:label" value="${esc(it.label ?? "")}" autocomplete="off">
+    <label for="p-ia">Amount (₱)${REQ}</label><input id="p-ia" data-field="i:${it.k}:amt" inputmode="decimal" value="${esc(it.amt ?? "")}" autocomplete="off" placeholder="0.00">
+    <label>Section</label><div class="chips">${[["earning", "Earnings"], ["deduction", "Deductions"], ["employer", "Employer share"]].map(([v, t]) => `<button class="chip" type="button" data-action="slip-section" data-id="${v}" aria-pressed="${it.section === v}">${t}</button>`).join("")}</div>
+    <label>Category</label>${picker("slipcat", [["", cats]], it.category ?? "", "slip-cat", "Choose a category")}
+    ${it.section === "earning" ? `<label>Overtime</label><div class="chips"><button class="chip" type="button" data-action="slip-ot" aria-pressed="${it.overtime === true}">${it.via_overtime === "suggested" ? "Overtime (suggested): count it" : "Count as overtime"}</button></div><p class="note small">Only a line you confirm here counts toward the 60/40 overtime draft.</p>` : ""}
+    <label for="p-ih">Hours, if printed (optional)</label><input id="p-ih" data-field="i:${it.k}:hours" value="${esc(it.hours ?? "")}" autocomplete="off">
+    ${notes.length ? `<p class="note small">${esc(notes.join(" · "))}</p>` : ""}
+    <p><button class="primary" data-action="slip-line-done" style="margin-top:12px">Done</button></p>
+    <p><button data-action="slip-remove" data-id="${esc(it.k)}" style="width:100%">Remove this line</button></p>`;
+}
 async function savePayslip(asDraft = false) {
   const f = ui.form, { p, problems } = payslipMarks(f), sh = ui.sheet, editId = sh?.editId ?? null, id = editId ?? newId("ps");
   // A payslip whose figures do not add up is never saved as verified income. A NEW one, or a draft being edited, asks once and is kept as a draft in Verify;
@@ -807,7 +929,7 @@ async function savePayslip(asDraft = false) {
   if (failing && !asDraft) { sh.askDraft = true; renderSheet(); refreshSave(); return; }
   const plan = editId ? (input, now) => M.updatePayslip(S(), editId, input, now) : (input, now) => M.planPayslip(S(), input, now);
   const r = plan({ id, transaction_id: newId("tx"), employer: f.employer, period_from: f.period_from, period_to: f.period_to, pay_date: f.pay_date, account_id: f.account_id,
-    printed_gross: p.printed_gross, printed_net: p.printed_net, deposit: p.deposit, printed_deductions: p.printed_deductions ?? undefined, net_words: (f.words ?? "").trim() || undefined, earnings: p.earnings, deductions: p.deductions, ...(failing ? { status: "draft" } : {}) }, new Date());
+    printed_gross: p.printed_gross, printed_net: p.printed_net, deposit: p.deposit, printed_deductions: p.printed_deductions ?? undefined, net_words: (f.words ?? "").trim() || undefined, ...(f.items ? { items: p.items, overtime_month: f.ot_month, pay_rate: f.pay_rate, pay_basis: f.pay_basis, period_type: f.period_type } : { earnings: p.earnings, deductions: p.deductions }), ...(failing ? { status: "draft" } : {}) }, new Date());
   if (!r.ok) { showToast("Could not save: " + r.violations[0].message); return; }
   let next = r.state, note = editId && r.draftsRemoved ? " The overtime draft was removed; make it again if you still want it." : "";
   const photoId = sh?.scanBlob ? (sh.queueId ?? newId("photo")) : null;   // a payslip read from a photo keeps the photo with the pay
@@ -824,7 +946,7 @@ async function savePayslip(asDraft = false) {
   }
   ui.sheet = null; renderSheet();
   if (pendingPhoto) { URL.revokeObjectURL(pendingPhoto.url); pendingPhoto = null; }
-  const saved = await commit(next, { ...ledger.settings, last_employer: f.employer.trim(), last_account_id: f.account_id, ...(sh?.queueId ? { scan_queue: scanQueue().filter((q) => q.id !== sh.queueId) } : {}) });
+  const saved = await commit(next, { ...(f.items ? M.rememberChoices(ledger.settings, f.employer.trim(), f.items) : ledger.settings), last_employer: f.employer.trim(), last_account_id: f.account_id, ...(sh?.queueId ? { scan_queue: scanQueue().filter((q) => q.id !== sh.queueId) } : {}) });
   if (saved && editId) for (const ph of r.photoIds ?? []) deletePhoto(ph).catch(() => {});
   if (failing) { showToast("Kept as a draft: " + peso(p.deposit) + ". Check it in Verify; it is not income yet."); return; }
   showToast((editId ? "Payslip changed: " : "Payslip saved: ") + peso(p.deposit) + (r.flags.length ? ". " + r.flags.length + (r.flags.length === 1 ? " thing does" : " things do") + " not match; see Income." : ".") + note);
@@ -2811,7 +2933,7 @@ function renderSheet() {
       <input id="u${side}${i}" data-field="u${side}${i}" inputmode="decimal" value="${esc(f[`u${side}${i}`] ?? "")}" autocomplete="off" placeholder="0.00"></div>`).join("");
     const chk = (key) => `<p class="note small" id="chk-${key}" hidden></p>`;
     const pm = payslipMarks(f);
-    body = `<h3>${sh.editId ? "Change this payslip" : "Add a payslip"}</h3>
+    body = f.items ? slipFormHtml(f, sh, pm) : `<h3>${sh.editId ? "Change this payslip" : "Add a payslip"}</h3>
       ${sh.scanBlob ? `${f.fromPdf ? `<details class="pagepeek" data-keep="pg"${ui.pdet?.pg === false ? "" : " open"}><summary><span class="pg-show">Show the page</span><span class="pg-hide">Hide the page</span></summary><button class="shotbtn enlarge" data-action="view-shot" aria-label="Open the page full size to compare it with the figures"><img class="shot" src="${esc(pendingPhoto?.url ?? "")}" alt="Your payslip, every page" style="max-height:32vh;object-fit:contain"></button></details>` : `<button class="shotbtn enlarge" data-action="view-shot" aria-label="Open the photo full size to compare it with the figures"><img class="shot" src="${esc(pendingPhoto?.url ?? "")}" alt="Your payslip photo" style="max-height:18vh;object-fit:contain"></button>`}${(f.notes ?? []).map((n) => `<p class="note small">${esc(n)}</p>`).join("")}` : ""}
       <p id="p-match" hidden><button class="link" data-action="open-lines">Matches paper. Tap to open.</button></p>
       <div id="p-lines">
@@ -2846,6 +2968,15 @@ function renderSheet() {
         <p><button class="primary" data-action="save-payslip-draft">Save as a draft</button></p><p><button data-action="keep-editing-slip" style="width:100%">Keep editing</button></p></div>
       <p id="p-savebox"${sh.askDraft && pm.problems.flags.length ? " hidden" : ""}><button class="primary" id="f-save" data-action="save-payslip" style="margin-top:14px" disabled>${sh.editId ? "Save changes" : "Save payslip"}</button></p>
       ${sh.queueId ? `<p><button data-action="discard-scan" data-id="${esc(sh.queueId)}" style="width:100%">Throw this photo away</button></p>` : ""}`;
+  } else if (sh.type === "itemcat") {
+    const item = (S().payslipItems ?? []).find((i) => i.id === sh.id);
+    if (!item) { ui.sheet = null; renderSheet(); return; }
+    const slip = S().payslips.find((p) => p.id === item.payslip_id), recs = M.changesOf(S(), item.id), name = (id) => id ? M.categoryName(item.section, id) : "No category yet";
+    body = `<h3>${esc(item.label)}</h3><p class="note">${peso(item.amount)}${slip ? " \u00B7 " + esc(slip.employer) + ", " + esc(periodText(slip)) : ""}</p>
+      <label>Category</label>${picker("itemcat", [["", slipCatList(item.section)]], item.category ?? "", "itemcat-pick", "Choose a category")}
+      <p class="note small">Only the category changes. No amount, no income and no transfer is made or changed.</p>
+      ${recs.length ? `<p class="note small">${recs.map((c) => `Changed ${esc(fullDate(c.changed_on))}: ${esc(name(c.from))} to ${esc(name(c.to))}.`).join("<br>")}</p>` : ""}
+      <p><button class="primary" data-action="close-sheet" style="margin-top:12px">Done</button></p>`;
   } else if (sh.type === "scanpick") {
     body = `<h3>Scan</h3><h4 class="dayhead">One receipt</h4><p class="note">A receipt, payment screen or payslip, as a photo or PDF. If the app is sure, it saves one draft; otherwise it asks.</p>${photoButtons("quick")}
       <h4 class="dayhead">Multiple transactions at once</h4><p class="note">A bank statement (PDF), a screenshot of your notes, or a CSV or Excel file. Every line waits in Verify.</p>
@@ -3316,16 +3447,17 @@ function refreshSave() {
       if (ask) ask.hidden = !open; if (box) box.hidden = open; if (q) q.textContent = "The figures differ" + (problems.gap ? " by " + peso(problems.gap) : "") + ". Save as a draft to check later?"; }
     for (const [key, id, from] of [["e", "chk-e", marks.gross], ["d", "chk-d", marks.ded]]) { const note = $(id); if (note) { note.hidden = !from; note.textContent = from ? "\u25B2 Check this: " + from : ""; } }
     if (out) {
-      const te = $("p-tot-e"), td = $("p-tot-d"); if (te) te.textContent = peso(t.gross); if (td) td.textContent = peso(t.deductions);
+      const te = $("p-tot-e"), td = $("p-tot-d"), tr = $("p-tot-r"); if (te) te.textContent = peso(t.gross); if (td) td.textContent = peso(t.deductions);
+      if (tr && f.items) tr.textContent = peso(f.items.filter((i) => i.section === "employer").reduce((n, i) => { const a = M.parsePesos(i.amt ?? ""); return n + (a.ok ? a.centavos : 0); }, 0));
       const flags = problems.flags.filter((x) => x.code === "WORDS" || (x.code === "GROSS" && /leaves out the overtime/.test(x.message)));   // the two checks that name something no field mark can
       const matches = lines.length && p.printed_gross && p.printed_net && p.deposit && !problems.flags.length && !p.errors.length;
       const box = $("p-lines"), tap = $("p-match");
       if (box && tap) { const collapse = matches && !ui.linesOpen && !box.contains(document.activeElement); box.hidden = collapse; tap.hidden = !collapse; }
       const fold = $("p-fold"); if (fold) fold.hidden = !(matches && ui.linesOpen && ui.sheet.scanBlob);   // a photo's figures fold only when the owner says they were checked
       const same = M.samePeriodPayslips(S(), { employer: f.employer, period_from: f.period_from, period_to: f.period_to }, ui.sheet.editId ?? null);
-      const sameNet = same.find((x) => x.deposit === p.deposit);
-      const repeat = !same.length ? "" : sameNet ? `<p class="note flag">▲ You already saved this payslip (same employer, same period, same net pay ${peso(sameNet.deposit)}). It cannot be saved twice. If it is a different payslip, change the dates or the net pay.</p>`
-        : `<p class="note">You already saved ${same.length === 1 ? "a payslip" : same.length + " payslips"} from ${esc(f.employer.trim())} for this period (net ${peso(same[0].deposit)}). Saving adds another one.</p>`;
+      const sameNet = same.find((x) => x.printed_net === p.printed_net);
+      const repeat = !same.length ? "" : sameNet ? `<p class="note flag">▲ You already saved this payslip (same employer, same period, same net pay ${peso(sameNet.printed_net)}). It cannot be saved twice. If it is a different payslip, change the dates or the net pay.</p>`
+        : `<p class="note">You already saved ${same.length === 1 ? "a payslip" : same.length + " payslips"} from ${esc(f.employer.trim())} for this period (net ${peso(same[0].printed_net)}). Saving adds another one.</p>`;
       out.innerHTML = repeat + (lines.length ? `<p class="note">The lines add to gross ${peso(t.gross)}; minus deductions, net ${peso(t.net)}.</p>` : "") + (p.errors.length ? `<p class="note flag">\u25B2 Check the amount typed for: ${esc(p.errors.join(", "))}.</p>` : "") + flags.map(flagLine).join("");
     }
   } else if (type === "schedule-new") {
@@ -4316,6 +4448,43 @@ async function onClick(el) {
     }
     case "open-scan-pick": ui.sheet = { type: "scanpick" }; renderSheet(); break;
     case "open-payslip-choice": ui.sheet = { type: "payslipchoice" }; renderSheet(); break;
+    case "slip-line": { ui.sheet.line = id; ui.sheet.pick = null; renderSheet(); document.querySelector("#sheet .sheet")?.scrollTo(0, 0); break; }
+    case "slip-line-done": { const it = slipItem(ui.form, ui.sheet.line); if (it) delete it.fresh; ui.sheet.line = null; ui.sheet.pick = null; renderSheet(); refreshSave(); break; }
+    case "slip-add": { ui.sheet.adding = id; ui.form.add_label = ""; renderSheet(); document.querySelector("#sheet .sheet")?.scrollTo(0, 0); break; }
+    case "slip-back": { ui.sheet.adding = null; renderSheet(); refreshSave(); break; }
+    case "slip-quick": {   // the owner chose the label: so its category is his choice too (remembered next time); Overtime is his confirmation
+      const section = ui.sheet.adding, [label, cat] = M.QUICK_LABELS[section][Number(id)], f = ui.form; f.nextK += 1;
+      const it = { k: "k" + f.nextK, section, label, amt: "", fresh: true, ...(cat ? { category: cat, chosen: true } : {}), ...(section === "earning" && label === "Overtime" ? { overtime: true } : {}) };
+      f.items.push(it); ui.sheet.adding = null; ui.sheet.line = it.k; renderSheet(); break;
+    }
+    case "slip-add-typed": {
+      const label = (ui.form.add_label ?? "").trim(); if (!label) { showToast("Type the label as it is printed."); break; }
+      const f = ui.form, section = ui.sheet.adding; f.nextK += 1;
+      const d = M.draftItem({ section, label, amount: 0, employer: f.employer, settings: ledger.settings }), { amount, ...rest } = d;
+      const it = { ...rest, k: "k" + f.nextK, amt: "", fresh: true }; f.items.push(it); ui.sheet.adding = null; ui.sheet.line = it.k; renderSheet(); break;
+    }
+    case "slip-remove": { ui.form.items = ui.form.items.filter((i) => i.k !== id); ui.sheet.line = null; renderSheet(); refreshSave(); break; }
+    case "slip-section": {
+      const it = slipItem(ui.form, ui.sheet.line); if (!it) break;
+      it.section = id; if (id !== "earning") { delete it.overtime; delete it.via_overtime; }
+      if (it.category && !M.validCategory(id, it.category)) delete it.category;
+      renderSheet(); break;
+    }
+    case "slip-cat": { const it = slipItem(ui.form, ui.sheet.line); if (!it) break; if (id) { it.category = id; it.chosen = true; it.via = "owner"; } else { delete it.category; delete it.chosen; delete it.via; } ui.sheet.pick = null; renderSheet(); break; }
+    case "slip-ot": { const it = slipItem(ui.form, ui.sheet.line); if (!it) break; if (it.overtime) delete it.overtime; else it.overtime = true; delete it.via_overtime; renderSheet(); break; }
+    case "slip-rest": {   // the same category for every earnings line of THIS payslip that has none
+      for (const it of ui.form.items) if (it.section === "earning" && !it.category) { it.category = id; it.chosen = true; it.via = "owner"; }
+      ui.sheet.pick = null; ui.pdet = { ...ui.pdet, e: true }; renderSheet(); refreshSave(); break;
+    }
+    case "open-itemcat": ui.sheet = { type: "itemcat", id }; renderSheet(); break;
+    case "itemcat-pick": {
+      const item = (S().payslipItems ?? []).find((i) => i.id === ui.sheet.id), slip = item && S().payslips.find((p) => p.id === item.payslip_id);
+      const r = M.setItemCategory(S(), ui.sheet.id, id, new Date());
+      if (!r.ok) { showToast(r.violations[0].message); break; }
+      ui.sheet.pick = null;
+      if (!r.unchanged) await commit(r.state, id && slip ? M.rememberChoices(ledger.settings, slip.employer, [{ ...item, category: id, chosen: true }]) : ledger.settings);
+      renderSheet(); break;
+    }
     case "open-lines": ui.linesOpen = true; refreshSave(); break;
     case "fold-lines": document.activeElement?.blur?.(); ui.linesOpen = false; refreshSave(); break;
     case "check-slip": { const r = M.markPayslipChecked(S(), id); if (r.ok && await commit(r.state)) showToast("Marked as checked."); break; }
@@ -5118,6 +5287,11 @@ document.addEventListener("input", (e) => {
   if (field === "sub" && !ui.sheet) { ui.accountForm.sub = e.target.value; const p = $("a-preview"); if (p) p.textContent = "Saved as: " + accountPreview(ui.accountForm); return; }
   if (field === "zoom") { zoomTo(Number(e.target.value)); return; }
   if (ui.sheet?.type === "entries" && field === "q") { ui.form.q = e.target.value; const l = $("entries-list"); if (l) l.innerHTML = entriesListHtml(); return; }
+  if (ui.sheet && field.startsWith("i:") && ui.form.items) {   // a field of one printed payslip line: i:<line>:<label|amt|hours>
+    const [, k, prop] = field.split(":"), it = slipItem(ui.form, k);
+    if (it) { it[prop] = e.target.value; if (prop === "label") { const fl = M.itemFlags(it.label); if (fl.back_pay) it.back_pay = true; else delete it.back_pay; if (fl.tax) it.tax = fl.tax; else delete it.tax; } refreshSave(); }
+    return;
+  }
   if (ui.sheet) { ui.form[field] = e.target.value; if (field.startsWith("y_") && ui.form.used) delete ui.form.used[field.slice(2)]; refreshSave(); }
   else ui.accountForm[field] = e.target.value;
 });

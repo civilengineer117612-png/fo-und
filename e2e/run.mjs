@@ -20,7 +20,7 @@ const T0 = new Date("2026-10-03T03:00:00Z");   // 11:00 on Oct 3 in Manila
 // What most tests start from: a ledger in the owner's own style (the categories and the three meal tiles the app used to start everyone with), so the
 // long flows below keep their wording. A brand-new install is now neutral: tests of that open with styled: false.
 const owner = (id, name, role) => ({ id, name, kind: "expense", ...(role ? { role } : {}) });
-const LEDGER_V = 10;
+const LEDGER_V = 11;
 const OWNER_STYLE = { v: 6, rev: 1, saved_at: "2026-10-01T08:00:00.000+08:00", settings: { notice_seen_at: "2026-10-01T08:00:00.000+08:00" }, state: {
   ...Object.fromEntries(["accounts", "goals", "envelopes", "transactions", "entries", "categoryMaps", "rules", "templates", "payeeRules", "subscriptions", "checkIns", "attachments", "tags", "foreignAmounts", "surveyResponses", "payslips", "payslipLines", "payslipRevisions"].map((k) => [k, []])),
   categories: [owner("cat-food", "Food", "food"), owner("cat-lakat", "Lakat/Date"), owner("cat-family", "Family"), owner("cat-shopping", "Shopping"), owner("cat-essentials", "Essentials", "essentials"), owner("cat-upskill", "Upskill"),
@@ -101,6 +101,18 @@ async function open({ storageMode = null, logOpen = true, setupFlat = true, ua =
   return { ctx, page, errors };
 }
 const text = (page, sel = "body") => page.locator(sel).innerText();
+// The payslip form lists ONLY the lines printed on that payslip (owner, Oct 30): add one by a quick label or a typed label, give its amount, Done.
+const slipAmount = async (page, amount) => {   // change the figure of the first earnings line
+  await page.evaluate(() => { const d = document.querySelector('#sheet details.tot[data-keep="e"]'); if (d) d.open = true; });
+  await page.click('#sheet details.tot[data-keep="e"] .pl-main'); await page.fill("#p-ia", amount); await page.click('#sheet [data-action="slip-line-done"]');
+};
+const slipLine = async (page, section, label, amount, { quick = false } = {}) => {
+  await page.evaluate((k) => { const d = document.querySelector(`#sheet details.tot[data-keep="${k}"]`); if (d) d.open = true; }, { earning: "e", deduction: "d", employer: "r" }[section]);
+  await page.click(`#sheet [data-action="slip-add"][data-id="${section}"]`);
+  if (quick) await page.click(`#sheet [data-action="slip-quick"]:text-is("${label}")`);
+  else { await page.fill("#p-addlabel", label); await page.click('#sheet [data-action="slip-add-typed"]'); }
+  await page.fill("#p-ia", amount); await page.click('#sheet [data-action="slip-line-done"]');
+};
 // Money, Budget and Setup live in the menu at the upper left; only Log and Verify are on the bottom bar.
 const addPayslipFlow = async (page) => { await page.click('button:has-text("Add income")'); };   // the Add income window offers the payslip ways straight away
 // Screens that belong together share one menu row; the picture strip on top of them switches between them (HUBS in names.js).
@@ -1574,17 +1586,15 @@ await addPayslipFlow(page); await page.click('#sheet button:has-text("Type a pay
 check(await page.locator("#sheet").innerText().then((t) => /tax id|employee|account number/i.test(t) && /Do not type/.test(t)), "the payslip window tells you not to type any id or account number");
 await page.fill("#p-emp", "Sample Employer Inc");
 await page.fill("#p-from", "2026-09-16"); await page.fill("#p-to", "2026-09-30"); await page.fill("#p-date", "2026-10-02");
+await slipLine(page, "earning", "Basic salary", "9000", { quick: true }); await slipLine(page, "earning", "Rice subsidy", "1000", { quick: true }); await slipLine(page, "earning", "Overtime", "1500", { quick: true });
+await slipLine(page, "deduction", "Withholding tax", "700", { quick: true }); await slipLine(page, "deduction", "SSS", "300", { quick: true }); await slipLine(page, "deduction", "PhilHealth", "100", { quick: true }); await slipLine(page, "deduction", "Pag-IBIG", "100", { quick: true });
 await page.evaluate(() => document.querySelectorAll("#sheet details[data-keep]").forEach((d) => { d.open = true; }));
-await page.fill("#e_basic", "9000"); await page.fill("#e_rice", "1000"); await page.fill("#e_overtime", "1500");
-await page.fill("#d_tax", "700"); await page.fill("#d_sss", "300"); await page.fill("#d_philhealth", "100"); await page.fill("#d_pagibig", "100");
 await page.fill("#p-gross", "10000"); await page.fill("#p-net", "9300"); await page.fill("#p-dep", "9300");
 check((await text(page, "#p-flags")).includes("leaves out the overtime ₱1,500.00"), "a printed gross that leaves out overtime is flagged while typing");
 await shot(page, "37-payslip");
 await page.fill("#p-gross", "11500"); await page.fill("#p-net", "10300"); await page.fill("#p-dep", "10300");
 check(!(await text(page, "#p-flags")).includes("▲"), "once the figures agree there is no flag");
-check(await page.locator("#p-match").isVisible() && (await text(page, "#p-match")).includes("Matches paper. Tap to open.") && !(await page.locator("#p-lines").isVisible()), "once the fields match the paper they fold into one line: Matches paper. Tap to open.");
-await page.click("#p-match button");
-check(await page.locator("#e_basic").isVisible() && !(await page.locator("#p-match").isVisible()), "tapping it opens the full fields as before");
+check(await page.locator("#sheet details.tot").count() === 2 && (await page.locator("#p-tot-e").innerText()) === "₱11,500.00" && (await page.locator("#p-tot-d").innerText()) === "₱1,200.00", "the two folding rows show the totals of the printed lines");
 await page.fill("#p-ded", "1200");
 await page.click("#f-save");
 check(await seen(page, "#toast", "Payslip saved"), "the payslip is saved");
@@ -1636,7 +1646,7 @@ await menuGo(page, "Income");
 const heroBefore = await text(page, ".hero");
 await page.click('button.choice[data-action="open-payslips"]');
 await page.click('#sheet button[data-action="edit-slip"]');
-check(await page.locator("#p-match").isVisible() && !(await page.locator("#p-lines").isVisible()), "Change this payslip on a payslip that matches its paper opens with the fields folded");
+check(await page.locator('#sheet details.tot[data-keep="e"] .pl').count() === 3 && await page.locator('#sheet details.tot[data-keep="d"] .pl').count() === 4 && await page.locator("#sheet details.tot").count() === 2, "Change this payslip opens with its printed lines (3 earnings, 4 deductions) and no Employer share row");
 check((await text(page, "#sheet")).includes("Change this payslip") && await page.locator("#p-emp").inputValue() !== "" && await page.locator("#p-net").inputValue() !== "", "Change this payslip opens the payslip window already filled in");
 await page.fill("#p-emp", "Renamed Test Employer"); await page.click("#f-save");
 check(await seen(page, "#toast", "Payslip changed"), "saving the change says so");
@@ -1644,7 +1654,7 @@ check((await text(page, ".hero")) === heroBefore && await page.locator('button.c
 await page.click('button.choice[data-action="open-payslips"]');
 check((await text(page, "#sheet")).includes("Renamed Test Employer"), "the list shows the changed employer");
 check((await text(page, "#sheet")).includes("Lines match paper.") && !(await text(page, "#sheet")).includes("Saved before the fix") && !(await text(page, "#sheet")).includes("days after period end"), "the printed deductions total was kept: Lines match paper; a payslip saved now carries no old-figures line");
-check(await page.locator("#sheet details.earlier").count() === 1 && (await page.locator("#sheet details.earlier").textContent()).includes("Sample Employer Inc") && (await text(page, "#sheet")).includes("Earlier figures"), "the change kept the old figures under Earlier figures");
+check(await page.locator('#sheet details.earlier:has(summary:text-is("Earlier figures"))').count() === 1 && (await page.locator('#sheet details.earlier:has(summary:text-is("Earlier figures"))').textContent()).includes("Sample Employer Inc"), "the change kept the old figures under Earlier figures");
 await page.click('#sheet button:has-text("Close")');
 // the Earnings view is a short list: one line per month, tap a month for where it came from
 await page.click('button[data-action="income-view"][data-view="earnings"]');
@@ -1696,7 +1706,7 @@ for (const [from, to, pay, amt] of [["2026-07-16", "2026-07-31", "2026-07-31", "
   await menuGo(page, "Income"); await addPayslipFlow(page); await page.click('#sheet button:has-text("Type a payslip")');
   await page.fill("#p-emp", "Sample Employer Inc"); await page.fill("#p-from", from); await page.fill("#p-to", to); await page.fill("#p-date", pay);
   await page.evaluate(() => document.querySelectorAll("#sheet details[data-keep]").forEach((d) => { d.open = true; }));
-  await page.fill("#e_basic", amt); await page.fill("#p-gross", amt); await page.fill("#p-net", amt); await page.fill("#p-dep", amt);
+  await slipLine(page, "earning", "Basic salary", amt, { quick: true }); await page.fill("#p-gross", amt); await page.fill("#p-net", amt); await page.fill("#p-dep", amt);
   await page.click("#f-save"); await seen(page, "#toast", "Payslip saved");
 }
 await menuGo(page, "Income");
@@ -1830,12 +1840,10 @@ check(await page.locator("#sheet .chip[data-action='pick-employer']").count() ==
 await page.waitForTimeout(450);   // the window slides up first; measure after it has settled
 const sheetBox = await page.locator("#sheet .sheet").boundingBox(), totBox = await page.locator("#p-tot-d").boundingBox();   // the window itself, not the empty box that holds it
 check(totBox && totBox.y + totBox.height < sheetBox.y + sheetBox.height, "the totals are on screen without scrolling");
-check(await page.locator("#p-fold").isVisible() && await page.locator("#p-lines").isVisible() && !(await page.locator("#p-match").isVisible()), "a photo's figures stay open, with a line to fold them once the owner has checked them against the photo");
-await page.click("#p-fold button");
-check(await page.locator("#p-match").isVisible() && !(await page.locator("#p-lines").isVisible()) && !(await page.locator("#p-fold").isVisible()), "tapping it folds them into Matches paper. Tap to open.");
-await page.click("#p-match button");
-check([await val("d_tax"), await val("d_sss"), await val("d_philhealth"), await val("d_pagibig")].join("|") === "700.00|300.00|100.00|100.00", "tax, SSS, PhilHealth and Pag-IBIG are read from their lines (" + [await val("d_tax"), await val("d_sss"), await val("d_philhealth"), await val("d_pagibig")].join("|") + ")");
-check([await val("e_basic"), await val("e_rice"), await val("e_overtime")].join("|") === "9000.00|1000.00|1500.00", "the earnings lines are read too, overtime included");
+const slipRows = (key) => page.evaluate((k) => [...document.querySelectorAll(`#sheet details.tot[data-keep="${k}"] .pl`)].map((r) => [r.querySelector(".pl-label").textContent, r.querySelector(".pl-amt").textContent, [...r.querySelectorAll(".pl-t")].map((t) => t.textContent)]), key);
+{ const er = await slipRows("e"), dr = await slipRows("d");
+  check(er.map((r) => r[1]).join("|") === "₱9,000.00|₱1,000.00|₱1,500.00" && dr.map((r) => r[1]).join("|") === "₱700.00|₱300.00|₱100.00|₱100.00", "the printed lines are listed as read, in print order, nothing squeezed into fixed boxes (" + JSON.stringify([er, dr]) + ")");
+  check(er[2][2].includes("Overtime (suggested)") && !er[0][2].includes("Overtime (suggested)"), "only the exact line Overtime is suggested as overtime"); }
 check([await val("p-gross"), await val("p-net"), await val("p-date"), await val("p-emp")].join("|") === "11500.00|10300.00|2026-10-02|Sample Employer Inc", "and the printed gross and net, the pay date and the employer (" + [await val("p-gross"), await val("p-net"), await val("p-date"), await val("p-emp")].join("|") + ")");
 check(await page.locator("#sheet img.shot").count() === 1 && await page.locator("#f-save").isDisabled(), "the photo is shown beside the figures, and saving waits until you say where it landed");
 await shot(page, "45-payslip-scan");
@@ -1868,10 +1876,10 @@ const crookedPng = await page.evaluate(() => {
 await menuGo(page, "Scan");
 await page.setInputFiles("input[data-scan]:not([capture])", { name: "crooked.png", mimeType: "image/png", buffer: Buffer.from(crookedPng, "base64") });
 check(await seen(page, "#sheet", "Add a payslip", 240000), "a crooked two-column payslip photo opens the payslip window");
-const got = [await val("d_tax"), await val("d_sss"), await val("d_philhealth"), await val("d_pagibig"), await val("d_absences")].join("|");
-check(got === "650.00|400.00|225.00|100.00|50.00", "the deductions side by side with the earnings still land on their own labels: tax, SSS, PhilHealth, Pag-IBIG, absences (" + got + ")");
-const earned = [await val("e_basic"), await val("e_rice"), await val("e_skills")].join("|");
-check(earned === "9000.00|1000.00|500.00", "and the earnings (" + earned + ")");
+const gotD = (await slipRows("d")).map((r) => r[0].toLowerCase().replace(/[^a-z]/g, "") + " " + r[1]).join("|");   // the label is what the reader made of the photo; its letters, not its punctuation
+check(gotD === "withholdingtax ₱650.00|ssspremiumcont ₱400.00|philhealthpremiumcont ₱225.00|pagibigpremiumcont ₱100.00|absences ₱50.00", "the deductions side by side with the earnings land on their own printed labels, as printed (" + gotD + ")");
+const gotE = (await slipRows("e")).map((r) => r[0] + " " + r[1]).join("|");
+check(gotE === "Basic Salary ₱9,000.00|Rice Subsidy ₱1,000.00|Skills Allowance ₱500.00", "and the earnings (" + gotE + ")");
 const head = [await val("p-gross"), await val("p-net"), await val("p-emp"), await val("p-from"), await val("p-to")].join("|");
 check(head === "10500.00|9075.00|PHIL SAMPLE, INC.|2026-04-16|2026-04-30", "the printed gross and net with the P sign, the company under the title, and a date range (" + head + ")");
 await shot(page, "46-crooked-payslip");
@@ -1909,7 +1917,7 @@ console.log("Income round 5");
     await menuGo(page, "Income"); await addPayslipFlow(page); await page.click('#sheet button:has-text("Type a payslip")');
     await page.fill("#p-emp", employer); await page.fill("#p-from", "2026-09-01"); await page.fill("#p-to", "2026-09-15"); await page.fill("#p-date", "2026-09-15");
     await page.evaluate(() => document.querySelectorAll("#sheet details[data-keep]").forEach((d) => { d.open = true; }));
-    await page.fill("#e_basic", amt); await page.fill("#p-gross", amt); await page.fill("#p-net", amt); await page.fill("#p-dep", amt);
+    await slipLine(page, "earning", "Basic salary", amt, { quick: true }); await page.fill("#p-gross", amt); await page.fill("#p-net", amt); await page.fill("#p-dep", amt);
     if (then === "save") { await page.click("#f-save"); await seen(page, "#toast", "Payslip saved"); }
   };
   await typeSlip("Sample Employer Inc", "5001");
@@ -1924,20 +1932,19 @@ console.log("Income round 5");
   // another payslip, same employer and period
   await typeSlip("sample employer inc", "5002", "stay");
   check((await text(page, "#p-flags")).includes("Saving adds another one") && !(await text(page, "#p-flags")).includes("cannot be saved twice"), "the same employer and period with another net pay gets a soft warning");
-  await page.fill("#p-dep", "5001"); await page.fill("#p-net", "5001"); await page.fill("#p-gross", "5001"); await page.fill("#e_basic", "5001");
+  await page.fill("#p-dep", "5001"); await page.fill("#p-net", "5001"); await page.fill("#p-gross", "5001"); await slipAmount(page, "5001");
   check((await text(page, "#p-flags")).includes("cannot be saved twice"), "the same net pay too says it cannot be saved twice, before you try");
-  await page.fill("#p-emp", "Another Employer Co"); await page.fill("#p-dep", "5002"); await page.fill("#p-net", "5002"); await page.fill("#p-gross", "5002"); await page.fill("#e_basic", "5002");
+  await page.fill("#p-emp", "Another Employer Co"); await page.fill("#p-dep", "5002"); await page.fill("#p-net", "5002"); await page.fill("#p-gross", "5002"); await slipAmount(page, "5002");
   check(!(await text(page, "#p-flags")).includes("already saved"), "another employer for the same period is a second income: no warning");
   await page.click("#f-save"); await seen(page, "#toast", "Payslip saved");
   // what a change altered
   await page.click('button.choice[data-action="open-payslips"]');
   await page.locator('#sheet button[data-action="edit-slip"]').first().click();
-  await page.click("#p-match button").catch(() => {});
   await page.evaluate(() => document.querySelectorAll("#sheet details[data-keep]").forEach((d) => { d.open = true; }));
-  await page.fill("#e_basic", "4000"); await page.fill("#p-gross", "4000"); await page.fill("#p-net", "4000"); await page.fill("#p-dep", "4000");
+  await slipAmount(page, "4000"); await page.fill("#p-gross", "4000"); await page.fill("#p-net", "4000"); await page.fill("#p-dep", "4000");
   await page.click("#f-save"); await seen(page, "#toast", "Payslip changed");
   await page.click('button.choice[data-action="open-payslips"]');
-  const earlier = await page.locator("#sheet details.earlier").first().textContent();
+  const earlier = await page.locator('#sheet details.earlier:has(summary:text-is("Earlier figures"))').first().textContent();
   check(/Basic salary ₱\d[\d,]*\.00 to ₱4,000\.00/.test(earlier) && /Received ₱\d[\d,]*\.00 to ₱4,000\.00/.test(earlier), "Earlier figures names which lines changed: Basic salary and Received, old to new (" + earlier.slice(-160) + ")");
   await ctx.close(); }
 
@@ -2055,7 +2062,7 @@ const V1 = { v: 1, rev: 3, saved_at: "2026-10-01T08:00:00.000+08:00", settings: 
     check(same(kept.local) && same(kept.idb), "the data as it was before the update is kept in both stores"); }
   await menuGo(page, "Setup");
   const su = await text(page, "#screen");
-  check(su.toLowerCase().includes("this app") && su.includes("development copy") && su.includes("Your data format: 10") && su.includes("Restore the copy from before the last update"), "Setup shows the version, the data format and the restore button for the copy kept before the update");
+  check(su.toLowerCase().includes("this app") && su.includes("development copy") && su.includes("Your data format: " + LEDGER_V + "") && su.includes("Restore the copy from before the last update"), "Setup shows the version, the data format and the restore button for the copy kept before the update");
   await page.click('#nav button:has-text("Log")'); await page.click('button:has-text("Add expense")'); await page.fill("#f-amount", "40"); await page.click('#sheet .chip:has-text("Food")'); await page.click("#f-save"); await seen(page, "#toast", "Saved");
   check(JSON.parse((await stored(page)).local).state.transactions.length === 2, "an expense is added after the update");
   await menuGo(page, "Setup");
@@ -2155,7 +2162,7 @@ const FIX = { v: 3, rev: 1, saved_at: "2026-10-01T08:00:00.000+08:00", settings:
   await menuGo(page, "Income"); await addPayslipFlow(page); await page.click('#sheet button:has-text("Type a payslip")');
   await page.fill("#p-emp", "Sample Employer Inc"); await page.fill("#p-from", "2026-09-16"); await page.fill("#p-to", "2026-09-30"); await page.fill("#p-date", "2026-10-02");
   await page.evaluate(() => document.querySelectorAll("#sheet details[data-keep]").forEach((d) => { d.open = true; }));
-  await page.fill("#e_basic", "9000"); await page.fill("#e_overtime", "1500"); await page.fill("#p-gross", "10500"); await page.fill("#p-net", "10500"); await page.fill("#p-dep", "10500");
+  await slipLine(page, "earning", "Basic salary", "9000", { quick: true }); await slipLine(page, "earning", "Overtime", "1500", { quick: true }); await page.fill("#p-gross", "10500"); await page.fill("#p-net", "10500"); await page.fill("#p-dep", "10500");
   await page.click("#f-save");
   check(await seen(page, "#toast", "Choose which goal is your emergency fund") && !(await text(page, "#toast")).includes("goal named"), "an overtime payslip with no emergency fund chosen says to choose one, with no fixed name");
   // the sweep order
@@ -3839,7 +3846,7 @@ console.log("\n-- Scheduled status, edit and remove --");
   for (const r of [{ id: "s1", kind: "repeating", name: "Rent", category_id: "cat-rent", account_id: "bank", amount: 335000, day: 5, start: "2026-10-05" }, { id: "s2", kind: "repeating", name: "Streaming", category_id: "cat-subscription", account_id: "bank", amount: 54900, day: 11, start: "2026-10-11" },
     { id: "s3", kind: "repeating", name: "Internet", category_id: "cat-essentials", account_id: "bank", amount: 149900, day: 25, start: "2026-10-25" }]) { const x = addSchedule(st, r, T0b); st = x.state; }
   st = makeDueDrafts(st, "2026-10-16", {}).state;
-  const seed = { v: 10, rev: 1, saved_at: TS, settings: { ...OWNER_STYLE.settings }, state: st };
+  const seed = { v: LEDGER_V, rev: 1, saved_at: TS, settings: { ...OWNER_STYLE.settings }, state: st };
   ({ ctx, page, errors } = await open({ blockSw: true, seed })); await page.clock.setFixedTime(T0b);
   await menuGo(page, "Scheduled"); await page.waitForTimeout(500);
   const rowOf = (n) => page.locator("#screen button.catrow", { hasText: n });
@@ -3900,7 +3907,7 @@ console.log("\n-- Search --");
   let st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [A("cash", "Cash", "asset", 2500000), A("bank", "Test Bank", "asset", 9000000)] };
   let n = 0; const spend = (date, payee, cat, amt, acc) => { const id = "t" + ++n; st.transactions.push({ id, date, payee, memo: "", status: "verified", source: "manual", created_at: DTS, verified_at: DTS }); st.entries.push({ transaction_id: id, category_id: cat, amount: amt }, { transaction_id: id, account_id: acc, amount: -amt }); };
   spend("2026-10-02", "Sample Cafe", "cat-food", 24500, "cash"); spend("2026-10-05", "Landlord", "cat-rent", 800000, "bank"); spend("2026-10-09", "Sample Grocer", "cat-food", 150000, "cash"); spend("2026-09-14", "Sample Cafe", "cat-food", 27000, "cash"); spend("2026-08-20", "Sample Cafe", "cat-food", 124500, "cash");
-  ({ ctx, page, errors } = await open({ blockSw: true, seed: { v: 10, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: { v: LEDGER_V, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
   await menuGo(page, "Spending"); await page.waitForTimeout(400); await page.click('button[data-action="open-entries"]'); await page.waitForSelector("#e-q");
   check(await page.locator("#sheet .row").count() === 3, "Every entry starts with this month's list");
   await page.fill("#e-q", "cafe"); await page.waitForTimeout(200);
@@ -3923,7 +3930,7 @@ console.log("\n-- Account history --");
   let st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [A("cash", "Cash", "asset", 2500000), A("card", "Test Card", "liability", 0)] };
   let n = 0; const spend = (date, payee, cat, amt, acc) => { const id = "t" + ++n; st.transactions.push({ id, date, payee, memo: "", status: "verified", source: "manual", created_at: DTS, verified_at: DTS }); st.entries.push({ transaction_id: id, category_id: cat, amount: amt }, { transaction_id: id, account_id: acc, amount: -amt }); };
   spend("2026-10-02", "Sample Cafe", "cat-food", 24500, "cash"); spend("2026-10-09", "Sample Grocer", "cat-food", 150000, "cash");
-  ({ ctx, page, errors } = await open({ blockSw: true, seed: { v: 10, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: { v: LEDGER_V, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
   await menuGo(page, "Cards"); await page.waitForTimeout(400);
   check(await page.locator('[data-action="open-register"][data-id="card"]').count() === 0, "a credit card keeps its own Pay a card window, not the history");
   await page.locator('[data-action="open-register"][data-id="cash"]').first().click(); await page.waitForSelector("#sheet .regl");
@@ -3943,7 +3950,7 @@ console.log("\n-- Spreadsheet export --");
   let st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [A("cash", "Cash", "asset", 2500000)] };
   let n = 0; const spend = (date, payee, cat, amt, status = "verified") => { const id = "t" + ++n; st.transactions.push({ id, date, payee, memo: "", status, source: "manual", created_at: DTS, verified_at: status === "verified" ? DTS : undefined }); st.entries.push({ transaction_id: id, category_id: cat, amount: amt }, { transaction_id: id, account_id: "cash", amount: -amt }); };
   spend("2026-10-02", "Sample Cafe", "cat-food", 24500); spend("2026-10-09", "=Sample Grocer", "cat-food", 150000); spend("2026-10-10", "Draft Shop", "cat-food", 9900, "draft"); spend("2025-12-30", "Old Shop", "cat-food", 5000);
-  ({ ctx, page, errors } = await open({ blockSw: true, setupFlat: false, seed: { v: 10, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
+  ({ ctx, page, errors } = await open({ blockSw: true, setupFlat: false, seed: { v: LEDGER_V, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
   await page.click("#menuBtn"); await page.click('#menu .item[data-tab="setup"]'); await page.waitForFunction(() => !document.querySelector("#menu .drawer")); await page.click('.setrow:has-text("Backup and restore")'); await page.waitForTimeout(300);
   check((await text(page, "#screen")).toLowerCase().includes("spreadsheet") && await page.locator('button[data-action="open-csv"]').count() === 1, "Backup and restore has a Spreadsheet block with Export entries");
   check(await page.locator("#screen button.primary").count() === 1, "and the page still has one filled button");
@@ -3966,7 +3973,7 @@ console.log("\n-- Net worth over time --");
   let st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [A("cash", "Cash", "asset", 1000000, "2026-07-01"), A("card", "Test Card", "liability", 100000, "2026-07-01")] };
   let n = 0; const spend = (date, payee, amt, acc, extra = {}) => { const id = "t" + ++n; st.transactions.push({ id, date, payee, memo: "", status: "verified", source: "manual", created_at: DTS, verified_at: DTS }); st.entries.push({ transaction_id: id, category_id: "cat-food", amount: amt }, { transaction_id: id, account_id: acc, amount: -amt, ...extra }); };
   spend("2026-08-10", "Sample Cafe", 50000, "cash"); spend("2026-09-12", "Sample Grocer", 150000, "card", { card_state: "posted" });
-  ({ ctx, page, errors } = await open({ blockSw: true, seed: { v: 10, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: { v: LEDGER_V, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
   await menuGo(page, "Cards"); await page.waitForTimeout(300);
   const free = (await text(page, ".netbig")).trim();
   await page.click('button[data-action="open-networth"]'); await page.waitForSelector("#sheet .tbl");
@@ -3985,7 +3992,7 @@ console.log("\n-- Goal pictures --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, cls, ob, d) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: d });
   let st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [A("sav", "Test Savings", "asset", 1000000, "2026-01-01")], goals: [{ id: "g1", account_id: "sav", name: "New laptop", target: 6000000, hidden_by_default: false }] };
-  ({ ctx, page, errors } = await open({ blockSw: true, seed: { v: 10, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: { v: LEDGER_V, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
   await menuGo(page, "Goals"); await openGoal(page, "New laptop");
   await page.click('#sheet button[data-action="open-icon"]'); await page.waitForSelector("#sheet .symrow");
   check(await page.locator("#sheet .symtile").count() === 16 && (await text(page, "#sheet")).includes("choose a photo"), "the picture window offers sixteen line pictures and still the photo");
@@ -4005,7 +4012,7 @@ console.log("\n-- Goals eye --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, cls, ob, d) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: d });
   let st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [A("sav", "Test Savings", "asset", 1000000, "2026-01-01")], goals: [{ id: "g1", account_id: "sav", name: "Hidden goal", target: 6000000, hidden_by_default: true, symbol: "laptop" }, { id: "g2", account_id: "sav", name: "Open goal", target: 5000000, hidden_by_default: false }] };
-  ({ ctx, page, errors } = await open({ blockSw: true, seed: { v: 10, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: { v: LEDGER_V, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
   await menuGo(page, "Goals");
   const DOTS = "\u20b1\u2022\u2022\u2022\u2022\u2022";
   check(await page.locator('button.eye[data-action="toggle-reveal"][aria-pressed="false"]').count() === 1 && !(await text(page, "#screen")).includes("Show balances"), "Goals has the eye, not a Show balances link");
@@ -4030,7 +4037,7 @@ console.log("\n-- Overdraw warning --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [{ id: "sav", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 220000, opening_date: "2026-01-01" }, { id: "crd", name: "Test Card", class: "liability", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-01-01" }],
     goals: [{ id: "g1", account_id: "sav", name: "Test Goal", target: 100000, hidden_by_default: false }] };
-  ({ ctx, page, errors } = await open({ blockSw: true, keepWarn: true, seed: { v: 10, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
+  ({ ctx, page, errors } = await open({ blockSw: true, keepWarn: true, seed: { v: LEDGER_V, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
   const spend = async (amount, acct) => { await page.click('button:has-text("Add expense")'); await page.fill("#f-amount", amount); await page.click('#sheet .chip:has-text("Shopping")'); await page.click('#sheet .chip:has-text("' + acct + '")'); await page.click("#f-save"); await page.waitForTimeout(300); };
   await spend("50", "Test Bank");
   check(await page.locator("#warn .sheet").count() === 0, "a spend that fits is saved with no warning");
@@ -4062,7 +4069,7 @@ console.log("\n-- Overdraw warning, Move money --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, ob, extra = {}) => ({ id, name, class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-01-01", ...extra });
   const st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [A("main", "Test Main", 200000), A("pk", "Test Pocket", 500000, { role: "pocket" })] };
-  ({ ctx, page, errors } = await open({ blockSw: true, keepWarn: true, seed: { v: 10, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
+  ({ ctx, page, errors } = await open({ blockSw: true, keepWarn: true, seed: { v: LEDGER_V, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
   await menuGo(page, "Cards");
   const move = async (from, to, amount) => { await page.click('button[data-action="open-move"]'); await page.waitForSelector("#sheet #f-amount"); await page.fill("#f-amount", amount); await page.click('#sheet [data-action="pick-from"][data-id="' + from + '"]'); await page.click('#sheet [data-action="pick-to"][data-id="' + to + '"]'); await page.click("#f-save"); await page.waitForTimeout(300); };
   await move("pk", "main", "1000");
@@ -4083,7 +4090,7 @@ console.log("\n-- Already logged --");
   const st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [{ id: "sav", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 5000000, opening_date: "2023-01-01" }],
     transactions: [{ id: "imp1", date: "2026-10-02", payee: "Test Shop", memo: "", status: "draft", source: "import", created_at: DTS }, { id: "old1", date: "2024-01-05", payee: "Old Shop", memo: "", status: "verified", source: "manual", created_at: DTS, verified_at: DTS }],
     entries: [{ transaction_id: "imp1", category_id: "cat-food", amount: 15000 }, { transaction_id: "imp1", account_id: "sav", amount: -15000 }, { transaction_id: "old1", category_id: "cat-food", amount: 7000 }, { transaction_id: "old1", account_id: "sav", amount: -7000 }] };
-  ({ ctx, page, errors } = await open({ blockSw: true, keepWarn: true, seed: { v: 10, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
+  ({ ctx, page, errors } = await open({ blockSw: true, keepWarn: true, seed: { v: LEDGER_V, rev: 1, saved_at: DTS, settings: { ...OWNER_STYLE.settings }, state: st } }));
   const spend = async (amount) => { await page.click('button:has-text("Add expense")'); await page.fill("#f-amount", amount); await page.click('#sheet .chip:has-text("Shopping")'); await page.click('#sheet .chip:has-text("Test Bank")'); await page.click("#f-save"); await page.waitForTimeout(300); };
   const count = async () => JSON.parse((await stored(page)).local).state.transactions.length;
   await menuGo(page, "Cards"); await page.click('[data-action="cards-list"]').catch(() => {}); await page.click('[data-action="open-register"][data-id="sav"]'); await page.waitForSelector("#sheet .regl");
@@ -4475,7 +4482,7 @@ console.log("\n-- Repair of past counts --");
 
   ({ ctx, page, errors } = await open({ blockSw: true, seed }));
   const L0 = await read();
-  check(L0.v === 10 && sep(L0) === 540000, "before: September shows 5,400.00 of spending (the lunch and the two shortfalls)");
+  check(L0.v === LEDGER_V && sep(L0) === 540000, "before: September shows 5,400.00 of spending (the lunch and the two shortfalls)");
   const bal0 = balances(L0);
   await menuGo(page, "Weekly review");
   check(await seen(page, "#screen", "Past counts booked \u20B13,400.00 as spending."), "the Weekly review says how much the old counts booked as spending");
