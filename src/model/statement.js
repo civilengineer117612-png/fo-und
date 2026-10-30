@@ -8,7 +8,7 @@ import { BANKS } from "./banks.js";
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 const pad = (n) => String(n).padStart(2, "0");
 const AMOUNT = /^(?:₱|php\s*)?\d{1,3}(?:,\d{3})*\.\d{2}$|^(?:₱|php\s*)?\d+\.\d{2}$/i;
-const SIGNED = /^[+\-\u2212\u2013]\s*(?:₱|php\s*)?\d{1,3}(?:,\d{3})*\.\d{2}$|^[+\-\u2212\u2013]\s*(?:₱|php\s*)?\d+\.\d{2}$/i;   // a card statement signs its amounts: -834.67 a purchase, +82.26 a credit
+const SIGNED = /^[+\-\u2212\u2013]\s*(?:₱|php\s*)?\d{1,3}(?:,\d{3})*\.\d{2}$|^[+\-\u2212\u2013]\s*(?:₱|php\s*)?\d+\.\d{2}$/i;   // a card statement signs its amounts: -850.00 a purchase, +80.00 a credit
 const signedCentavos = (s) => (/^[\-\u2212\u2013]/.test(String(s).trim()) ? -1 : 1) * centavos(String(s).replace(/^[+\-\u2212\u2013]\s*/, ""));
 const centavos = (s) => Math.round(parseFloat(String(s).replace(/[₱,\s]|php/gi, "")) * 100);
 const FULL_DATE = /^\d{1,2}\s+[A-Za-z]{3,9}\.?\s+\d{4}$/, DAY_MONTH = /^\d{1,2}\s+[A-Za-z]{3,9}\.?$/, MONTH_ONLY = /^[A-Za-z]{3,9}\.?$/;

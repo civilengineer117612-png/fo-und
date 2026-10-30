@@ -216,31 +216,31 @@ function page(tilt) {
     x = 480; for (const t of right.label.split(" ")) { put(x, t); x += 12 * t.length + 14; } if (right.amount) put(840, right.amount);
   };
   row(100, { label: "EARNINGS", amount: "" }, { label: "DEDUCTIONS", amount: "" });
-  row(140, { label: "Basic Salary", amount: "9,000.00" }, { label: "Withholding Tax", amount: "794.22" });
+  row(140, { label: "Basic Salary", amount: "9,000.00" }, { label: "Withholding Tax", amount: "800.00" });
   row(180, { label: "Rice Subsidy", amount: "2,000.00" }, { label: "SSS Premium Cont.", amount: "1,700.00" });
   row(220, { label: "Skills Allowance", amount: "9,000.00" }, { label: "Philhealth Premium Cont.", amount: "450.00" });
   row(260, { label: "Clothing Allowance", amount: "3,000.00" }, { label: "Pag-Ibig Premium Cont.", amount: "360.00" });
-  row(300, { label: "Gross Earnings", amount: "23,000.00" }, { label: "Absences", amount: "827.39" });
-  row(340, { label: "", amount: "" }, { label: "Total Deductions", amount: "3,131.61" });
+  row(300, { label: "Gross Earnings", amount: "23,000.00" }, { label: "Absences", amount: "750.00" });
+  row(340, { label: "", amount: "" }, { label: "Total Deductions", amount: "4,060.00" });
   return words;
 }
 test("a two-column payslip keeps every label with its own amount, even when the photo is tilted", () => {
   for (const tilt of [0, 0.06, -0.05]) {
     const lines = linesFromWords(page(tilt)).split("\n");
-    for (const want of ["Basic Salary 9,000.00", "Withholding Tax 794.22", "SSS Premium Cont. 1,700.00", "Philhealth Premium Cont. 450.00", "Pag-Ibig Premium Cont. 360.00", "Absences 827.39", "Gross Earnings 23,000.00"]) {
+    for (const want of ["Basic Salary 9,000.00", "Withholding Tax 800.00", "SSS Premium Cont. 1,700.00", "Philhealth Premium Cont. 450.00", "Pag-Ibig Premium Cont. 360.00", "Absences 750.00", "Gross Earnings 23,000.00"]) {
       assert.ok(lines.includes(want), "tilt " + tilt + ": " + want + " in " + JSON.stringify(lines));
     }
   }
 });
 test("the lines made from a tilted two-column page give the right tax, SSS, PhilHealth and Pag-IBIG", () => {
   const r = readPayslip(linesFromWords(page(0.06)), TODAY);
-  assert.deepEqual(r.deductions.map((l) => [l.kind, l.amount]), [["tax", 79422], ["sss", 170000], ["philhealth", 45000], ["pagibig", 36000], ["absences", 82739]]);
+  assert.deepEqual(r.deductions.map((l) => [l.kind, l.amount]), [["tax", 80000], ["sss", 170000], ["philhealth", 45000], ["pagibig", 36000], ["absences", 75000]]);
   assert.deepEqual(r.earnings.map((l) => [l.kind, l.amount]), [["basic", 900000], ["rice", 200000], ["skills", 900000], ["clothing", 300000]]);
   assert.equal(r.printed_gross, 2300000);
 });
 test("a currency sign stays with its amount, a second figure joins the same label, and nothing found gives empty text", () => {
   const w = (t, x, y = 0) => ({ text: t, x0: x, x1: x + 10 * t.length, y0: y, y1: y + 20 });
-  assert.equal(linesFromWords([w("Net", 0), w("Pay:", 40), w("P", 100), w("21,868.19", 120)]), "Net Pay: 21,868.19");
+  assert.equal(linesFromWords([w("Net", 0), w("Pay:", 40), w("P", 100), w("21,500.00", 120)]), "Net Pay: 21,500.00");
   assert.equal(linesFromWords([w("Basic", 0), w("9,000.00", 80), w("18,000.00", 200)]), "Basic 9,000.00 18,000.00");
   assert.equal(linesFromWords([]), "");
   assert.equal(linesFromWords(null), "");
@@ -258,7 +258,7 @@ test("Pag-IBIG is found under the spellings a photo gives it", () => {
 test("the employer is the company's name, never a figure, a label, a date or a signature line", () => {
   const emp = (lines) => readPayslip(lines.join("\n"), "2026-10-03").employer;
   assert.equal(emp(["L SAMPLE CO, INC. Apr 16-30, 2026", "PAYSLIP", "Net Pay: P 100.00"]), "SAMPLE CO, INC.", "a date and a stray letter on the same line are dropped");
-  assert.equal(emp(["Withholding Tax 794.22", "SSS Premium Cont. 1,700.00", "SAMPLE CO, INC.", "PAYSLIP"]), "SAMPLE CO, INC.", "figure lines and deduction labels are skipped");
+  assert.equal(emp(["Withholding Tax 800.00", "SSS Premium Cont. 1,700.00", "SAMPLE CO, INC.", "PAYSLIP"]), "SAMPLE CO, INC.", "figure lines and deduction labels are skipped");
   assert.equal(emp(["PAYSLIP", "SAMPLE ENGINEERING CONSULTANCY", "DESIGNERS - ENGINEERS", "Covered Period: Sept 26, 2025 to Oct 12, 2025"]), "SAMPLE ENGINEERING CONSULTANCY", "company words beyond Inc and Corp are known");
   assert.equal(emp(["Employer: Another Co", "SAMPLE CO, INC."]), "Another Co", "a labelled employer wins");
   assert.equal(emp(["EARNINGS", "Basic Salary 9,000.00", "Withholding Tax"]), null, "nothing company-like gives nothing, not a wrong line");
@@ -298,9 +298,9 @@ test("linesFromBoxes uses each amount once", () => {
 });
 
 test("readPayslip copes with dotted thousands, a count times a rate, garbled labels and advances", () => {
-  const r = readPayslip(["PHIL JAC INC", "Apr 16-30, 2026", "Total Salary 6.250.50", "Overtime 2.50 x 114.18", "555: 300.00", "Phitheahh 150.00", "Advances 200.00", "1/2 Day 125.00", "Net Pay 5,400.00"].join("\n"), "2026-05-02");
+  const r = readPayslip(["PHIL JAC INC", "Apr 16-30, 2026", "Total Salary 6.250.50", "Overtime 2.50 x 114.00", "555: 300.00", "Phitheahh 150.00", "Advances 200.00", "1/2 Day 125.00", "Net Pay 5,400.00"].join("\n"), "2026-05-02");
   assert.equal(r.printed_gross, 625050);
-  assert.deepEqual(r.earnings.map((e) => [e.kind, e.amount]), [["overtime", 11418]]);
+  assert.deepEqual(r.earnings.map((e) => [e.kind, e.amount]), [["overtime", 11400]]);
   const d = Object.fromEntries(r.deductions.map((x) => [x.kind, x.amount]));
   assert.deepEqual(d, { sss: 30000, philhealth: 15000, loan: 20000, absences: 12500 });
   assert.equal(r.printed_net, 540000);
@@ -353,26 +353,26 @@ test("a corporate suffix alone is not a store name", () => {
 test("linesFromBoxes cleans a stray mark and a B read for 8 so the amount pairs with its label", () => {
   const out = linesFromBoxes([box("Sub-Total: 51.29", 20, 20, 250), box("：1.157.B4", 400, 60, 100), box("Bill Amount", 20, 60, 150)]);
   assert.match(out, /Bill Amount 1\.157\.84/);
-  assert.equal(readScan("Billing Invoice\nMeralco\nBill Amount 1.157.84\nDue date Oct 10, 2026", "2026-10-04").amount, 115784);
+  assert.equal(readScan("Billing Invoice\nMeralco\nBill Amount 1.150.00\nDue date Oct 10, 2026", "2026-10-04").amount, 115000);
 });
 
 test("a bank screen with the value above its label and a cashback line: the transaction amount is the total, the date is the transaction time", () => {
-  const boxes = [box("PHP 834.67", 300, 20, 200), box("From", 20, 80, 80), box("SampleBank", 360, 80, 140), box("To", 20, 120, 40), box("SAMPLE STORE MALUGAY", 300, 120, 220),
-    box("Transaction Amount", 20, 220, 260), box("PHP 834.67", 400, 220, 120), box("Cashback", 20, 260, 140), box("+PHP 8.35", 400, 260, 120),
+  const boxes = [box("PHP 850.00", 300, 20, 200), box("From", 20, 80, 80), box("SampleBank", 360, 80, 140), box("To", 20, 120, 40), box("SAMPLE STORE MALUGAY", 300, 120, 220),
+    box("Transaction Amount", 20, 220, 260), box("PHP 850.00", 400, 220, 120), box("Cashback", 20, 260, 140), box("+PHP 8.50", 400, 260, 120),
     box("Transaction Type", 20, 340, 220), box("Credit Card Transaction", 300, 340, 220), box("Transaction Time", 20, 380, 220), box("02 0ct 2026. 21:16", 300, 380, 220), box("Posted Time", 20, 420, 160), box("04 0ct 2026. 01:00", 300, 420, 220)];
   const text = linesFromBoxes(boxes);
-  assert.match(text, /Transaction Amount PHP 834\.67/);
-  assert.match(text, /Cashback \+PHP 8\.35/);
+  assert.match(text, /Transaction Amount PHP 850\.00/);
+  assert.match(text, /Cashback \+PHP 8\.50/);
   const r = readScan(text, "2026-10-04");
-  assert.equal(r.amount, 83467);
+  assert.equal(r.amount, 85000);
   assert.equal(r.date, "2026-10-02");
   assert.equal(r.creditCard, true);
 });
 
 test("a bank screen read with the spaces dropped: the amount, the date and the time are still found", () => {
-  const text = "Transaction Details\nPHP834.67\nFrom\nSampleBank\nTo\nSAMPLESTOREMALUGAY\nTransactionAmountPHP834.67\nCashback+PHP8.35\nCreditCardTransaction\nTransactionType\nTransactionTime020ct2026,21:16\nPostedTime04.0ct2026.01:00";
+  const text = "Transaction Details\nPHP850.00\nFrom\nSampleBank\nTo\nSAMPLESTOREMALUGAY\nTransactionAmountPHP850.00\nCashback+PHP8.50\nCreditCardTransaction\nTransactionType\nTransactionTime020ct2026,21:16\nPostedTime04.0ct2026.01:00";
   const r = readScan(text, "2026-10-04");
-  assert.equal(r.amount, 83467);
+  assert.equal(r.amount, 85000);
   assert.equal(r.date, "2026-10-02");
   assert.equal(r.creditCard, true);
   assert.deepEqual(r.notes, []);
@@ -388,7 +388,7 @@ test("a payslip whose period is printed over its label, read with the spaces dro
 });
 
 test("an electricity bill that also prints a TIN is a bill, not a receipt", () => {
-  assert.equal(readScan("SAMPLE POWER COOP\nBILLING INVOICE\nTIN\nMeter No 123\nSub-Total: 10.00\nBill Amount 1,157.84", "2026-10-04").kind, "bill");
+  assert.equal(readScan("SAMPLE POWER COOP\nBILLING INVOICE\nTIN\nMeter No 123\nSub-Total: 10.00\nBill Amount 1,150.00", "2026-10-04").kind, "bill");
 });
 
 // A payslip with two columns (earnings left, deductions right) photographed on a slant. Every figure is invented.
@@ -431,5 +431,5 @@ test("a year followed by a time is not a figure", () => {
 });
 
 test("a cashback or reward line is never taken as the amount", () => {
-  assert.equal(readScan("Transaction Details\nTransaction Amount\nCashback +PHP 8.35\nFrom MariBank\nPHP 834.67", "2026-10-04").amount, 83467);
+  assert.equal(readScan("Transaction Details\nTransaction Amount\nCashback +PHP 8.50\nFrom MariBank\nPHP 850.00", "2026-10-04").amount, 85000);
 });
