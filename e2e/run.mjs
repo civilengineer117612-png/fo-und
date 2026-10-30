@@ -102,6 +102,10 @@ async function open({ storageMode = null, logOpen = true, setupFlat = true, ua =
 }
 const text = (page, sel = "body") => page.locator(sel).innerText();
 // The payslip form lists ONLY the lines printed on that payslip (owner, Oct 30): add one by a quick label or a typed label, give its amount, Done.
+const slipAmount = async (page, amount) => {   // change the figure of the first earnings line
+  await page.evaluate(() => { const d = document.querySelector('#sheet details.tot[data-keep="e"]'); if (d) d.open = true; });
+  await page.click('#sheet details.tot[data-keep="e"] .pl-main'); await page.fill("#p-ia", amount); await page.click('#sheet [data-action="slip-line-done"]');
+};
 const slipLine = async (page, section, label, amount, { quick = false } = {}) => {
   await page.evaluate((k) => { const d = document.querySelector(`#sheet details.tot[data-keep="${k}"]`); if (d) d.open = true; }, { earning: "e", deduction: "d", employer: "r" }[section]);
   await page.click(`#sheet [data-action="slip-add"][data-id="${section}"]`);
@@ -1928,20 +1932,19 @@ console.log("Income round 5");
   // another payslip, same employer and period
   await typeSlip("sample employer inc", "5002", "stay");
   check((await text(page, "#p-flags")).includes("Saving adds another one") && !(await text(page, "#p-flags")).includes("cannot be saved twice"), "the same employer and period with another net pay gets a soft warning");
-  await page.fill("#p-dep", "5001"); await page.fill("#p-net", "5001"); await page.fill("#p-gross", "5001"); await slipLine(page, "earning", "Basic salary", "5001", { quick: true });
+  await page.fill("#p-dep", "5001"); await page.fill("#p-net", "5001"); await page.fill("#p-gross", "5001"); await slipAmount(page, "5001");
   check((await text(page, "#p-flags")).includes("cannot be saved twice"), "the same net pay too says it cannot be saved twice, before you try");
-  await page.fill("#p-emp", "Another Employer Co"); await page.fill("#p-dep", "5002"); await page.fill("#p-net", "5002"); await page.fill("#p-gross", "5002"); await slipLine(page, "earning", "Basic salary", "5002", { quick: true });
+  await page.fill("#p-emp", "Another Employer Co"); await page.fill("#p-dep", "5002"); await page.fill("#p-net", "5002"); await page.fill("#p-gross", "5002"); await slipAmount(page, "5002");
   check(!(await text(page, "#p-flags")).includes("already saved"), "another employer for the same period is a second income: no warning");
   await page.click("#f-save"); await seen(page, "#toast", "Payslip saved");
   // what a change altered
   await page.click('button.choice[data-action="open-payslips"]');
   await page.locator('#sheet button[data-action="edit-slip"]').first().click();
-  await page.click("#p-match button").catch(() => {});
   await page.evaluate(() => document.querySelectorAll("#sheet details[data-keep]").forEach((d) => { d.open = true; }));
-  await slipLine(page, "earning", "Basic salary", "4000", { quick: true }); await page.fill("#p-gross", "4000"); await page.fill("#p-net", "4000"); await page.fill("#p-dep", "4000");
+  await slipAmount(page, "4000"); await page.fill("#p-gross", "4000"); await page.fill("#p-net", "4000"); await page.fill("#p-dep", "4000");
   await page.click("#f-save"); await seen(page, "#toast", "Payslip changed");
   await page.click('button.choice[data-action="open-payslips"]');
-  const earlier = await page.locator("#sheet details.earlier").first().textContent();
+  const earlier = await page.locator('#sheet details.earlier:has(summary:text-is("Earlier figures"))').first().textContent();
   check(/Basic salary ₱\d[\d,]*\.00 to ₱4,000\.00/.test(earlier) && /Received ₱\d[\d,]*\.00 to ₱4,000\.00/.test(earlier), "Earlier figures names which lines changed: Basic salary and Received, old to new (" + earlier.slice(-160) + ")");
   await ctx.close(); }
 
