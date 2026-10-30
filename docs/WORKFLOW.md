@@ -177,7 +177,6 @@ P0 (loses data, blocks logging or blocks a backup)
 - P0-4 Weekly check-in gaps: #271 cancel-once is merged; the new check-in is #272 (count all first, held gaps, proposed moves); the repair of past months is next (owner approved: both directions, per-month before and after, proposed moves from old pairs).
 
 P1
-- P1-1 README: data version 9 -> 10.
 - P1-2 Payslip reader leftovers (repeated rows merged, 0.00 lines dropped, labels replaced, a mismatched payslip can still be saved as
   verified income, the duplicate check ignores the employer). The owner has not scanned his own payslip since #263.
 - P1-4 Duplicate transaction ids: `validateState` has no check for a repeated transaction id. First step, read-only: count (no values) whether the owner's data holds any, and find whether any code path can still create them (the cancel path is fixed in #271). If yes, its own PR with a failing test first.
