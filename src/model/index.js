@@ -111,3 +111,4 @@ export { RANGES, dailySpending, firstSpendingDate, rangeFor, stepFor, seriesFor,
 export { payerFor, nextDue, lastStatementDate, cardStatement, setCardDetails, planCardPayment, makeCardDueDrafts, DUE_CATCH_UP_DAYS } from "./cardpay.js";
 
 export { arranged, orderFrom } from "./order.js";
+export { KNOWN_WORDS, maskText, maskedLayout, layoutReport } from "./layoutreport.js";

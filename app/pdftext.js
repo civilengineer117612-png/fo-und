@@ -59,7 +59,7 @@ export async function readPdfScan(file, askPassword, readImage, progress = () =>
     preview.height = sizes.reduce((sum, s) => sum + Math.ceil(preview.width * s.height / s.width), 0);
     const ctx = preview.getContext("2d");
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, preview.width, preview.height);
-    const texts = [];
+    const texts = [], layout = [];
     let top = 0;
     for (let n = 1; n <= doc.numPages; n++) {
       progress("Reading PDF page " + n + " of " + doc.numPages + "...");
@@ -71,12 +71,13 @@ export async function readPdfScan(file, askPassword, readImage, progress = () =>
         await page.render({ canvasContext: canvas.getContext("2d"), viewport, background: "white" }).promise;
         const tc = await page.getTextContent();
         const items = tc.items.filter((i) => typeof i.str === "string" && i.str.trim()).map((i) => ({ x: i.transform[4], y: i.transform[5], w: i.width, h: i.height, str: i.str }));
+        layout.push(items);   // for the layout report: masked on the phone before anything is shown or copied
         const embedded = pdfScanText(items);
         texts.push(embedded.trim() ? embedded : await readImage(await canvasBlob(canvas, "image/png")));
         const height = Math.ceil(preview.width * size.height / size.width);
         ctx.drawImage(canvas, 0, top, preview.width, height); top += height;
       } finally { canvas.width = canvas.height = 0; page.cleanup(); }
     }
-    return { text: texts.join("\n"), blob: await canvasBlob(preview) };
+    return { text: texts.join("\n"), blob: await canvasBlob(preview), layout };
   } finally { preview.width = preview.height = 0; await doc.destroy(); }
 }
