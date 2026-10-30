@@ -392,13 +392,14 @@ test("with history, spending over the needs + wants targets lowers the want line
   const s = withHistory((x) => { for (const m of MONTHS6) for (let i = 0; i < 3; i++) spend(x, m + "-21", "fun", 400000); });   // fun now 15,000 a month
   const r = run(s), total = (name) => r.paydays.reduce((a, p) => a + (p.lines.find((l) => l.name === name)?.amount ?? 0), 0);
   // spending 6,000 + 8,000 + 15,000 = 29,000; targets allow 24,000; 5,000 over; a 10% step = 500 off the wants (fun is the only want)
-  assert.equal(total("Fun"), 1500000 - 50000);
+  // then the funding order: income 30,000 - rent 8,000 - food 6,000 - buffer 1,500 = 14,500 is left, and wants are capped at 30% of 30,000 = 9,000
+  assert.equal(total("Fun"), 900000, "the step is taken, then wants are held to the 30% cap");
   assert.equal(total("Food"), 600000, "needs are not lowered"); assert.equal(total("Rent"), 800000);
   assert.ok(r.paydays.some((p) => p.lines.some((l) => l.name === "Fun" && l.nudged === 50000 && /Lowered a step toward your targets/.test(l.reason))));
   assert.ok(balances(r));
   const pinned = run(s, { pinned: [{ name: "Fun", category_id: "fun", first: 750000, second: 750000 }] });
   assert.equal(pinned.paydays.reduce((a, p) => a + p.lines.find((l) => l.name === "Fun").amount, 0), 1500000, "a figure you typed is yours: never lowered");
-  assert.equal(run(s, { settings: { nudge_bps: 0 } }).paydays.reduce((a, p) => a + p.lines.find((l) => l.name === "Fun").amount, 0), 1500000, "0 turns the step off");
+  assert.equal(run(s, { settings: { nudge_bps: 0 } }).paydays.reduce((a, p) => a + p.lines.find((l) => l.name === "Fun").amount, 0), 900000, "0 turns the step off; the 30% cap still holds");
 });
 
 test("the two new settings are checked like the others", () => {
