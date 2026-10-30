@@ -814,7 +814,7 @@ function openSlipEdit(p) {
     gross: two(p.printed_gross), net: two(p.printed_net), deposit: two(p.deposit), ded: p.printed_deductions ? two(p.printed_deductions) : "", words: p.net_words ?? "", ot_month: payslipDefaults().ot_month };
   const stored = M.itemsOf(S(), id);
   if (stored.length) {   // a payslip saved with its printed lines opens as its lines; an older one keeps the old form (its original wording was not kept)
-    f.items = stored.map((i, n) => { const { id: _i, payslip_id: _p, position: _q, amount, ...rest } = i; return { ...rest, k: "k" + (n + 1), amt: two(amount) }; }); f.nextK = stored.length;
+    f.items = stored.map((i, n) => { const { id: itemId, payslip_id: _p, position: _q, amount, ...rest } = i; return { ...rest, item_id: itemId, k: "k" + (n + 1), amt: two(amount) }; }); f.nextK = stored.length;
     f.pay_rate = p.pay_rate ?? ""; f.pay_basis = p.pay_basis ?? ""; f.period_type = p.period_type ?? "";
     for (const l of M.linesOf(S(), id)) if (l.earned_month) f.ot_month = l.earned_month;
   } else for (const l of M.linesOf(S(), id)) { f[(l.side === "earning" ? "e_" : "d_") + l.kind] = two(l.amount); if (l.earned_month) f.ot_month = l.earned_month; }

@@ -226,6 +226,20 @@ test("changing a payslip replaces its items and keeps what it held before; remov
   assert.deepEqual(validateState(edited.state), []);
 });
 
+test("a line keeps its id when the payslip is changed, so a category record still names the same line; a new line gets the next free id", () => {
+  assert.deepEqual(storedItems("ps1", [{ section: "earning", label: "a", amount: 1, item_id: "ps1-i2" }, { section: "earning", label: "b", amount: 2 }, { section: "earning", label: "c", amount: 3, item_id: "ps1-i2" }, { section: "earning", label: "d", amount: 3, item_id: "other-i1" }]).map((i) => i.id),
+    ["ps1-i2", "ps1-i3", "ps1-i4", "ps1-i5"], "a repeated or foreign id is never reused");
+  let s = planPayslip(ledger(), base(), NOW).state;
+  const meal = itemsOf(s, "ps1").find((i) => i.label === "Meal Subsidy");
+  s = setItemCategory(s, meal.id, "allowance", NOW).state;
+  const draft = itemsOf(s, "ps1").filter((i) => i.label !== "Basic Salary").map(({ id, payslip_id, position, ...rest }) => ({ ...rest, item_id: id }));   // the owner removed the first line
+  const printedGross = 3200000 - 2000000;
+  const r = updatePayslip(s, "ps1", base({ items: draft, printed_gross: printedGross, printed_net: printedGross - 919000, deposit: printedGross - 919000 }), NOW);
+  assert.ok(r.ok, JSON.stringify(r.violations));
+  assert.equal(itemsOf(r.state, "ps1").find((i) => i.label === "Meal Subsidy").id, meal.id, "the line kept its id although another line went");
+  assert.equal(r.state.payslipItemChanges[0].item_id, meal.id, "so its record still points at it");
+});
+
 test("the quick-pick labels, and every category name, are the owner's list", () => {
   assert.deepEqual(QUICK_LABELS.earning.map((q) => q[0]), ["Basic salary", "Overtime", "Holiday and night pay", "Rice subsidy", "Allowance"]);
   assert.deepEqual(QUICK_LABELS.deduction.map((q) => q[0]), ["SSS", "PhilHealth", "Pag-IBIG", "Withholding tax", "Loan"]);

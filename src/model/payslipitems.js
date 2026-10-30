@@ -79,9 +79,14 @@ export function draftItem({ section, label, amount, hours, employer, settings })
 
 // ---------- what is saved ----------
 const STORED = ["section", "label", "amount", "category", "overtime", "back_pay", "tax", "hours"];
+// A line that already exists keeps its id when the payslip is changed (`item_id` on the draft), so the record of a category change still names the same line; a new line gets the next free one.
 export function storedItems(payslipId, drafts) {
+  const mine = new RegExp("^" + payslipId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "-i(\\d+)$"), used = new Set();
+  let next = 1 + Math.max(0, ...drafts.map((d) => Number(mine.exec(d.item_id ?? "")?.[1] ?? 0)));
   return drafts.map((d, n) => {
-    const row = { id: `${payslipId}-i${n + 1}`, payslip_id: payslipId, position: n };
+    const keep = typeof d.item_id === "string" && mine.test(d.item_id) && !used.has(d.item_id) ? d.item_id : null, id = keep ?? `${payslipId}-i${next++}`;
+    used.add(id);
+    const row = { id, payslip_id: payslipId, position: n };
     for (const k of STORED) if (d[k] !== undefined && d[k] !== null && d[k] !== "" && !(k === "overtime" && d[k] !== true) && !(k === "back_pay" && d[k] !== true)) row[k] = d[k];
     return row;
   });
