@@ -84,6 +84,17 @@ export function checkDuplicate(state, transaction, entries) {
   return other ? [warn("DUPLICATE_REFERENCE", "looks like transaction " + other + " (same payment shown again)", { duplicate_of: other })] : [];
 }
 
+// 4b. A verified entry is FINAL (owner, Oct 30): a save whose id belongs to a VERIFIED entry already in the ledger is refused, so nothing can overwrite it or
+// repeat its number. A draft keeps today's behaviour: saving it again is an edit (and verifying it is the same id turning verified).
+export function checkEntryFinal(state, transaction) {
+  const old = state.transactions.find((t) => t.id === transaction.id);
+  return old && old.status === "verified" ? [err("ENTRY_FINAL", "this entry is already verified and cannot be saved again (" + transaction.id + ")")] : [];
+}
+
+// Read-only count for Setup, About this app: how many transaction ids appear more than once (each extra copy counts one). Never blocks or repairs anything.
+export const repeatedIds = (transactions) => { const seen = new Set(); let n = 0; for (const t of transactions ?? []) { if (seen.has(t.id)) n += 1; else seen.add(t.id); } return n; };
+export const repeatsLine = (state) => { const n = repeatedIds(state.transactions); return "Repeated entry numbers: " + (n === 0 ? "none" : n + " (tell the project chat)"); };
+
 // 5. Rules are append-only: every previously saved row must still be present and
 // byte-for-byte unchanged. New rows (new ids) are the only allowed difference.
 export function checkRulesAppendOnly(previousRules, nextRules) {
