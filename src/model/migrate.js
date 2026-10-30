@@ -10,9 +10,9 @@ import { phTimestamp } from "./util.js";
 
 // Version 2 is the first with named migrations. To change the data's shape: raise this number, add the step from the old number to MIGRATIONS,
 // add a backup fixture of the old version to tests/migrate.test.js, and add the new collection to COLLECTION_NAMES.
-export const LEDGER_VERSION = 10;
+export const LEDGER_VERSION = 11;
 export const COLLECTION_NAMES = ["accounts", "goals", "envelopes", "transactions", "entries", "categories", "categoryMaps", "rules",
-  "templates", "presets", "payeeRules", "subscriptions", "checkIns", "attachments", "tags", "foreignAmounts", "surveyResponses", "payslips", "payslipLines", "payslipRevisions", "schedules", "scheduleChanges", "statementRecords", "statementLines", "statementAccepts"];
+  "templates", "presets", "payeeRules", "subscriptions", "checkIns", "attachments", "tags", "foreignAmounts", "surveyResponses", "payslips", "payslipLines", "payslipRevisions", "payslipItems", "payslipItemChanges", "schedules", "scheduleChanges", "statementRecords", "statementLines", "statementAccepts"];
 
 // Each step takes a ledger of version N and returns one of N + 1 (the runner sets `v`). Steps only add.
 export const MIGRATIONS = {
@@ -64,6 +64,10 @@ export const MIGRATIONS = {
   // 9 to 10: statement proof. Three new lists (statement records, their lines, and the months accepted), all empty, and a new transaction source "statement".
   // Nothing existing is touched, so every total is the same.
   9: (ledger) => ({ ...ledger, state: { ...ledger.state, statementRecords: ledger.state.statementRecords ?? [], statementLines: ledger.state.statementLines ?? [], statementAccepts: ledger.state.statementAccepts ?? [] } }),
+  // 10 to 11: every printed payslip line is kept. Two new lists, `payslipItems` (a payslip's lines as printed: label, section, amount, position, category, flags) and
+  // `payslipItemChanges` (the record of a line's category being changed), both empty; a payslip may also hold pay_rate, pay_basis and period_type as printed.
+  // Old payslips keep their lines and figures exactly and simply have no items ("Original wording not kept"). Nothing existing is touched, so every total is the same.
+  10: (ledger) => ({ ...ledger, state: { ...ledger.state, payslipItems: ledger.state.payslipItems ?? [], payslipItemChanges: ledger.state.payslipItemChanges ?? [] } }),
 };
 
 const clone = (x) => JSON.parse(JSON.stringify(x));

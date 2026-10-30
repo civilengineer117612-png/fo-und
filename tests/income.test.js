@@ -193,11 +193,13 @@ test("a verified overtime transfer stays when its payslip is removed, and the re
 test("the same payslip saved twice is refused: same period and same net pay", () => {
   const first = planPayslip(ledger(), base(), NOW);
   assert.equal(first.ok, true);
-  const again = planPayslip(first.state, base({ id: "ps2", transaction_id: "tx-ps2", employer: "Sample Employer Inc (misread)" }), NOW);
+  const again = planPayslip(first.state, base({ id: "ps2", transaction_id: "tx-ps2", employer: " sample employer inc " }), NOW);   // the same employer, whatever the capitals and spaces
   assert.equal(again.ok, false);
   assert.equal(again.violations[0].code, "DUPLICATE_PAYSLIP");
-  assert.match(again.violations[0].message, /already saved one for 2026-10-01 to 2026-10-15/);
+  assert.match(again.violations[0].message, /already saved one for .*2026-10-01 to 2026-10-15/);
   assert.equal(planPayslip(first.state, base({ id: "ps3", transaction_id: "tx-ps3", deposit: 700000, printed_net: 700000 }), NOW).ok, true, "a second income in the same period, with another net pay, is allowed");
+  assert.equal(planPayslip(first.state, base({ id: "ps5", transaction_id: "tx-ps5", employer: "Another Employer Inc" }), NOW).ok, true, "another employer for the same period and net pay is a second source of income, not a repeat");
+  assert.equal(planPayslip(first.state, base({ id: "ps6", transaction_id: "tx-ps6", deposit: 730000 }), NOW).ok, false, "the net printed on the paper decides, not what reached the account");
   assert.equal(planPayslip(first.state, base({ id: "ps4", transaction_id: "tx-ps4", period_from: "2026-10-16", period_to: "2026-10-31", pay_date: "2026-10-31" }), NOW).ok, true, "the next period with the same net pay is allowed");
 });
 

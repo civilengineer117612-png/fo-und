@@ -103,13 +103,20 @@ export const SCHEMAS = {
     printed_gross: centavos, printed_net: centavos, deposit: centavos, net_words: optional(text),
     printed_deductions: optional(centavos),   // ADDED: the total deductions printed on the paper, when it was entered
     version: optional(count),   // ADDED: which rules saved it (income.js PAYSLIP_VERSION); a payslip without one was saved before the date and reading fixes
+    pay_rate: optional(text), pay_basis: optional(text), period_type: optional(text),   // ADDED (data version 11): as printed on the payslip ("Semi-Monthly", "Bi-Week", a rate); text, never worked out
   },
   // The figures a payslip had before it was changed, with the day of the change. The payslip keeps its ids; this only remembers.
   PayslipRevision: {
     id, payslip_id: id, changed_on: date, employer: name, period_from: date, period_to: date, pay_date: date,
     printed_gross: centavos, printed_net: centavos, deposit: centavos, printed_deductions: optional(centavos), lines: { type: "lineList" },
+    items: optional({ type: "itemList" }),   // ADDED (data version 11): the printed lines it held, when it had them
   },
-  PayslipLine: { payslip_id: id, side: oneOf("earning", "deduction"), kind: oneOf("basic", "rice", "skills", "clothing", "transport", "overtime", "thirteenth", "bonus", "tax", "sss", "philhealth", "pagibig", "absences", "lates", "loan", "other"), amount: centavos, earned_month: optional({ type: "month" }) },
+  PayslipLine: { payslip_id: id, side: oneOf("earning", "deduction"), kind: oneOf("basic", "rice", "skills", "clothing", "transport", "overtime", "thirteenth", "bonus", "tax", "sss", "gsis", "philhealth", "pagibig", "absences", "lates", "loan", "other"), amount: centavos, earned_month: optional({ type: "month" }) },
+  // ADDED (data version 11): EVERY line printed on a payslip, as printed. The section decides the direction (an "employer" line is shown and never reduces net); a 0.00 line is kept.
+  PayslipItem: { id, payslip_id: id, section: oneOf("earning", "deduction", "employer"), label: name, amount: centavos, position: count,
+    category: optional(text), overtime: optional(bool), back_pay: optional(bool), tax: optional(oneOf("taxable", "non_taxable")), hours: optional(text) },
+  // A past line's category changed by the owner, one line at a time: this is the visible record. It never touches an amount, an entry or a transfer.
+  PayslipItemChange: { id, item_id: id, payslip_id: id, from: text, to: text, changed_on: date },
   ForeignAmount: { transaction_id: id, currency: name, foreign_amount: centavos, rate: { type: "rate" } },
 };
 
@@ -131,6 +138,7 @@ const TYPE_CHECKS = {
   day: (v) => Number.isInteger(v) && v >= 1 && v <= 31,
   plan: (v) => Number.isInteger(v) && v >= 1 && v <= 600,
   rate: (v) => typeof v === "number" && Number.isFinite(v) && v > 0,
+  itemList: (v) => Array.isArray(v) && v.every((l) => typeof l === "object" && l !== null && validateShape("PayslipItem", { id: "x", payslip_id: "x", ...l }).length === 0),
   lineList: (v) => Array.isArray(v) && v.every((l) => typeof l === "object" && l !== null && validateShape("PayslipLine", { payslip_id: "x", ...l }).length === 0),
   idList: (v) => Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && x.length > 0),
 };
@@ -160,9 +168,13 @@ const CROSS_FIELD = {
     ...(p.period_to < p.period_from ? ["period_to is before period_from"] : []),
     ...(p.printed_gross <= 0 || p.printed_net <= 0 || p.deposit <= 0 ? ["gross, net and deposit must be more than zero"] : []),
   ],
+  PayslipItem: (i) => [
+    ...(i.amount < 0 ? ["a printed line cannot be negative"] : []),
+    ...(i.overtime === true && i.section !== "earning" ? ["only an earnings line can be overtime"] : []),
+  ],
   PayslipLine: (l) => [
     ...(l.amount <= 0 ? ["a payslip line must be more than zero"] : []),
-    ...(l.side === "earning" && ["tax", "sss", "philhealth", "pagibig", "absences", "lates", "loan"].includes(l.kind) ? ["that kind belongs under deductions"] : []),
+    ...(l.side === "earning" && ["tax", "sss", "gsis", "philhealth", "pagibig", "absences", "lates", "loan"].includes(l.kind) ? ["that kind belongs under deductions"] : []),
     ...(l.side === "deduction" && ["basic", "rice", "skills", "clothing", "transport", "overtime", "thirteenth", "bonus"].includes(l.kind) ? ["that kind belongs under earnings"] : []),
     ...(l.kind === "overtime" && l.earned_month == null ? ["overtime needs the month it was earned"] : []),
     ...(l.kind !== "overtime" && l.earned_month != null ? ["only overtime carries an earned month"] : []),

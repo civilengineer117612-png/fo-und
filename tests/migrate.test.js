@@ -69,8 +69,8 @@ const text = (l) => JSON.stringify(l);
 // every field of `a` is still in `b` with the same value (b may have more)
 const holds = (a, b) => (typeof a !== "object" || a === null ? a === b : typeof b === "object" && b !== null && Object.keys(a).every((k) => holds(a[k], b[k])));
 
-test("the current data version is 10 and the first version's data is still accepted as older", () => {
-  assert.equal(LEDGER_VERSION, 10);
+test("the current data version is 11 and the first version's data is still accepted as older", () => {
+  assert.equal(LEDGER_VERSION, 11);
   for (const make of Object.values(FIXTURES)) { const p = parseLedger(text(make())); assert.equal(p.ok, true); assert.equal(p.older, true); }
   const cur = upgradeLedger(v1Early()).ledger;
   assert.equal(parseLedger(text(cur)).older, undefined);
@@ -372,7 +372,7 @@ const v9Ledger = () => ({
 test("data version 9 upgrades to 10: three empty lists are added and nothing else changes", () => {
   const before = v9Ledger(), snapshot = JSON.stringify(before);
   const r = upgradeLedger(before, { now: new Date("2026-10-14T00:00:00Z") });
-  assert.equal(r.ok, true, r.error); assert.equal(r.ledger.v, 10); assert.equal(JSON.stringify(before), snapshot, "the input is never changed");
+  assert.equal(r.ok, true, r.error); assert.equal(r.ledger.v, LEDGER_VERSION); assert.equal(JSON.stringify(before), snapshot, "the input is never changed");
   for (const k of V9_LISTS) assert.deepEqual(r.ledger.state[k], before.state[k], k + " is the same");
   for (const k of ["statementRecords", "statementLines", "statementAccepts"]) assert.deepEqual(r.ledger.state[k], [], k + " starts empty");
   assert.deepEqual(r.ledger.settings, before.settings);
@@ -384,6 +384,6 @@ test("a version 9 backup file opens and upgrades; restoring it keeps its own ver
   const sealed = await encryptLedgerBackup(v9Ledger(), "correct horse battery"), back = await decryptLedgerBackup(sealed, "correct horse battery");
   assert.equal(back.v, 9);
   const r = upgradeLedger(back, { now: new Date("2026-10-14T00:00:00Z") });
-  assert.equal(r.ok, true); assert.equal(r.ledger.v, 10);
+  assert.equal(r.ok, true); assert.equal(r.ledger.v, LEDGER_VERSION);
   assert.equal(restoreLedger({ v: LEDGER_VERSION, rev: 150, saved_at: TS, state: {}, settings: {} }, back).v, 9);
 });

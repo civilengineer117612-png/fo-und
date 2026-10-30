@@ -7,12 +7,13 @@ import { checkTransactionSave } from "./index.js";
 import { planOvertimeTransfer, splitOvertime } from "./goals.js";
 import { wordsToCentavos } from "./scan.js";
 import { monthOf } from "./reports.js";
+import { storedItems, checkItems, linesFromItems, itemsOf, categoryOf, categoryName, FALLBACK, EARNING_CATEGORIES, DEDUCTION_CATEGORIES } from "./payslipitems.js";
 
 export const EARNINGS = [["basic", "Basic salary"], ["rice", "Rice subsidy"], ["skills", "Skills allowance"], ["clothing", "Clothing allowance"],
   ["transport", "Transportation allowance"], ["overtime", "Overtime"], ["thirteenth", "13th month"], ["bonus", "Bonus"], ["other", "Other earnings"]];
 export const DEDUCTIONS = [["tax", "Withholding tax"], ["sss", "SSS"], ["philhealth", "PhilHealth"], ["pagibig", "Pag-IBIG"],
   ["absences", "Absences"], ["lates", "Lates / undertime"], ["loan", "Loans"], ["other", "Other deductions"]];
-export const GOVERNMENT = ["tax", "sss", "philhealth", "pagibig"];   // what went to government
+export const GOVERNMENT = ["tax", "sss", "gsis", "philhealth", "pagibig"];   // what went to government
 export const LOST = ["absences", "lates"];   // pay lost to missed time
 export const OVERTIME_SHARE = { num: 3, den: 5 };   // 60% of overtime goes to the Emergency Fund, 40% is free to spend
 
@@ -82,8 +83,18 @@ export function planPayslip(state, input, now = new Date()) {
   const account = state.accounts.find((a) => a.id === input.account_id);
   if (!account || account.class !== "asset") return fail("UNKNOWN_ACCOUNT", "choose the account the pay landed in");
   if ((state.payslips ?? []).some((p) => p.id === input.id)) return fail("DUPLICATE_ID", "that payslip is already saved");
-  // The same payslip scanned or typed twice would be counted twice: same period and same net pay means it is already here.
-  if ((state.payslips ?? []).some((p) => p.period_from === input.period_from && p.period_to === input.period_to && p.deposit === input.deposit)) return fail("DUPLICATE_PAYSLIP", "Duplicate payslip: you already saved one for " + input.period_from + " to " + input.period_to + " with the same net pay (" + peso(input.deposit) + "). To fix it, open it in Income, Payslips and use Change this payslip. If this is a different payslip, change its dates or net pay.");
+  // The same payslip scanned or typed twice would be counted twice: the same employer, period and net pay means it is already here.
+  if ((state.payslips ?? []).some((p) => sameEmployer(p.employer, employer) && p.period_from === input.period_from && p.period_to === input.period_to && p.printed_net === input.printed_net)) return fail("DUPLICATE_PAYSLIP", "Duplicate payslip: you already saved one for " + employer + ", " + input.period_from + " to " + input.period_to + " with the same net pay (" + peso(input.printed_net) + "). To fix it, open it in Income, Payslips and use Change this payslip. If this is a different payslip, change its dates or net pay.");
+  // A NEW payslip is given its printed lines as `items` (label, section, amount, category, flags): they are the source, and the payslip's lines are generated from them here,
+  // in the same save, so items (without the employer share) and lines always give the same earnings, deductions and net. `overtime_month` is the month overtime was earned.
+  let items = null;
+  if (Array.isArray(input.items)) {
+    const why = checkItems(input.items);
+    if (why) return fail("BAD_ITEM", why);
+    items = storedItems(input.id, input.items);
+    const month = input.overtime_month ?? input.period_to.slice(0, 7), made = linesFromItems(items, month);
+    input = { ...input, earnings: made.filter((l) => l.side === "earning").map(({ side, ...l }) => l), deductions: made.filter((l) => l.side === "deduction").map(({ side, ...l }) => l) };
+  }
   if (!(input.earnings ?? []).length) return fail("NO_EARNINGS", "add at least one earnings line");
   const cats = new Map(state.categories.map((c) => [c.id, c]));
   if (cats.get("cat-salary")?.kind !== "income" || cats.get("cat-overtime")?.kind !== "income") return fail("NO_CATEGORY", "the Salary and Overtime income categories are missing");
@@ -94,7 +105,8 @@ export function planPayslip(state, input, now = new Date()) {
   ];
   const payslip = { id: input.id, employer, period_from: input.period_from, period_to: input.period_to, pay_date: input.pay_date, account_id: account.id,
     transaction_id: input.transaction_id, printed_gross: input.printed_gross, printed_net: input.printed_net, deposit: input.deposit,
-    ...(input.net_words ? { net_words: input.net_words } : {}), ...(input.printed_deductions > 0 ? { printed_deductions: input.printed_deductions } : {}), version: PAYSLIP_VERSION };
+    ...(input.net_words ? { net_words: input.net_words } : {}), ...(input.printed_deductions > 0 ? { printed_deductions: input.printed_deductions } : {}), version: PAYSLIP_VERSION,
+    ...(input.pay_rate ? { pay_rate: String(input.pay_rate).trim() } : {}), ...(input.pay_basis ? { pay_basis: String(input.pay_basis).trim() } : {}), ...(input.period_type ? { period_type: String(input.period_type).trim() } : {}) };
   for (const row of lines) { const v = validateShape("PayslipLine", row); if (v.length) return fail("BAD_LINE", v[0].message); }
   const bad = validateShape("Payslip", payslip);
   if (bad.length) return fail("BAD_PAYSLIP", bad[0].message ?? "the payslip is not complete");
@@ -112,8 +124,8 @@ export function planPayslip(state, input, now = new Date()) {
   const result = checkTransactionSave(state, { transaction, entries });
   if (!result.ok) return { ok: false, violations: result.violations, state: undefined };
   return {
-    ok: true, violations: result.violations, flags: payslipChecks(payslip, lines), payslip, lines, transaction, entries,
-    state: { ...state, transactions: [...state.transactions, transaction], entries: [...state.entries, ...entries], payslips: [...(state.payslips ?? []), payslip], payslipLines: [...(state.payslipLines ?? []), ...lines] },
+    ok: true, violations: result.violations, flags: payslipChecks(payslip, lines), payslip, lines, transaction, entries, ...(items ? { items } : {}),
+    state: { ...state, transactions: [...state.transactions, transaction], entries: [...state.entries, ...entries], payslips: [...(state.payslips ?? []), payslip], payslipLines: [...(state.payslipLines ?? []), ...lines], ...(items ? { payslipItems: [...(state.payslipItems ?? []), ...items] } : {}) },
   };
 }
 
@@ -205,6 +217,24 @@ export function netPerPayday(state, range) {
   });
 }
 
+// Income by the category of each PRINTED line (data version 11): earnings, deductions and the employer share, each category with its total and the printed lines in it.
+// A line with no category counts under "Other earnings" / "Other deductions" until the owner chooses one. A payslip saved before every line was kept has no lines to
+// group: it is counted apart (`original`) and the screens say "Original wording not kept". Drafts are not income yet and are left out, like every other figure here.
+export function incomeByCategory(state, range) {
+  const slips = liveSlips(state).filter((p) => inRange(range, p)), out = { earning: new Map(), deduction: new Map(), employer: new Map(), original: { count: 0, gross: 0, deductions: 0 } };
+  for (const p of slips) {
+    const items = itemsOf(state, p.id);
+    if (!items.length) { const t = payslipTotals(linesOf(state, p.id)); out.original.count += 1; out.original.gross += t.gross; out.original.deductions += t.deductions; continue; }
+    for (const i of items) {
+      const id = categoryOf(i), g = out[i.section].get(id) ?? { category: id, name: categoryName(i.section, id), total: 0, items: [] };
+      g.total += i.amount; g.items.push({ id: i.id, payslip_id: p.id, employer: p.employer, pay_date: p.pay_date, label: i.label, amount: i.amount, section: i.section, back_pay: i.back_pay === true, tax: i.tax ?? null, overtime: i.overtime === true, hours: i.hours ?? null });
+      out[i.section].set(id, g);
+    }
+  }
+  const sorted = (m) => [...m.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  return { earning: sorted(out.earning), deduction: sorted(out.deduction), employer: sorted(out.employer), original: out.original };
+}
+
 // Basic pay over time: each payslip's basic salary, and the change from the one before it.
 // With a year, only that year's payslips are listed, but each change is still measured against the payslip before it (even from an earlier year).
 export function raiseHistory(state, year = null) {
@@ -217,7 +247,7 @@ export function raiseHistory(state, year = null) {
 // Deductions by month of pay date and for the year to date: government (tax, SSS, PhilHealth, Pag-IBIG), pay lost (absences,
 // lates), and loans.
 export function deductionsByMonth(state, range) {
-  const zero = () => ({ tax: 0, sss: 0, philhealth: 0, pagibig: 0, absences: 0, lates: 0, loan: 0, other: 0 });
+  const zero = () => ({ tax: 0, sss: 0, gsis: 0, philhealth: 0, pagibig: 0, absences: 0, lates: 0, loan: 0, other: 0 });
   const by = new Map();
   for (const p of liveSlips(state)) {
     if (!inRange(range, p)) continue;
@@ -253,6 +283,7 @@ export function updatePayslip(state, id, input, now = new Date()) {
   const side = ["ot-" + id, "otf-" + id], drafts = new Set(state.transactions.filter((t) => side.includes(t.id) && t.status === "draft").map((t) => t.id));
   const gone = new Set([p.transaction_id, ...drafts]), dropped = new Set(drafts);
   const without = { ...state, payslips: state.payslips.filter((x) => x.id !== id), payslipLines: (state.payslipLines ?? []).filter((l) => l.payslip_id !== id),
+    ...(state.payslipItems ? { payslipItems: state.payslipItems.filter((x) => x.payslip_id !== id) } : {}),
     transactions: state.transactions.filter((t) => !gone.has(t.id)), entries: state.entries.filter((e) => !gone.has(e.transaction_id)),
     attachments: (state.attachments ?? []).filter((a) => !dropped.has(a.transaction_id)) };
   const old = state.transactions.find((t) => t.id === p.transaction_id);
@@ -263,10 +294,12 @@ export function updatePayslip(state, id, input, now = new Date()) {
   const oldLines = linesOf(state, id).map(({ side, kind, amount, earned_month }) => ({ side, kind, amount, ...(earned_month ? { earned_month } : {}) }));
   const figures = (x, lines) => JSON.stringify([x.employer, x.period_from, x.period_to, x.pay_date, x.printed_gross, x.printed_net, x.deposit, x.printed_deductions ?? null,
     lines.map((l) => [l.side, l.kind, l.amount, l.earned_month ?? null]).sort()]);
-  const changed = figures(p, oldLines) !== figures(r.payslip, r.lines);
+  const oldItems = itemsOf(state, id), itemFigures = (xs) => JSON.stringify(xs.map(({ id: _i, payslip_id: _p, ...x }) => x));
+  const changed = figures(p, oldLines) !== figures(r.payslip, r.lines) || itemFigures(oldItems) !== itemFigures(r.items ?? []) || ["pay_rate", "pay_basis", "period_type"].some((k) => (p[k] ?? "") !== (r.payslip[k] ?? ""));
   const n = (state.payslipRevisions ?? []).filter((x) => x.payslip_id === id).length + 1;
   const revision = { id: id + "-r" + n, payslip_id: id, changed_on: phTimestamp(now).slice(0, 10), employer: p.employer, period_from: p.period_from, period_to: p.period_to, pay_date: p.pay_date,
-    printed_gross: p.printed_gross, printed_net: p.printed_net, deposit: p.deposit, ...(p.printed_deductions ? { printed_deductions: p.printed_deductions } : {}), lines: oldLines };
+    printed_gross: p.printed_gross, printed_net: p.printed_net, deposit: p.deposit, ...(p.printed_deductions ? { printed_deductions: p.printed_deductions } : {}), lines: oldLines,
+    ...(oldItems.length ? { items: oldItems } : {}) };
   const bad = changed ? validateShape("PayslipRevision", revision) : [];
   if (bad.length) return fail("BAD_REVISION", bad[0].message);
   return { ...r, transaction, draftsRemoved: drafts.size, photoIds: (state.attachments ?? []).filter((a) => dropped.has(a.transaction_id)).map((a) => a.id),
@@ -275,6 +308,10 @@ export function updatePayslip(state, id, input, now = new Date()) {
 
 // "Earlier figures": what a payslip held before each change, newest change first.
 export const revisionsOf = (state, payslipId) => (state.payslipRevisions ?? []).filter((x) => x.payslip_id === payslipId).slice().reverse();
+
+// An old payslip (saved before every printed line was kept) has no items: the screens say "Original wording not kept" instead of inventing lines.
+export const wordingKept = (state, p) => itemsOf(state, p.id).length > 0;
+export const ORIGINAL_NOT_KEPT = "Original wording not kept";
 
 // One plain line each, only when it applies (no colour, no new checks): a payslip saved before the fixes, a pay date long after the period
 // ended, and the printed deductions total against the lines.
@@ -352,6 +389,7 @@ export function deletePayslip(state, id) {
     keptTransfers: state.transactions.filter((t) => side.includes(t.id) && t.status !== "draft").length,
     state: { ...state, payslips: state.payslips.filter((x) => x.id !== id), payslipLines: (state.payslipLines ?? []).filter((l) => l.payslip_id !== id),
       ...(state.payslipRevisions ? { payslipRevisions: state.payslipRevisions.filter((x) => x.payslip_id !== id) } : {}),
+      ...(state.payslipItems ? { payslipItems: state.payslipItems.filter((x) => x.payslip_id !== id) } : {}), ...(state.payslipItemChanges ? { payslipItemChanges: state.payslipItemChanges.filter((x) => x.payslip_id !== id) } : {}),
       transactions: state.transactions.filter((t) => !gone.has(t.id)), entries: state.entries.filter((e) => !gone.has(e.transaction_id)), attachments: (state.attachments ?? []).filter((a) => !gone.has(a.transaction_id)) },
   };
 }
@@ -374,13 +412,13 @@ export function revisionChanges(state, payslipId) {
   if (!p) return [];
   const revs = (state.payslipRevisions ?? []).filter((x) => x.payslip_id === payslipId), now = { ...p, lines: linesOf(state, payslipId) };
   const day = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-  const NAME = Object.fromEntries([...EARNINGS, ...DEDUCTIONS]);
+  const NAME = Object.fromEntries([...EARNINGS, ...DEDUCTIONS, ["gsis", "GSIS"]]);
   const fields = [["employer", "Employer", (v) => v], ["period_from", "Period start", day], ["period_to", "Period end", day], ["pay_date", "Pay date", day],
     ["printed_gross", "Printed gross", peso], ["printed_net", "Printed net", peso], ["printed_deductions", "Printed deductions total", peso], ["deposit", "Received", peso]];
   const diff = (a, b) => {
     const out = [];
     for (const [k, label, show] of fields) if ((a[k] ?? null) !== (b[k] ?? null)) out.push(a[k] == null ? `${label} added ${show(b[k])}` : b[k] == null ? `${label} removed (was ${show(a[k])})` : `${label} ${show(a[k])} to ${show(b[k])}`);
-    const key = (l) => l.side + ":" + l.kind, A = new Map(a.lines.map((l) => [key(l), l])), B = new Map(b.lines.map((l) => [key(l), l]));
+    const key = (l) => l.side + ":" + l.kind, fold = (ls) => { const m = new Map(); for (const l of ls) m.set(key(l), m.has(key(l)) ? { ...m.get(key(l)), amount: m.get(key(l)).amount + l.amount } : l); return m; }, A = fold(a.lines), B = fold(b.lines);   // several lines of one kind (two loans) are compared by their sum
     for (const [k, l] of A) {
       const m = B.get(k), name = NAME[l.kind] ?? l.kind;
       if (!m) out.push(`${name} removed (was ${peso(l.amount)})`);
