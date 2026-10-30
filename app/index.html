@@ -78,7 +78,7 @@
   details[data-keep="t"] > summary { font-size: 15px; color: var(--mid); }
   input.chk, select.chk { outline: 2px solid var(--ink); outline-offset: 1px; border-radius: 8px; }   /* a figure the arithmetic did not prove: an outline and words, never red */
   .unread { display: grid; grid-template-columns: 1fr; gap: 4px; padding: 6px 0; border-top: 1px dashed var(--dashed); }
-  .pagepeek { margin-top: 10px; } .pagepeek summary { cursor: pointer; padding: 8px 0; }
+  .pagepeek { margin-top: 10px; } .pagepeek summary { cursor: pointer; padding: 8px 0; } .pagepeek[open] .pg-show, .pagepeek:not([open]) .pg-hide { display: none; }
   .slipask { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
   .shotbtn.enlarge { position: relative; } .shotbtn.enlarge::after { content: "Tap to enlarge"; position: absolute; right: 8px; bottom: 8px; background: var(--ink); color: var(--paper); font-size: 13px; padding: 4px 8px; border-radius: 6px; }
   .note.small { font-size: 13px; margin: 6px 0; }

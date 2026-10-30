@@ -35,6 +35,17 @@ const checkPayslip = async () => {
   assert.equal(await page.locator('[data-field="period_to"]').inputValue(), "2026-10-15");
   assert.equal(await page.locator('[data-field="pay_date"]').inputValue(), "2026-10-20");
   assert.equal(await page.locator("#sheet img.shot").count(), 1);
+  // The page picture is OPEN without any tap, above the figures (where a photo's picture sits); "Hide the page" folds it and "Show the page" brings it back.
+  assert.equal(await page.locator("#sheet details.pagepeek[open]").count(), 1, "the page is open by default");
+  assert.equal(await page.locator("#sheet details.pagepeek img.shot").isVisible(), true, "the page picture shows without a tap");
+  const imgY = (await page.locator("#sheet img.shot").boundingBox()).y, grossY = (await page.locator("#p-gross").boundingBox())?.y ?? Infinity;
+  assert.ok(imgY < grossY, "the page picture sits above the figures");
+  assert.equal(await page.locator("#sheet .pagepeek summary:visible").innerText(), "Hide the page");
+  await page.locator("#sheet .pagepeek summary").click();
+  assert.equal(await page.locator("#sheet details.pagepeek[open]").count(), 0, "Hide the page folds it");
+  assert.equal(await page.locator("#sheet .pagepeek summary:visible").innerText(), "Show the page");
+  await page.locator("#sheet .pagepeek summary").click();
+  assert.equal(await page.locator("#sheet details.pagepeek[open]").count(), 1, "Show the page opens it again");
 };
 try {
   await page.clock.setFixedTime(new Date("2026-10-22T03:00:00Z"));

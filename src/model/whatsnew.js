@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-10-30-page-open", date: "2026-10-30", text: "A payslip PDF now shows its page at the top of the form, open, so you can check each figure against it; Hide the page folds it." },
   { id: "2026-10-30-repeat-check", date: "2026-10-30", text: "A verified entry can no longer be saved over, and Setup, About this app says whether any entry number is repeated." },
   { id: "2026-10-30-app-lock", date: "2026-10-30", text: "App lock, off until you turn it on in Setup: it opens with Face ID (swipe up) or a 6-digit PIN, when the app opens and after a minute away." },
   { id: "2026-10-29-layout-report", date: "2026-10-29", text: "A payslip PDF has a link, Copy layout report: it copies the page layout with every digit and name hidden, so a payslip that will not read can be fixed." },
