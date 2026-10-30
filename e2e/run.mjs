@@ -2374,6 +2374,7 @@ console.log("Setup as pages");
     await page.click(`.setrow:has-text("${row}")`); await page.waitForTimeout(250);
     check((await text(page, "#top")).includes(title) && await page.locator(mark).count() >= 1 && await page.locator('.back button:has-text("Setup")').count() === 1, `${row} opens its own page, with a way back`);
     if (row === "About this app") check(/Your ledger: \d+ KB\. Saved twice: a main copy and a spare\./.test(await text(page, "#screen")), "About this app shows the ledger's size and that it is saved twice");
+    if (row === "About this app") check((await text(page, "#about-repeats")) === "Repeated entry numbers: none", "About this app says no entry number repeats");
     await page.click('.back button:has-text("Setup")'); await page.waitForTimeout(200);
     check(await page.locator(".setrow").count() === 7, `back from ${row} returns to the list`);
   }
