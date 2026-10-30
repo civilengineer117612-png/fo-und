@@ -2,6 +2,7 @@
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
   { id: "2026-10-30-app-lock", date: "2026-10-30", text: "App lock, off until you turn it on in Setup: it opens with Face ID (swipe up) or a 6-digit PIN, when the app opens and after a minute away." },
+  { id: "2026-10-29-layout-report", date: "2026-10-29", text: "A payslip PDF has a link, Copy layout report: it copies the page layout with every digit and name hidden, so a payslip that will not read can be fixed." },
   { id: "2026-10-29-funding-order", date: "2026-10-29", text: "Suggested budgets fund fixed payments and needs first, then your savings floor, the buffer, and wants last, at most 30% of your base income." },
   { id: "2026-10-29-payslip-fill", date: "2026-10-29", text: "A payroll PDF is never refused: the form is filled with what was read, figures that do not add up say Check this, and a payslip that still differs waits as a draft in Verify." },
   { id: "2026-10-29-repair-counts", date: "2026-10-29", text: "Weekly review can put right past counts that booked a gap as spending: each is cancelled and counted again as not yet explained, after the app keeps a copy of your data." },

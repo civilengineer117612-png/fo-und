@@ -657,13 +657,13 @@ const payslipDefaults = () => ({
 // A payslip photo, read line by line: opens the payslip window already filled in. The owner checks every figure (the same four checks as
 // for a typed payslip point out what does not add up), chooses where it landed, and saves. The photo stays with the pay.
 const knownEmployers = () => [...new Set([...(S().payslips ?? []).map((p) => p.employer), ledger.settings.last_employer].filter(Boolean))];
-function openPayslipFromPhoto(blob, text, queueId, source = "photo") {
+function openPayslipFromPhoto(blob, text, queueId, source = "photo", layout = null) {
   const r = M.readPayslip(text, today(), { allowHistorical: source === "PDF" }), d = payslipDefaults(), two = (c) => (c / 100).toFixed(2);
   const employer = r.employer ? M.snapEmployer(r.employer, knownEmployers()) : d.employer;
   // One short line: everything was read from the photo and none of it is confirmed (a right employer does not make the figures right).
   // Only what needs action is added after it.
   const f = { ...d, account_id: null, employer, text, notes: [source === "PDF" ? "Read from the PDF. Check each figure against the paper." : "Read from the photo, the employer too. Check each figure against the paper.", ...r.notes.filter((n) => /could not|total deductions/i.test(n)), ...(r.earnings.length || r.deductions.length ? [] : ["I could not read any lines. Type them from the paper."]),
-    ...((r.unread?.earning || r.unread?.deduction) ? ["I could not read " + ((r.unread.earning ?? 0) + (r.unread.deduction ?? 0)) + " row" + ((r.unread.earning ?? 0) + (r.unread.deduction ?? 0) === 1 ? "" : "s") + ". Empty rows are waiting for you in the lines below."] : [])], unread_e: r.unread?.earning ?? 0, unread_d: r.unread?.deduction ?? 0, fromPdf: source === "PDF" };
+    ...((r.unread?.earning || r.unread?.deduction) ? ["I could not read " + ((r.unread.earning ?? 0) + (r.unread.deduction ?? 0)) + " row" + ((r.unread.earning ?? 0) + (r.unread.deduction ?? 0) === 1 ? "" : "s") + ". Empty rows are waiting for you in the lines below."] : [])], unread_e: r.unread?.earning ?? 0, unread_d: r.unread?.deduction ?? 0, fromPdf: source === "PDF", layoutText: layout ? M.layoutReport(layout) : "" };
   // A date the reader could not find is left EMPTY, not filled with today: a payslip must never land in the wrong month by default.
   f.period_from = r.period_from ?? ""; f.period_to = r.period_to ?? ""; f.pay_date = r.pay_date ?? "";
   if (!r.period_from && r.pay_date) f.notes = [...f.notes, "I could not find the pay period. Choose the dates."];
@@ -971,7 +971,7 @@ async function startPdfScan(file, asPayslip = false) {
   const say = (busy) => { if (ui.sheet === sheet) { ui.form = { busy }; renderSheet(); } };
   ui.scan = { busy: true, msg: "Opening the PDF..." }; renderScreen(); say("Opening the PDF...");
   try {
-    const { blob, text } = await readPdfScan(file,
+    const { blob, text, layout } = await readPdfScan(file,
       (wrong) => ui.sheet === sheet ? askPdfPassword(wrong) : null,
       async (image) => {
         const progress = (fraction, what) => say(what + (fraction ? " " + Math.round(fraction * 100) + "%" : "..."));
@@ -987,7 +987,7 @@ async function startPdfScan(file, asPayslip = false) {
       }, say);
     if (ui.sheet !== sheet) return;
     ui.sheet = null;
-    if (asPayslip || M.readScan(text, today()).kind === "payslip") openPayslipFromPhoto(blob, text, null, "PDF");
+    if (asPayslip || M.readScan(text, today()).kind === "payslip") openPayslipFromPhoto(blob, text, null, "PDF", layout);
     else openScanSheet(blob, text, null, null);
   } catch (err) {
     if (ui.sheet !== sheet) return;
@@ -2839,6 +2839,7 @@ function renderSheet() {
       <div id="p-flags" role="status"></div>
       <p id="p-fold" hidden><button class="link" data-action="fold-lines">Checked against the photo? Fold the fields.</button></p>
       ${sh.scanBlob && f.fromPdf ? `<details class="pagepeek" data-keep="pg"${open("pg")}><summary>Show the page</summary><button class="shotbtn enlarge" data-action="view-shot" aria-label="Open the page full size to compare it with the figures"><img class="shot" src="${esc(pendingPhoto?.url ?? "")}" alt="Your payslip, every page" style="max-height:60vh;object-fit:contain"></button></details>` : ""}
+      ${f.layoutText ? `<p class="note small"><button class="link" data-action="copy-layout">Copy layout report</button> It hides every digit and every name.</p>` : ""}
       <p class="note">Do not type any employee, tax or account number.</p>
       ${REQNOTE}
       <div id="p-ask" class="slipask"${sh.askDraft && pm.problems.flags.length ? "" : " hidden"}><p><b id="p-askq">The figures differ${pm.problems.gap ? " by " + esc(peso(pm.problems.gap)) : ""}. Save as a draft to check later?</b></p><p class="note small">It waits in Verify and is not income until it is verified.</p>
@@ -4537,6 +4538,11 @@ async function onClick(el) {
     case "open-check-backup": ui.sheet = { type: "restore", check: true }; ui.form = {}; renderSheet(); break;
     case "make-backup": await makeBackup(); break;
     case "make-passphrase": { const made = M.makePassphrase(); ui.form = { ...ui.form, pass: made, pass2: made, made }; renderSheet(); break; }   // shown on screen, kept nowhere
+    case "copy-layout": {   // the report was masked when the PDF was read: only digits turned to 9 and unknown words turned to x are ever copied
+      try { await navigator.clipboard.writeText(ui.form.layoutText ?? ""); showToast("Layout report copied. It holds no digits or names."); }
+      catch { showToast("Could not copy the layout report."); }
+      break;
+    }
     case "copy-passphrase": {
       try { await navigator.clipboard.writeText(ui.form.made); showToast("Copied. Paste it into Passwords or a note you trust."); }
       catch { showToast("Could not copy. Select the passphrase and copy it by hand."); }

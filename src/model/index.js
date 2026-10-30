@@ -112,3 +112,4 @@ export { payerFor, nextDue, lastStatementDate, cardStatement, setCardDetails, pl
 
 export { arranged, orderFrom } from "./order.js";
 export { PIN_LENGTH, AWAY_MS, FREE_TRIES, FIRST_WAIT, LONGEST_WAIT, validPin, lockOn, newSalt, hashPin, makeRecord, checkPin, waitSeconds, secondsLeft, afterWrong, afterRight, shouldLock } from "./applock.js";
+export { KNOWN_WORDS, maskText, maskedLayout, layoutReport } from "./layoutreport.js";
