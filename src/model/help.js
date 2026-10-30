@@ -49,7 +49,11 @@ export const TOPICS = [
     "A credit card compares in what you owe: the statement against your ledger. A purchase or fee the ledger lacks has Add as draft. A payment to the card is only named, and a card never starts from its statement.",
     "A month marked as not adding up has a link, Show the lines: the lines that do not follow, with the balance the bank prints. A line is usually missing just before each.",
     "A Go Save pocket statement for a number you have no account for makes that pocket for you. Rename it in Setup when you know which one it is.",
-    "A ? beside a screen's name brings back its short explanation.", "To get the new icon and name on iPhone: make a backup first, then add the app to your Home Screen again. Do not remove the old one until the backup is checked."] },
+    "A ? beside a screen's name brings back its short explanation.", "To get the new icon and name on iPhone: make a backup first, then add the app to your Home Screen again. Do not remove the old one until the backup is checked.",
+    "App lock (Setup) keeps someone who picks up your unlocked phone out of the app. It is OFF until you turn it on. It does NOT encrypt your data.",
+    "With it on, the app asks when it opens and after a minute away: swipe up for Face ID, or type your 6-digit PIN. A wrong PIN makes the next try wait. Nothing is ever erased.",
+    "A backup does not carry the lock. Lost the passkey? The PIN still opens the app. Lost both? Only a restore from a backup gets you back in.",
+  ] },
 ];
 
 // Getting started: each step is done or not, worked out from your own data. `done` says what to look for; `tab` is where the step happens.
