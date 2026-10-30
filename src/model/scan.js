@@ -456,7 +456,11 @@ function payrollTableText(rows, headersIn) {
       const h = find(row.items, re);
       if (!h || seenInfo.has(name)) continue;
       let v = null;
-      if (how === "right") v = row.items.slice(h.end + 1).find((i) => i.x >= h.x + h.w - 1) ?? null;
+      if (how === "right") {   // the words right after the label, as far as they run together (a value printed as several text pieces is one value)
+        const after = row.items.slice(h.end + 1).filter((i) => i.x >= h.x + h.w - 1), run = [];
+        for (const i of after) { const last = run[run.length - 1]; if (!last || i.x - (last.x + last.w) <= 12) run.push(i); else break; }
+        if (run.length) v = { ...run[0], str: run.map((i) => i.str.trim()).join(" ") };
+      }
       if (!v && next && row.y - next.y <= 30) {
         const mid = h.x + h.w / 2, near = [...next.items].sort((a, b) => Math.abs(a.x + a.w / 2 - mid) - Math.abs(b.x + b.w / 2 - mid))[0];
         if (near && Math.abs(near.x + near.w / 2 - mid) <= Math.max(60, h.w) && (how !== "below-words" || (/[A-Za-z]/.test(near.str) && !/\d/.test(near.str)))) v = near;
