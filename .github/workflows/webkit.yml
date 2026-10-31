@@ -59,7 +59,7 @@ jobs:
             echo '```'
             echo "First lines of each script's error (a script stops at its first step that throws):"
             echo '```'
-            awk '/^##### e2e\/.*\.mjs$/{name=$2; n=0} /Error|assert|triggerUncaught|AssertionError|expected|actual|Timeout/{ if (n<14 && name!="") { print name ": " substr($0,1,300); n++ } }' e2e-webkit.log
+            awk '/^##### e2e\/.*\.mjs$/{name=$2; n=0} /Error|assert|triggerUncaught|AssertionError|expected|actual|Timeout|^ +at .*e2e\//{ if (n<30 && name!="") { print name ": " substr($0,1,300); n++ } }' e2e-webkit.log
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Keep the log

@@ -16,6 +16,7 @@ export const launchBrowser = () => playwright()[ENGINE].launch(ENGINE === "chrom
 export const TOOLS = {
   virtualAuthenticator: ENGINE === "chromium",   // the Chrome DevTools "WebAuthn" virtual Face ID (applock.mjs)
   clipboardPermission: ENGINE === "chromium",    // ctx.grantPermissions(["clipboard-read", "clipboard-write"]): Playwright's WebKit has no such permission
+  serviceWorkerNetwork: ENGINE === "chromium",   // staging the network (ctx.route) for requests a service worker makes: Playwright's WebKit cannot, so those requests reach the real internet
 };
 
 export const skipped = (label, tool) => console.log(`  skip ${label} (${ENGINE} has no ${tool})`);

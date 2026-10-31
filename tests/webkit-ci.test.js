@@ -47,3 +47,12 @@ test("every script gets its browser from engine.mjs, and a skip names the missin
   const skips = readdirSync(new URL("../e2e/", import.meta.url)).filter((n) => n.endsWith(".mjs")).flatMap((n) => [...read("e2e/" + n).matchAll(/\bskipped\(/g)]);
   assert.equal(skips.length, 3, "engine.mjs defines it; run.mjs and pdf-scan.mjs use it once each");
 });
+
+test("on WebKit the network fake cannot reach a service worker, so only the Offline section keeps one", () => {
+  const run = read("e2e/run.mjs");
+  assert.match(read("e2e/engine.mjs"), /serviceWorkerNetwork: ENGINE === "chromium"/);
+  assert.match(run, /blockSw = !TOOLS\.serviceWorkerNetwork,/);
+  const offline = run.match(/\(\{ ctx, page, errors \} = await open\(\{ blockSw: false \}\)\);[^\n]*\nawait page\.evaluate\(\(\) => navigator\.serviceWorker\.ready/);
+  assert.ok(offline, "the Offline section opens with the service worker allowed");
+  assert.equal([...run.matchAll(/navigator\.serviceWorker/g)].length, 2, "no other section tests the service worker");
+});
