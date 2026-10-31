@@ -441,7 +441,7 @@ function dayCard() {
 }
 
 // Spent today and This month count VERIFIED entries only (owner, Oct 31); what still waits in Verify is shown apart, in the same words on both.
-const waitingLine = (amount, count) => (count ? `<p class="note center small waiting"><button class="link" data-action="tab" data-tab="verify">+ ${peso(amount)} waiting in Verify</button></p>` : "");
+const waitingLine = (amount, count) => (count ? `<p class="note center small waiting">+ ${peso(amount)} waiting in Verify</p>` : "");
 // This month at a glance on Log: verified spending against the month's budgets, one bar, the figure at its tip. Tap it for what you spent this month, by category (owner, Oct 20).
 function monthGlance() {
   const month = M.monthOf(today()), report = M.spendingByCategory(S(), { month }), spent = Math.max(0, report.total), waiting = report.pending;
