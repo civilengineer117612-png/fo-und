@@ -1671,7 +1671,7 @@ await shot(page, "38-months");
 await page.click('button[data-action="income-view"][data-view="overview"]');
 // income added without a payslip (a payslip photo once saved as plain pay received) is listed and can be removed
 await page.click('button:has-text("Add income")'); await page.click('#sheet button:has-text("Other income")');
-await page.fill("#f-amount", "777"); await page.fill("#f-date", "2026-09-20"); await page.click('#sheet .chip:has-text("Salary")'); await page.click('#sheet .chip:has-text("Wallet")'); await page.click("#f-save");
+await page.fill("#f-amount", "777"); await page.fill("#f-date", "2026-10-01"); await page.click('#sheet .chip:has-text("Salary")'); await page.click('#sheet .chip:has-text("Wallet")'); await page.click("#f-save");
 await seen(page, 'button.choice[data-action="open-payslips"]', "without one");
 check(/without one/.test(await text(page, 'button.choice[data-action="open-payslips"]')), "an income entry with no payslip behind it shows on the Payslips row (+ 1 without one)");
 await page.click('button.choice[data-action="open-payslips"]');
