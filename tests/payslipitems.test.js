@@ -212,7 +212,7 @@ test("a line is refused when it is out of shape; a 0.00 line is allowed; saving 
   assert.equal(checkTransactionSave(s, { transaction: s.transactions.find((t) => t.id === "tx-ps1"), entries: s.entries.filter((e) => e.transaction_id === "tx-ps1") }).ok, false);
 });
 
-test("changing a payslip replaces its items and keeps what it held before; removing it removes its items and their category records", () => {
+test("changing a payslip replaces its items and keeps what it held before; removing it keeps them and cancels its pay", () => {
   let s = planPayslip(ledger(), base(), NOW).state;
   s = setItemCategory(s, itemsOf(s, "ps1").find((i) => i.label === "Meal Subsidy").id, "allowance", NOW).state;
   const edited = updatePayslip(s, "ps1", base({ items: withAuto([...EARN.slice(0, 13), E("Performance Incentive", 179000, { category: "bonus" }), ...DED, R("SSS ER", 105000)]), pay_basis: "Monthly" }), NOW);
@@ -221,8 +221,9 @@ test("changing a payslip replaces its items and keeps what it held before; remov
   assert.equal(edited.state.payslips[0].pay_basis, "Monthly");
   assert.equal(edited.state.payslipRevisions.length, 1, "the pay basis changed, so a record of the earlier figures is kept");
   assert.equal(edited.state.payslipRevisions[0].items.length, 27, "the revision keeps the lines it held");
-  const gone = deletePayslip(edited.state, "ps1");
-  assert.deepEqual([gone.state.payslipItems.length, gone.state.payslipItemChanges.length, gone.state.payslipLines.length], [0, 0, 0]);
+  const gone = deletePayslip(edited.state, "ps1", NOW);
+  assert.deepEqual([gone.state.payslipItems.length, gone.state.payslipItemChanges.length].map((n) => n > 0), [true, true], "a removed payslip keeps its lines and their records (the pay entry is cancelled, nothing verified is erased)");
+  assert.equal(gone.state.transactions.some((t) => t.reverses === edited.state.payslips[0].transaction_id), true);
   assert.deepEqual(validateState(edited.state), []);
 });
 

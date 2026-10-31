@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-10-31-audit-trail", date: "2026-10-31", text: "Removing a payslip or an income entry, or changing a payslip's pay, now cancels the old entry with a correction instead of erasing it; Show cancelled lists the pair." },
   { id: "2026-10-31-stable-pay", date: "2026-10-31", text: "Your base income counts only stable pay (overtime, holiday and night pay, bonus and back pay left out); payslips are clean cards, and an older payslip can Add the breakdown." },
   { id: "2026-10-30-payslip-lines", date: "2026-10-30", text: "A payslip now keeps every line printed on it, as printed, each with its own category; the form lists only those lines, and Income groups them by category." },
   { id: "2026-10-30-page-open", date: "2026-10-30", text: "A payslip PDF now shows its page at the top of the form, open, so you can check each figure against it; Hide the page folds it." },

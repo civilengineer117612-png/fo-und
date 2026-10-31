@@ -26,10 +26,22 @@ const sameEmployer = (a, b) => (a ?? "").trim().toLowerCase() === (b ?? "").trim
 // Bump when a fix changes what a saved payslip should hold. A payslip saved under an older version may carry wrong figures until it is saved again.
 export const PAYSLIP_VERSION = 2;
 // A payslip kept as a DRAFT (its checks did not pass, owner Oct 29) is not income yet: every figure below counts only payslips whose pay entry is verified.
+// A correction cancels a verified entry (it stays, with its reversal beside it): the pay of a payslip that was removed is cancelled this way, so that payslip no longer counts.
+const reversedIds = (state) => new Set((state.transactions ?? []).filter((t) => t.reverses != null).map((t) => t.reverses));
+export const slipCancelled = (state, p) => (state.transactions ?? []).some((t) => t.reverses === p.transaction_id);
 export const liveSlips = (state) => {
-  const draft = new Set(state.transactions.filter((t) => t.status === "draft").map((t) => t.id));
-  return (state.payslips ?? []).filter((p) => !draft.has(p.transaction_id));
+  const draft = new Set(state.transactions.filter((t) => t.status === "draft").map((t) => t.id)), gone = reversedIds(state);
+  return (state.payslips ?? []).filter((p) => !draft.has(p.transaction_id) && !gone.has(p.transaction_id));
 };
+// The cancelling entry for one verified entry: the exact opposite, naming it, dated the same day (so the month it was in nets to nothing). Checked like any save.
+// Returns {ok, transaction, entries} or {ok: false, message}.
+function reversalOf(state, orig, now) {
+  const stamp = phTimestamp(now), id = "rev:" + orig.id;
+  const transaction = { id, date: orig.date, payee: orig.payee, memo: "Correction of " + (orig.payee || "an entry") + (orig.memo ? " (" + orig.memo + ")" : ""), status: "verified", source: "correction", reverses: orig.id, created_at: stamp, verified_at: stamp };
+  const entries = state.entries.filter((e) => e.transaction_id === orig.id).map(({ transaction_id, ...e }) => ({ ...e, transaction_id: id, amount: -e.amount }));
+  const check = checkTransactionSave(state, { transaction, entries });
+  return check.ok ? { ok: true, transaction, entries } : { ok: false, message: check.violations.find((v) => v.severity === "error")?.message ?? "that entry cannot be cancelled" };
+}
 export const linesOf = (state, payslipId) => (state.payslipLines ?? []).filter((l) => l.payslip_id === payslipId);
 export const payslipTotals = (lines) => {
   const earn = lines.filter((l) => l.side === "earning"), ded = lines.filter((l) => l.side === "deduction");
@@ -85,7 +97,7 @@ export function planPayslip(state, input, now = new Date()) {
   if (!account || account.class !== "asset") return fail("UNKNOWN_ACCOUNT", "choose the account the pay landed in");
   if ((state.payslips ?? []).some((p) => p.id === input.id)) return fail("DUPLICATE_ID", "that payslip is already saved");
   // The same payslip scanned or typed twice would be counted twice: the same employer, period and net pay means it is already here.
-  if ((state.payslips ?? []).some((p) => sameEmployer(p.employer, employer) && p.period_from === input.period_from && p.period_to === input.period_to && p.printed_net === input.printed_net)) return fail("DUPLICATE_PAYSLIP", "Duplicate payslip: you already saved one for " + employer + ", " + input.period_from + " to " + input.period_to + " with the same net pay (" + peso(input.printed_net) + "). To fix it, open it in Income, Payslips and use Change this payslip. If this is a different payslip, change its dates or net pay.");
+  if ((state.payslips ?? []).some((p) => !slipCancelled(state, p) && sameEmployer(p.employer, employer) && p.period_from === input.period_from && p.period_to === input.period_to && p.printed_net === input.printed_net)) return fail("DUPLICATE_PAYSLIP", "Duplicate payslip: you already saved one for " + employer + ", " + input.period_from + " to " + input.period_to + " with the same net pay (" + peso(input.printed_net) + "). To fix it, open it in Income, Payslips and use Change this payslip. If this is a different payslip, change its dates or net pay.");
   // A NEW payslip is given its printed lines as `items` (label, section, amount, category, flags): they are the source, and the payslip's lines are generated from them here,
   // in the same save, so items (without the employer share) and lines always give the same earnings, deductions and net. `overtime_month` is the month overtime was earned.
   let items = null;
@@ -169,7 +181,7 @@ export const SOURCES = [["base", "Base pay"], ["overtime", "Overtime"], ["intere
 export function incomeBySource(state, { from, to }) {
   const income = new Set(state.categories.filter((c) => c.kind === "income").map((c) => c.id));
   const txById = new Map(state.transactions.map((t) => [t.id, t]));
-  const periodOf = new Map((state.payslips ?? []).map((p) => [p.transaction_id, slipDate(p)]));   // pay from a payslip counts on its period
+  const periodOf = new Map((state.payslips ?? []).flatMap((p) => { const c = state.transactions.find((t) => t.reverses === p.transaction_id); return [[p.transaction_id, slipDate(p)], ...(c ? [[c.id, slipDate(p)]] : [])]; }));   // pay from a payslip counts on its period; so does the entry that cancels it
   const out = { base: 0, overtime: 0, interest: 0, refunds: 0, other: 0 };
   for (const e of state.entries) {
     if (e.category_id == null || !income.has(e.category_id)) continue;
@@ -283,15 +295,36 @@ export function updatePayslip(state, id, input, now = new Date()) {
   const p = (state.payslips ?? []).find((x) => x.id === id);
   if (!p) return fail("UNKNOWN_PAYSLIP", "That payslip is no longer there.");
   const side = ["ot-" + id, "otf-" + id], drafts = new Set(state.transactions.filter((t) => side.includes(t.id) && t.status === "draft").map((t) => t.id));
-  const gone = new Set([p.transaction_id, ...drafts]), dropped = new Set(drafts);
+  const old = state.transactions.find((t) => t.id === p.transaction_id), verified = old?.status === "verified";
+  if (verified && slipCancelled(state, p)) return fail("REMOVED", "That payslip was removed, so it cannot be changed.");
+  const dropped = new Set(drafts), gone = new Set(verified ? drafts : [p.transaction_id, ...drafts]);   // a VERIFIED pay entry is never taken out: it is cancelled by a correction below
   const without = { ...state, payslips: state.payslips.filter((x) => x.id !== id), payslipLines: (state.payslipLines ?? []).filter((l) => l.payslip_id !== id),
     ...(state.payslipItems ? { payslipItems: state.payslipItems.filter((x) => x.payslip_id !== id) } : {}),
     transactions: state.transactions.filter((t) => !gone.has(t.id)), entries: state.entries.filter((e) => !gone.has(e.transaction_id)),
     attachments: (state.attachments ?? []).filter((a) => !dropped.has(a.transaction_id)) };
-  const old = state.transactions.find((t) => t.id === p.transaction_id);
-  const r = planPayslip(without, { ...input, id, transaction_id: p.transaction_id }, now);
+  // A verified payslip whose money is the same (the account, the amounts, the day) keeps its pay entry exactly as it is; only the payslip's own figures and labels change.
+  // If the money changes, the old pay entry is cancelled once by a correction and a NEW pay entry takes its place (principle 7: never edit, never delete).
+  const legs = (es) => es.map((e) => JSON.stringify([e.account_id ?? null, e.category_id ?? null, e.amount])).sort().join();
+  let r = planPayslip({ ...without, transactions: without.transactions.filter((t) => t.id !== p.transaction_id), entries: without.entries.filter((e) => e.transaction_id !== p.transaction_id) }, { ...input, id, transaction_id: p.transaction_id }, now);
   if (!r.ok) return r;
-  const transaction = old ? { ...r.transaction, created_at: old.created_at } : r.transaction;
+  let transaction = old ? { ...r.transaction, created_at: old.created_at } : r.transaction, nextState = r.state, correction = null;
+  if (verified) {
+    const oldEntries = state.entries.filter((e) => e.transaction_id === old.id);
+    if (old.date === r.transaction.date && legs(oldEntries) === legs(r.entries)) {   // the same money: leave the verified entry alone
+      transaction = old;
+      nextState = { ...r.state, transactions: [...state.transactions.filter((t) => !drafts.has(t.id))], entries: state.entries.filter((e) => !drafts.has(e.transaction_id)) };
+      r = { ...r, transaction: old, entries: oldEntries };
+    } else {
+      const n = state.transactions.filter((t) => t.id.startsWith("pay:" + id + ":")).length + 1, newId = "pay:" + id + ":" + n;
+      const again = planPayslip(without, { ...input, id, transaction_id: newId }, now);   // `without` still holds the old pay entry (only its drafts were taken out)
+      if (!again.ok) return again;
+      correction = reversalOf(again.state, old, now);
+      if (!correction.ok) return fail("NOT_CORRECTABLE", correction.message);
+      r = again; transaction = r.transaction;
+      nextState = { ...r.state, transactions: [...r.state.transactions, correction.transaction], entries: [...r.state.entries, ...correction.entries],
+        attachments: (r.state.attachments ?? []).map((a) => (a.transaction_id === old.id ? { ...a, transaction_id: newId } : a)) };   // the photo follows the payslip to its new pay entry
+    }
+  }
   // Remember the old figures when the new save really changes them (saving the same figures again leaves no entry).
   const oldLines = linesOf(state, id).map(({ side, kind, amount, earned_month }) => ({ side, kind, amount, ...(earned_month ? { earned_month } : {}) }));
   const figures = (x, lines) => JSON.stringify([x.employer, x.period_from, x.period_to, x.pay_date, x.printed_gross, x.printed_net, x.deposit, x.printed_deductions ?? null,
@@ -304,8 +337,8 @@ export function updatePayslip(state, id, input, now = new Date()) {
     ...(oldItems.length ? { items: oldItems } : {}) };
   const bad = changed ? validateShape("PayslipRevision", revision) : [];
   if (bad.length) return fail("BAD_REVISION", bad[0].message);
-  return { ...r, transaction, draftsRemoved: drafts.size, photoIds: (state.attachments ?? []).filter((a) => dropped.has(a.transaction_id)).map((a) => a.id),
-    state: { ...r.state, transactions: r.state.transactions.map((t) => (t.id === transaction.id ? transaction : t)), ...(changed ? { payslipRevisions: [...(state.payslipRevisions ?? []), revision] } : {}) } };
+  return { ...r, transaction, draftsRemoved: drafts.size, photoIds: (state.attachments ?? []).filter((a) => dropped.has(a.transaction_id)).map((a) => a.id), correction: correction?.transaction ?? null,
+    state: { ...nextState, transactions: nextState.transactions.map((t) => (t.id === transaction.id ? transaction : t)), ...(changed ? { payslipRevisions: [...(state.payslipRevisions ?? []), revision] } : {}) } };
 }
 
 // Printed lines for a payslip saved before every printed line was kept (owner, Oct 31): the lines are read again from the paper (or typed) and must
@@ -381,10 +414,10 @@ export function missingPayPeriods(state, range, today) {
 // under an income category, by the day they arrived, one row per transaction. They count in every Income total, so they are listed to be seen.
 export function incomeWithoutPayslip(state, { from, to }) {
   const income = new Set(state.categories.filter((c) => c.kind === "income").map((c) => c.id));
-  const slipTx = new Set((state.payslips ?? []).map((p) => p.transaction_id));
+  const slipTx = new Set((state.payslips ?? []).map((p) => p.transaction_id)), cancelled = reversedIds(state);
   const rows = [];
   for (const t of state.transactions) {
-    if (t.status !== "verified" || slipTx.has(t.id) || t.date < from || t.date > to) continue;
+    if (t.status !== "verified" || slipTx.has(t.id) || t.reverses != null || cancelled.has(t.id) || t.date < from || t.date > to) continue;   // a cancelled entry and its cancelling entry are not listed
     const mine = state.entries.filter((e) => e.transaction_id === t.id), amount = -mine.filter((e) => e.category_id != null && income.has(e.category_id)).reduce((n, e) => n + e.amount, 0);
     if (amount === 0) continue;
     rows.push({ transaction_id: t.id, date: t.date, payee: t.payee, amount, account_id: mine.find((e) => e.account_id != null)?.account_id ?? null });
@@ -392,31 +425,47 @@ export function incomeWithoutPayslip(state, { from, to }) {
   return rows.sort((a, b) => a.date.localeCompare(b.date) || a.transaction_id.localeCompare(b.transaction_id));
 }
 
-// Removes one income entry that has no payslip (a stray or double one): the transaction, its entries and its photo link. The money also
-// leaves the account it was added to. A payslip's own pay, or anything that is not plain income, is refused (use the payslip's Remove).
-// Returns {ok, state, photoIds} or {ok: false, error}.
-export function removeIncomeEntry(state, id) {
+// Removes one income entry that has no payslip (a stray or double one). A verified entry is never deleted: it is CANCELLED by a correction, so it stays in the
+// history with its cancelling entry beside it and the money leaves the account again. A payslip's own pay, or anything that is not plain income, is refused (use
+// the payslip's Remove). Returns {ok, state, photoIds} or {ok: false, error}; the photo stays with the cancelled entry, so photoIds is empty.
+export function removeIncomeEntry(state, id, now = new Date()) {
   const t = state.transactions.find((x) => x.id === id);
   if (!t) return { ok: false, error: "That entry is no longer there." };
   if ((state.payslips ?? []).some((p) => p.transaction_id === id)) return { ok: false, error: "That is a payslip's pay. Remove the payslip instead." };
   const income = new Set(state.categories.filter((c) => c.kind === "income").map((c) => c.id)), mine = state.entries.filter((e) => e.transaction_id === id);
   if (!mine.some((e) => e.category_id != null && income.has(e.category_id)) || mine.some((e) => e.category_id != null && !income.has(e.category_id))) return { ok: false, error: "That is not a plain income entry." };
-  return { ok: true, photoIds: (state.attachments ?? []).filter((a) => a.transaction_id === id).map((a) => a.id),
-    state: { ...state, transactions: state.transactions.filter((x) => x.id !== id), entries: state.entries.filter((e) => e.transaction_id !== id), attachments: (state.attachments ?? []).filter((a) => a.transaction_id !== id) } };
+  if (reversedIds(state).has(id)) return { ok: false, error: "That entry was already removed." };
+  if (t.status !== "verified") {   // a draft was never final: it may simply go
+    return { ok: true, photoIds: (state.attachments ?? []).filter((a) => a.transaction_id === id).map((a) => a.id),
+      state: { ...state, transactions: state.transactions.filter((x) => x.id !== id), entries: state.entries.filter((e) => e.transaction_id !== id), attachments: (state.attachments ?? []).filter((a) => a.transaction_id !== id) } };
+  }
+  const c = reversalOf(state, t, now);
+  if (!c.ok) return { ok: false, error: c.message };
+  return { ok: true, photoIds: [], state: { ...state, transactions: [...state.transactions, c.transaction], entries: [...state.entries, ...c.entries] } };
 }
 
-// Removes a payslip: its lines, the pay it recorded (the transaction, its entries and its photo link), and any overtime transfer still
-// waiting as a draft. An overtime transfer already verified stays (it is real money that moved); `keptTransfers` says how many.
-// Returns {ok, state, photoIds, keptTransfers}; photoIds are the picture files the caller deletes.
-export function deletePayslip(state, id) {
+// Removes a payslip. Its pay entry is verified money in, so it is never deleted: it is CANCELLED by a correction (the entry and its cancelling entry stay in the
+// history, the money leaves the account again) and the payslip no longer counts anywhere. A payslip that waits as a draft was never final and is deleted as before,
+// with its pay entry and photo link. Any overtime transfer still waiting as a draft is dropped; one already verified stays (real money that moved): `keptTransfers`.
+// Returns {ok, state, photoIds, keptTransfers}; photoIds are the picture files of dropped drafts, for the caller to delete.
+export function deletePayslip(state, id, now = new Date()) {
   const p = (state.payslips ?? []).find((x) => x.id === id);
   if (!p) return { ok: false, error: "That payslip is no longer there." };
   const side = ["ot-" + id, "otf-" + id], drafts = new Set(state.transactions.filter((t) => side.includes(t.id) && t.status === "draft").map((t) => t.id));
+  const pay = state.transactions.find((t) => t.id === p.transaction_id), keptTransfers = state.transactions.filter((t) => side.includes(t.id) && t.status !== "draft").length;
+  if (pay && pay.status === "verified") {
+    if (slipCancelled(state, p)) return { ok: false, error: "That payslip was already removed." };
+    const c = reversalOf(state, pay, now);
+    if (!c.ok) return { ok: false, error: c.message };
+    return { ok: true, keptTransfers, photoIds: (state.attachments ?? []).filter((a) => drafts.has(a.transaction_id)).map((a) => a.id),
+      state: { ...state, transactions: [...state.transactions.filter((t) => !drafts.has(t.id)), c.transaction], entries: [...state.entries.filter((e) => !drafts.has(e.transaction_id)), ...c.entries],
+        attachments: (state.attachments ?? []).filter((a) => !drafts.has(a.transaction_id)) } };
+  }
   const gone = new Set([p.transaction_id, ...drafts]);
   return {
     ok: true,
     photoIds: (state.attachments ?? []).filter((a) => gone.has(a.transaction_id)).map((a) => a.id),
-    keptTransfers: state.transactions.filter((t) => side.includes(t.id) && t.status !== "draft").length,
+    keptTransfers,
     state: { ...state, payslips: state.payslips.filter((x) => x.id !== id), payslipLines: (state.payslipLines ?? []).filter((l) => l.payslip_id !== id),
       ...(state.payslipRevisions ? { payslipRevisions: state.payslipRevisions.filter((x) => x.payslip_id !== id) } : {}),
       ...(state.payslipItems ? { payslipItems: state.payslipItems.filter((x) => x.payslip_id !== id) } : {}), ...(state.payslipItemChanges ? { payslipItemChanges: state.payslipItemChanges.filter((x) => x.payslip_id !== id) } : {}),
@@ -426,7 +475,7 @@ export function deletePayslip(state, id) {
 
 // Payslips from the SAME employer for the SAME period as `input` (another employer's payslip for those days is a second source of income, not a repeat).
 // Used for a soft warning while the window is open: it never blocks saving. `exceptId` leaves out the payslip being changed.
-export const samePeriodPayslips = (state, input, exceptId = null) => (state.payslips ?? []).filter((p) => p.id !== exceptId && sameEmployer(p.employer, input.employer) && p.period_from === input.period_from && p.period_to === input.period_to);
+export const samePeriodPayslips = (state, input, exceptId = null) => (state.payslips ?? []).filter((p) => p.id !== exceptId && !slipCancelled(state, p) && sameEmployer(p.employer, input.employer) && p.period_from === input.period_from && p.period_to === input.period_to);
 
 // The owner compared a payslip saved under older rules with the paper and it is right: it carries the current version without being retyped.
 export function markPayslipChecked(state, id) {
