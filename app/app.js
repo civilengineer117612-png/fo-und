@@ -88,7 +88,7 @@ function clipFor(id) {
       if (e && st?.target > 0) goal = { name: e.name, balance: st.balance, target: st.target, ef: true, months: st.months, account: ea ? { name: ea.name, picture: iconOf(ea, 20) } : null };
     }
   }
-  return M.howtoClip(id, { date: longDate(today()), tiles, account: a ? { name: a.name, picture: iconOf(a, 20) } : null, total: M.dayTotal(S(), today()).total, budget, trips, goal, accounts, months, schedules });
+  return M.howtoClip(id, { date: longDate(today()), tiles, account: a ? { name: a.name, picture: iconOf(a, 20) } : null, total: M.dayTotal(S(), today()).verified, budget, trips, goal, accounts, months, schedules });
 }
 const REQ = ' <span class="req" aria-hidden="true">*</span>';   // marks what is needed before an entry can be saved (ink colour, never red)
 // ---------- The Pay plan form: one payday at a time, a thin bar for each line ----------
@@ -430,26 +430,29 @@ function renderScreen() {
 function dayCard() {
   const picked = ui.dayPick && ui.dayPick !== today() ? ui.dayPick : null;
   const d = M.dayTotal(S(), picked ?? today());
-  const words = (picked ? longDate(picked) : "Today") + " " + peso(d.total) + (d.drafts ? ", including " + d.drafts + " not yet verified" : "");
+  const words = (picked ? longDate(picked) : "Today") + " " + peso(d.verified) + (d.drafts ? ". " + peso(d.draft) + " more is waiting in Verify" : "");
   // One quiet link at a time: "Select date" on today; on another day the date itself (tap it to pick another) and a single "Today".
-  return `<p class="spentlabel" aria-hidden="true">${picked ? "Spent that day" : "Spent today"}</p><div class="daytotal" role="status" aria-label="${esc(words)}">${peso(d.total)}</div>
+  return `<p class="spentlabel" aria-hidden="true">${picked ? "Spent that day" : "Spent today"}</p><div class="daytotal" role="status" aria-label="${esc(words)}">${peso(d.verified)}</div>
+    ${waitingLine(d.draft, d.drafts)}
     ${picked ? `<p class="center daycap"><button class="daycapbtn datelink" data-action="open-cal" aria-label="${esc(longDate(picked))}, tap to choose another day">${esc(longDate(picked))}</button></p>
     <p class="note center small">New entries go on this day.</p>
     <p class="center"><button class="link" data-action="reset-day">Today</button></p>`
     : `<p class="changedate"><button class="link datelink" data-action="open-cal">Select date</button></p>`}`;
 }
 
+// Spent today and This month count VERIFIED entries only (owner, Oct 31); what still waits in Verify is shown apart, in the same words on both.
+const waitingLine = (amount, count) => (count ? `<p class="note center small waiting"><button class="link" data-action="tab" data-tab="verify">+ ${peso(amount)} waiting in Verify</button></p>` : "");
 // This month at a glance on Log: verified spending against the month's budgets, one bar, the figure at its tip. Tap it for what you spent this month, by category (owner, Oct 20).
 function monthGlance() {
-  const month = M.monthOf(today()), spent = Math.max(0, M.spendingByCategory(S(), { month }).total);
+  const month = M.monthOf(today()), report = M.spendingByCategory(S(), { month }), spent = Math.max(0, report.total), waiting = report.pending;
   const budget = expenseCategories().filter((c) => c.id !== M.UNLOGGED_CATEGORY_ID).reduce((n, c) => n + (M.budgetFor(S().rules, c.id, month) ?? 0), 0);
   const t = budget > 0 ? M.tenths(spent, budget) : null, w = t === null ? 0 : Math.min(100, t / 10);
   const words = budget > 0 ? (spent > budget ? `Over the month's budget by ${peso(spent - budget)}` : `${peso(budget - spent)} left of ${peso(budget)}, ${M.showTenths(t)} used`) : "No budget set yet";
   // The bar is the message; the only words under it are for the one case that needs them (over, with its shape).
-  return `<button class="monthcard" id="glance" data-action="tab" data-tab="money" aria-label="This month: ${esc(peso(spent))} spent. ${esc(words)}. Tap to see where it went.">
+  return `<button class="monthcard" id="glance" data-action="tab" data-tab="money" aria-label="This month: ${esc(peso(spent))} spent. ${esc(words)}.${waiting ? " " + esc(peso(waiting)) + " more is waiting in Verify." : ""} Tap to see where it went.">
     <span class="mc-top"><span>This month</span><b>${peso(spent)}</b></span>
     ${budget > 0 ? `<span class="bar" aria-hidden="true"><span style="width:${w}%"></span></span>` : ""}
-    ${budget > 0 && spent > budget ? `<span class="mc-sub">${glyph("critical")} ${esc(words)}</span>` : ""}</button>`;
+    ${waiting > 0 ? `<span class="mc-sub mc-wait">+ ${peso(waiting)} waiting in Verify</span>` : ""}${budget > 0 && spent > budget ? `<span class="mc-sub">${glyph("critical")} ${esc(words)}</span>` : ""}</button>`;
 }
 
 // The day's entries stay out of sight until you tap the heading (less on the screen, nothing to scroll past). The choice is kept until the app is closed.
