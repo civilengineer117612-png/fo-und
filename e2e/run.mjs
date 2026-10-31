@@ -2664,7 +2664,7 @@ console.log("Pictures file");
     await gone();
     await menuGo(page, "Setup"); await page.click('button[data-action="open-restore"][data-all="1"]');
     await page.setInputFiles("#r-file", [oldLedger, oldPics]); await page.fill("#r-pass", PW); await page.click("#f-save");
-    check(await seen(page, "#sheet", "Replace this phone's data?") && (await text(page, "#sheet")).includes("1 picture missing here will be put back, from 1 file"), "an older ledger file with its pictures file still opens, as before");
+    check(await seen(page, "#sheet", "Replace this phone's data?") && /1 picture missing here will be put back\s+from 1 file/.test(await text(page, "#sheet")), "an older ledger file with its pictures file still opens, as before");
     await page.click("#f-save"); await page.click("#f-save");
     check(await picSize() === madeBoth, "and puts the picture back");
     await gotIt();
@@ -2683,7 +2683,7 @@ console.log("Pictures file");
     check(await seen(page, "#f-msg", "These files are from different backups"), "parts of two different backups are refused");
     check(await page.locator('#f-save[data-action="open-backup-file"]').count() === 1 && await idb(async (db) => { const b = await new Promise((res) => { const q = db.transaction("photos").objectStore("photos").get("pic-a"); q.onsuccess = () => res(q.result); }); return b ? b.size : null; }) === null, "nothing was restored: the window is still on Open the backup and no picture came back");
     await page.setInputFiles("#r-file", setA.slice().reverse()); await page.click("#f-save");
-    check(await seen(page, "#sheet", "Replace this phone's data?") && (await text(page, "#sheet")).includes("1 picture missing here will be put back, from all 4 parts"), "all the parts, chosen in any order, open together");
+    check(await seen(page, "#sheet", "Replace this phone's data?") && /1 picture missing here will be put back\s+from all 4 parts/.test(await text(page, "#sheet")), "all the parts, chosen in any order, open together");
     await page.click("#f-save"); await page.click("#f-save");
     check(await picSize() === madeBoth, "and the picture comes back");
   }
