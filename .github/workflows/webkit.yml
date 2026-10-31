@@ -36,6 +36,7 @@ jobs:
         run: |
           status=0
           : > e2e-webkit.log
+          node e2e/engine-probe.mjs 2>&1 | tee -a e2e-webkit.log   # facts about the engine itself, before any check
           for script in pdf-scan spending-details payslip-items ledger-check run; do
             echo "##### e2e/${script}.mjs" | tee -a e2e-webkit.log
             start=$(date +%s)
@@ -56,7 +57,7 @@ jobs:
           {
             echo "### e2e-webkit: ${passed} checks passed, ${failed} failed, ${skipped} skipped, ${crashed} script(s) stopped early"
             echo '```'
-            grep -E '^(##### |  FAIL |  skip )' e2e-webkit.log
+            grep -E '^(probe: |##### |  FAIL |  skip )' e2e-webkit.log
             echo '```'
             echo "First lines of each script's error (a script stops at its first step that throws):"
             echo '```'
