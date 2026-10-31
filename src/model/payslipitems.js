@@ -38,6 +38,7 @@ export const itemFlags = (label) => ({
 // The reader may pre-select Overtime ONLY for the exact whole label "Overtime" or "OT"; saving the payslip confirms it. "OT Premium" and "Hot meal" never do.
 export const suggestOvertime = (label) => /^\s*(?:overtime|ot)\s*$/i.test(label ?? "");
 // Likewise "Basic Salary" and "Basic Pay" are shown as "Basic pay (suggested)". Nothing else is suggested.
+export const suggestBonus = (label) => /^\s*(?:13th\s+month|bonus)\s*$/i.test(label ?? "");
 export const suggestBasic = (label) => /^\s*basic\s+(?:salary|pay)\s*$/i.test(label ?? "");
 // A category chosen without a tap, only for a strong match on a deduction or employer line. A loan, advance or amortization is a loan repayment first.
 export function strongCategory(section, label) {
@@ -72,6 +73,7 @@ export function draftItem({ section, label, amount, hours, employer, settings })
   const remembered = rememberedCategory(settings, employer, section, label);
   if (remembered) { item.category = remembered; item.via = "remembered"; }
   else if (section === "earning" && suggestBasic(label)) { item.category = "salary"; item.via = "suggested"; }
+  else if (section === "earning" && suggestBonus(label)) { item.category = "bonus"; item.via = "suggested"; }
   else { const strong = strongCategory(section, label); if (strong) { item.category = strong; item.via = "auto"; } }
   if (section === "earning" && suggestOvertime(label)) { item.overtime = true; item.via_overtime = "suggested"; }
   return item;

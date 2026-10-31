@@ -213,6 +213,14 @@ test("NON-RECURRING INCOME: a line categorised as overtime, holiday and night pa
   assert.equal(M.baseIncome(mk(plain)).amount, 1600000);
 });
 
+test("NON-RECURRING INCOME: an uncategorised line counts in the base only when its label was on 2 of the last 3 payslips from that employer", () => {
+  const slip = (s, id, date, extra) => { const items = [["earning", "Basic Salary", 1000000, { category: "salary" }], ...extra, ["deduction", "SSS", 200000]].map(([section, label, amount, o]) => { const { via, via_overtime, ...d } = { ...M.draftItem({ section, label, amount, employer: "Co", settings: {} }), ...o }; return d; });
+    const gross = items.filter((i) => i.section === "earning").reduce((a, i) => a + i.amount, 0), r = M.planPayslip(s, { id, transaction_id: "tx" + id, employer: "Co", period_from: date, period_to: date, pay_date: date, account_id: "chk", printed_gross: gross, printed_net: gross - 200000, deposit: gross - 200000, period_type: "Bi-Week", items }, NOW); assert.ok(r.ok, JSON.stringify(r.violations)); return r.state; };
+  const mk = (awards) => { let s = slip(ledger(), "r0", "2026-08-07", []); s = slip(s, "r1", "2026-08-21", awards ? [["earning", "Spot Award", 900000]] : []); return slip(s, "r2", "2026-09-04", awards ? [["earning", "Team Prize", 900000]] : []); };
+  assert.equal(M.baseIncome(mk(true)).amount, M.baseIncome(mk(false)).amount, "two different one-off awards do not move the base");
+  assert.equal(M.netPerPayday(mk(true)).at(-1).parts[0].why, "one_off");
+});
+
 test("MATERIALITY IS NOT USED: a count that is one centavo off is a gap to explain, not a rounding", () => {
   const s = ledger(), p = M.planCheckIn(s, { id: "c", transaction_id: "ck", date: "2026-10-13", account_id: "chk", counted_balance: balanceOf(s, "chk") - 1, unlogged_category_id: UL, why: "later" }, NOW);
   assert.ok(p.transaction, "a gap of one centavo is recorded");

@@ -7,7 +7,7 @@ import { checkTransactionSave } from "./index.js";
 import { planOvertimeTransfer, splitOvertime } from "./goals.js";
 import { wordsToCentavos } from "./scan.js";
 import { monthOf } from "./reports.js";
-import { stableOf } from "./stablepay.js";
+import { stableOf, recurringLabels, RECURRENCE_WINDOW } from "./stablepay.js";
 import { storedItems, checkItems, linesFromItems, itemsOf, categoryOf, categoryName, FALLBACK, EARNING_CATEGORIES, DEDUCTION_CATEGORIES } from "./payslipitems.js";
 
 export const EARNINGS = [["basic", "Basic salary"], ["rice", "Rice subsidy"], ["skills", "Skills allowance"], ["clothing", "Clothing allowance"],
@@ -241,8 +241,12 @@ export function incomeByMonth(state, year) {
 
 // One row per payslip in the year, oldest first: what arrived, split into base and overtime.
 export function netPerPayday(state, range) {
-  return liveSlips(state).filter((p) => inRange(range, p)).sort((a, b) => a.pay_date.localeCompare(b.pay_date) || a.id.localeCompare(b.id)).map((p) => {
-    const lines = linesOf(state, p.id), t = payslipTotals(lines), overtime = Math.min(t.overtime, p.deposit), s = stableOf({ deposit: p.deposit, items: itemsOf(state, p.id), lines });
+  const all = liveSlips(state).sort((a, b) => a.pay_date.localeCompare(b.pay_date) || a.id.localeCompare(b.id));
+  return all.filter((p) => inRange(range, p)).map((p) => {
+    const lines = linesOf(state, p.id), t = payslipTotals(lines), overtime = Math.min(t.overtime, p.deposit);
+    // A line with no category is pay you can rely on only if its label was on 2 of the last 3 payslips from this employer, this one included (stablepay.js).
+    const window = all.slice(0, all.indexOf(p) + 1).filter((q) => sameEmployer(q.employer, p.employer)).slice(-RECURRENCE_WINDOW).map((q) => itemsOf(state, q.id));
+    const s = stableOf({ deposit: p.deposit, items: itemsOf(state, p.id), lines, recurring: recurringLabels(window) });
     // `base` (deposit less overtime) is what the Income tables show; `stable` (deposit less every variable line) is what the budget counts on (stablepay.js).
     return { payslip_id: p.id, date: p.pay_date, employer: p.employer, net: p.deposit, overtime, base: p.deposit - overtime, stable: s.stable, variable: s.variable, parts: s.parts, period_type: p.period_type ?? "" };
   });

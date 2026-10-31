@@ -81,8 +81,10 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 - **Rule.** One-off or variable income (back pay, holiday and night pay, overtime, bonus, 13th month, an extra payday) is kept apart from recurring income
   and never lifts the base used for budgets.
 - **In the app.** The budget's base income counts stable pay (`stableOf`): the deposit minus the variable lines. A third payday in a month is an extra
-  payday and is left out.
-- **Guarded by.** "NON-RECURRING INCOME", `tests/stablepay.test.js`.
+  payday and is left out. An earnings line with no category counts only when a line with the same label (case and spacing ignored) was on at least 2 of the last
+  3 payslips from that employer, this one included (`recurringLabels`); otherwise it is one-off. A category the owner chose decides instead. The exact labels
+  "13th month" and "Bonus" are suggested as Bonus and 13th month.
+- **Guarded by.** "NON-RECURRING INCOME" (twice), `tests/stablepay.test.js`, `tests/nonrecurring.test.js`.
 
 ### 10. Consistency and presentation
 - **Rule.** One definition per figure, used on every screen. Two screens that show the same thing for the same period show the same number.
@@ -113,5 +115,4 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 
 ## Known gaps (found by the audit, each fixed in its own change; remove a line when it is fixed)
 These are the places where the app does not yet meet a principle above. Each has its own fix task and its own audit test.
-- Non-recurring: an uncategorised bonus or 13th month line stays in the base.
 - Presentation: Spent today includes drafts and This month does not; "Unlogged by week" counts held gaps; `homeSummary` is unused and disagrees.

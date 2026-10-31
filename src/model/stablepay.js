@@ -6,21 +6,33 @@
 // Pure functions. No colour, no screen.
 
 export const VARIABLE_CATEGORIES = ["overtime", "holiday_night", "bonus"];
-const WHY = { overtime: "Overtime", holiday_night: "Holiday and night pay", bonus: "Bonus and 13th month", back_pay: "Back pay" };
+const WHY = { overtime: "Overtime", holiday_night: "Holiday and night pay", bonus: "Bonus and 13th month", back_pay: "Back pay", one_off: "One-off earnings" };
+
+export const labelKey = (label) => String(label ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+// A line with no category the owner chose counts as pay you can rely on only when the same label was on at least 2 of the last 3 payslips from that employer
+// (this one included). `recurring` is that test for one label; without it (no history to look at) an uncategorised line is left in the base, as before.
+export const RECURRENCE_MIN = 2, RECURRENCE_WINDOW = 3;
+export function recurringLabels(window) {
+  const seen = new Map();
+  for (const items of window) for (const k of new Set((items ?? []).filter((i) => i.section === "earning").map((i) => labelKey(i.label)))) seen.set(k, (seen.get(k) ?? 0) + 1);
+  return (label) => (seen.get(labelKey(label)) ?? 0) >= RECURRENCE_MIN;
+}
 
 // The variable earnings lines of a payslip's printed items: [{label, amount, why}]. A 0.00 line adds nothing, so it is not listed.
-export function variableParts(items) {
+// The owner's category decides when there is one (Allowances stay in, Bonus stays out); only a line with none asks `recurring`.
+export function variableParts(items, recurring) {
   return (items ?? []).filter((i) => i.section === "earning" && i.amount > 0).flatMap((i) => {
-    const why = i.back_pay === true ? "back_pay" : i.overtime === true ? "overtime" : VARIABLE_CATEGORIES.includes(i.category) ? i.category : null;
+    const uncategorised = !i.category || i.category === "other_earning";
+    const why = i.back_pay === true ? "back_pay" : i.overtime === true ? "overtime" : VARIABLE_CATEGORIES.includes(i.category) ? i.category : recurring && uncategorised && !recurring(i.label) ? "one_off" : null;
     return why ? [{ label: i.label, amount: i.amount, why, name: WHY[why] }] : [];
   });
 }
 
 // {stable, variable, parts, source}: `source` is "items" when the printed lines were read, "lines" for an old payslip (only its overtime is known).
 // The variable part never goes above what arrived, so stable pay is never negative.
-export function stableOf({ deposit, items, lines }) {
+export function stableOf({ deposit, items, lines, recurring }) {
   if ((items ?? []).length) {
-    const parts = variableParts(items), variable = Math.min(parts.reduce((n, p) => n + p.amount, 0), deposit);
+    const parts = variableParts(items, recurring), variable = Math.min(parts.reduce((n, p) => n + p.amount, 0), deposit);
     return { stable: deposit - variable, variable, parts, source: "items" };
   }
   const ot = (lines ?? []).filter((l) => l.side === "earning" && l.kind === "overtime").reduce((n, l) => n + l.amount, 0), variable = Math.min(ot, deposit);
