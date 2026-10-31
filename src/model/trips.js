@@ -9,6 +9,7 @@
 //   - Only expense categories count: income and transfers are not trip spending.
 import { budgetGrade } from "./budget.js";
 import { reportingCategory } from "./rules.js";
+import { heldIds } from "./held.js";
 import { validateShape } from "./schema.js";
 import { isPhDate } from "./util.js";
 
@@ -70,8 +71,9 @@ export function tripMembership(state) {
   const tags = state.tags ?? [], byId = new Map(tags.map((t) => [t.id, t])), dated = tags.filter((t) => t.start && t.end);
   const spendCats = new Set(state.categories.filter((c) => c.kind === "expense").map((c) => c.id));
   const spends = new Set(state.entries.filter((e) => e.category_id != null && spendCats.has(e.category_id)).map((e) => e.transaction_id));
-  const out = new Map();
+  const out = new Map(), held = heldIds(state);   // a gap not yet explained (and the entry that cancels it) is never on a trip: it is not spending
   for (const t of state.transactions) {
+    if (held.has(t.id)) continue;
     if (t.trip_add && byId.has(t.trip_add)) { out.set(t.id, { tag_id: t.trip_add, how: "hand" }); continue; }
     if (!spends.has(t.id) || AUTO_TAG_SKIPS.includes(t.source)) continue;
     const trip = dated.find((x) => t.date >= x.start && t.date <= x.end);

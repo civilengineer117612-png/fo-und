@@ -31,12 +31,32 @@ export function unexplainedGaps(state, { from = "0000-01-01", to = "9999-12-31",
   return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.transaction_id < b.transaction_id ? -1 : 1));
 }
 
+// Gaps that are NOT held but were booked as spending ("I spent some of it": a plain count whose missing money went to Unlogged). They are real spending today, so they are
+// not in "Not yet explained"; but the real charge, when it is logged, is the same money, so it is matched with them too (docs/ACCOUNTING.md principle 5: match before you record).
+// The same shape as unexplainedGaps rows, "short" only. A cancelled count, and a count that cancels another, are never listed.
+export function spentGaps(state, { from = "0000-01-01", to = "9999-12-31", unlogged_category_id } = {}) {
+  const cancelled = new Set(state.transactions.filter((t) => t.reverses != null).map((t) => t.reverses));
+  const byTx = new Map();
+  for (const e of state.entries) { const l = byTx.get(e.transaction_id) ?? []; l.push(e); byTx.set(e.transaction_id, l); }
+  const out = [];
+  for (const t of state.transactions) {
+    if (t.adjustment || t.reverses != null || !isCountGap(t) || t.status !== "verified" || cancelled.has(t.id) || t.date < from || t.date > to) continue;
+    const es = byTx.get(t.id) ?? [];
+    const side = es.find((e) => e.category_id != null && (unlogged_category_id == null || e.category_id === unlogged_category_id)), acct = es.find((e) => e.account_id != null);
+    if (!side || !acct || side.amount <= 0) continue;
+    out.push({ transaction_id: t.id, account_id: acct.account_id, date: t.date, kind: "short", amount: side.amount });
+  }
+  return out;
+}
+// Every gap a new entry can explain: the held ones and the ones booked as spending.
+export const explainableGaps = (state, opts = {}) => [...unexplainedGaps(state, opts), ...spentGaps(state, opts)];
+
 // A newly logged entry that is exactly an open gap: same account, same amount, dated in the 7 days up to the day of that check-in (the check-in's period).
-// Only money that LEFT can be explained by an entry, so only "short" gaps. Returns the gap to offer ("This explains the gap"), the closest date first, or null.
+// Only money that LEFT can be explained by an entry, so only "short" gaps, held or booked as spending. Returns the gap to offer ("This explains the gap"), the closest date first, or null.
 export const GAP_DAYS = 7;
 const dayMs = 86400000, dayNum = (d) => Math.floor(Date.parse(d + "T00:00:00Z") / dayMs);
 export function findOpenGap(state, { account_id, amount, date, exclude_id, unlogged_category_id }) {
-  const gaps = unexplainedGaps(state, { unlogged_category_id }).filter((g) => g.kind === "short" && g.account_id === account_id && g.amount === amount && g.transaction_id !== exclude_id
+  const gaps = explainableGaps(state, { unlogged_category_id }).filter((g) => g.kind === "short" && g.account_id === account_id && g.amount === amount && g.transaction_id !== exclude_id
     && dayNum(date) <= dayNum(g.date) && dayNum(date) > dayNum(g.date) - GAP_DAYS);
   return gaps.sort((a, b) => Math.abs(dayNum(a.date) - dayNum(date)) - Math.abs(dayNum(b.date) - dayNum(date)))[0] ?? null;
 }

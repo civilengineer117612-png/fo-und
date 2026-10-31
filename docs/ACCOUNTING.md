@@ -42,14 +42,15 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 - **In the app.** "Not yet explained": a weekly count with a gap that the owner did not explain is flagged `adjustment`; the balance is corrected but the
   gap is held (`heldIds`). It is cleared by a move, by money received, or by the entry that explains it ("This explains the gap"). The cancelling entry
   is held too.
-- **Guarded by.** "SUSPENSE" (Category, This month, Accounts, Spent today, the Trends line, Who, the entries behind a Category row, and the suggestion).
+- **Guarded by.** "SUSPENSE" (Category, This month, Accounts, Spent today, the Trends line, Who, the entries behind a Category row, the Budget view, trips and the suggestion), `tests/suspense.test.js`.
 
 ### 5. Reconciliation
 - **Rule.** Counted money is compared with the ledger. A difference is one of: a missing entry, a transfer, timing (a pending card charge), or an error.
   Match before you record.
 - **In the app.** The weekly count; a card is counted on what the bank posted or on all you owe; a short and an equal extra between your own accounts
-  become one proposed move; a gap is never guessed.
-- **Guarded by.** `tests/checkin.test.js`, `tests/checkin-gaps.test.js`, `tests/gapmatch.test.js`, `tests/countwhy.test.js`; "MATERIALITY IS NOT USED".
+  become one proposed move; a gap is never guessed. A real charge of exactly the missing amount, on that account, in that check-in's week, is offered the gap
+  ("This explains the gap"), whether the gap is held or was booked as "I spent some of it": the gap is cancelled and the money counts once, in the charge.
+- **Guarded by.** `tests/checkin.test.js`, `tests/checkin-gaps.test.js`, `tests/gapmatch.test.js`, `tests/countwhy.test.js`, `tests/suspense.test.js`; "RECONCILIATION", "MATERIALITY IS NOT USED".
 
 ### 6. Classification
 - **Rule.** Every entry is classed once: income, expense, transfer, card payment. The employer's share of a payslip is shown and never reduces net pay.
@@ -109,7 +110,6 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 
 ## Known gaps (found by the audit, each fixed in its own change; remove a line when it is fixed)
 These are the places where the app does not yet meet a principle above. Each has its own fix task and its own audit test.
-- Suspense: "I spent some of it" books the gap as spending, and a later real charge counts again; the Budget view and trip totals still include held gaps.
 - Recognition: a refund is saved as income.
 - Cutoff: payslip income is counted in the month the pay period ended.
 - Non-recurring: an uncategorised bonus or 13th month line stays in the base.

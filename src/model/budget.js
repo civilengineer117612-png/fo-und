@@ -6,6 +6,7 @@
 //     run), so a merge also regroups earlier history (Option A).
 //   - Over-budget is shown plainly as a negative `remaining`; nothing here blocks.
 import { ruleInEffect, reportingCategory } from "./rules.js";
+import { heldIds } from "./held.js";
 import { countsTowardBudget } from "./invariants.js";
 import { checkRulesSave } from "./index.js";
 import { addMonths } from "./reports.js";
@@ -18,6 +19,7 @@ const inMonth = (date, month) => date >= month + "-01" && date <= month + "-31";
 export function budgetStatus(state, { rules, categoryMaps = [], month, asOf }) {
   const txById = new Map(state.transactions.map((t) => [t.id, t]));
   const expense = new Set(state.categories.filter((c) => c.kind === "expense").map((c) => c.id));
+  const held = heldIds(state);   // "Not yet explained" (and the entry that cancels it) is not spending, up or down
   const rows = new Map();
   const row = (id) => {
     if (!rows.has(id)) rows.set(id, { category_id: id, budget: null, spent: 0, pending: 0 });
@@ -27,7 +29,7 @@ export function budgetStatus(state, { rules, categoryMaps = [], month, asOf }) {
   for (const e of state.entries) {
     if (e.category_id == null || !expense.has(e.category_id)) continue;
     const t = txById.get(e.transaction_id);
-    if (!t || !inMonth(t.date, month)) continue;
+    if (!t || held.has(t.id) || !inMonth(t.date, month)) continue;
     const r = row(reportingCategory(categoryMaps, e.category_id, asOf));
     if (countsTowardBudget(t)) r.spent += e.amount; else r.pending += e.amount;
   }
