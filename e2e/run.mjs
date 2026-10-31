@@ -4,12 +4,12 @@
 import { createRequire } from "node:module";
 import { protectionChecks } from "./protection.mjs";
 import { appLockChecks } from "./applock.mjs";
+import { ENGINE, TOOLS, launchBrowser, skipped } from "./engine.mjs";
 import { execSync } from "node:child_process";
 import { readFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 const require = createRequire(import.meta.url);
-const { chromium } = require(execSync("npm root -g").toString().trim() + "/playwright");
 
 const BASE = process.env.BASE ?? "http://localhost:8124/app/index.html";
 const SHOTS = process.env.SHOTS ?? "";
@@ -30,7 +30,8 @@ const OWNER_STYLE = { v: 6, rev: 1, saved_at: "2026-10-01T08:00:00.000+08:00", s
 
 let failures = 0;
 const check = (cond, label) => { console.log((cond ? "  ok   " : "  FAIL ") + label); if (!cond) failures++; };
-const browser = await chromium.launch();
+const browser = await launchBrowser();
+console.log("Engine: " + ENGINE);
 
 // Every request for a bank logo goes through this, so the network is faked: by default nothing answers.
 let iconServe = (r) => r.abort();
@@ -4705,7 +4706,8 @@ console.log("\n-- Checks screen --");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 await protectionChecks({ browser, base: BASE, open, addAccount, menuGo, check });
-await appLockChecks({ browser, base: BASE, open, menuGo, check, seen, text, stored, OWNER_STYLE, ANDROID });
+if (TOOLS.virtualAuthenticator) await appLockChecks({ browser, base: BASE, open, menuGo, check, seen, text, stored, OWNER_STYLE, ANDROID });
+else skipped("App lock (the virtual Face ID checks)", "Chrome DevTools virtual authenticator (WebAuthn)");
 
 await browser.close();
 console.log(failures ? "\n" + failures + " check(s) FAILED" : "\nAll checks passed");

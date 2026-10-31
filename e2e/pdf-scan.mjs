@@ -1,13 +1,13 @@
 // Serve the repo on port 8124, then node e2e/pdf-scan.mjs. All documents are invented.
 import assert from "node:assert/strict";
+import { launchBrowser, TOOLS, skipped } from "./engine.mjs";
 import { payrollItems, payrollPdf } from "./payroll-table.mjs";
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { emptyLedger, CHANGES, BANKS } from "../src/model/index.js";
 const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE ?? execSync("npm root -g").toString().trim() + "/playwright");
-const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const browser = await launchBrowser();
 const base = process.env.BASE ?? "http://127.0.0.1:8124/app/index.html";
 const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
   userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1" });
@@ -127,15 +127,17 @@ try {
   assert.equal(await page.locator('#p-emp').inputValue(),'Example Employer Ltd');
   // The layout report: one tap copies a skeleton of the PDF's text with every digit as 9 and every word that is not an app heading as x's; the real
   // name, employer and figures never reach the clipboard.
-  await ctx.grantPermissions(['clipboard-read','clipboard-write'], { origin: new URL(base).origin });
-  await page.locator('[data-action="copy-layout"]').click();
-  const copied = await page.evaluate(() => navigator.clipboard.readText());
-  assert.match(copied, /^LAYOUT REPORT/);
-  for (const heading of ['Gross','Summary','Earnings','Distribution','Amount']) assert.ok(copied.includes(heading), heading + ' is kept');
-  for (const secret of ['Example','Person','17,000.00','15,200.00','12,000.00','2,500.00','Jan','2026']) assert.ok(!copied.includes(secret), secret + ' never leaves the phone');
-  const body = copied.split('\n').filter(l => l && !/^(LAYOUT|Page )/.test(l)).map(l => l.replace(/^\d+:\s*/, '').replace(/(^|; )\d+\/\d+ /g, '$1')).join('\n');
-  assert.ok(!/[0-8]/.test(body), 'no digit but 9 in any text');
-  console.log('ok: Copy layout report copies a masked skeleton: headings and positions, no digit or name');
+  if (TOOLS.clipboardPermission) {
+    await ctx.grantPermissions(['clipboard-read','clipboard-write'], { origin: new URL(base).origin });
+    await page.locator('[data-action="copy-layout"]').click();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    assert.match(copied, /^LAYOUT REPORT/);
+    for (const heading of ['Gross','Summary','Earnings','Distribution','Amount']) assert.ok(copied.includes(heading), heading + ' is kept');
+    for (const secret of ['Example','Person','17,000.00','15,200.00','12,000.00','2,500.00','Jan','2026']) assert.ok(!copied.includes(secret), secret + ' never leaves the phone');
+    const body = copied.split('\n').filter(l => l && !/^(LAYOUT|Page )/.test(l)).map(l => l.replace(/^\d+:\s*/, '').replace(/(^|; )\d+\/\d+ /g, '$1')).join('\n');
+    assert.ok(!/[0-8]/.test(body), 'no digit but 9 in any text');
+    console.log('ok: Copy layout report copies a masked skeleton: headings and positions, no digit or name');
+  } else skipped('Copy layout report (the clipboard text)', 'permission to read the clipboard');
   const paid = page.locator('#sheet button[data-id="example-bank"]');
   if (!(await paid.isVisible())) await paid.locator('xpath=ancestor::div[@class="pick"][1]').locator('.pickrow').click();
   await paid.click();
