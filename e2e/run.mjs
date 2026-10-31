@@ -1964,7 +1964,7 @@ console.log("Log date and Cash first");
   const led = JSON.parse((await stored(page)).local);
   check(led.state.transactions.length === 1 && led.state.transactions[0].date === "2026-10-01", "and it is dated that day in the ledger");
   await page.click('button[data-action="reset-day"]');
-  check(/^₱0\.00$/.test((await text(page, ".daytotal")).trim()) && !(await page.locator("#entries-list").textContent()).includes("33.00") && (await page.locator(".note.waiting").count()) === 0, "it is not in today's total or list");
+  check(/^₱0\.00$/.test((await text(page, ".daytotal")).trim()) && ((await page.locator("#entries-list").count()) === 0 || !(await page.locator("#entries-list").textContent()).includes("33.00")) && (await page.locator(".note.waiting").count()) === 0, "it is not in today's total or list");
   check((await text(page, "#glance")).includes("+ ₱33.00 waiting in Verify"), "it is in this month, shown as waiting in Verify (a draft is not counted as spent)");
   await page.click('button:has-text("Add expense")');
   const paidFrom = await page.locator("#sheet .pick").nth(1).locator(".chip").allInnerTexts();
