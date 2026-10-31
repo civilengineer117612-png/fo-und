@@ -130,9 +130,39 @@ try {
     await goIncome(page);
     await page.locator('[data-action="open-payslips"]').click();
     assert.ok((await page.locator("#sheet").innerText()).includes("Original wording not kept"), "an old payslip says so and invents no lines");
-    assert.equal(await page.locator("#sheet details.earlier summary", { hasText: "Printed lines" }).count(), 0, "no printed lines are shown for it");
+    const sheetText = await page.locator("#sheet").innerText();
+    assert.ok(!/Printed lines/.test(sheetText), "the heading Printed lines is nowhere on the list (only the Add the breakdown link)");
+    assert.equal(await page.locator("#sheet details.slipc").count(), 0, "an old payslip has no lines to open");
+    assert.equal(await page.locator("#sheet .slipcard .slipkv").count(), 2, "Gross and Deductions are one row each");
+    assert.ok(/Gross\s*\u20B19,000\.00/.test(await page.locator("#sheet .slipkv").nth(0).innerText()) && /Deductions\s*\u20B11,000\.00/.test(await page.locator("#sheet .slipkv").nth(1).innerText()), "with their figures");
+    // ---------- Add the breakdown: they must reconcile to the payslip as saved; the pay itself is untouched ----------
+    const before = await ledgerOf(page);
+    await page.locator('#sheet [data-action="add-lines"]').click();
+    assert.ok((await page.locator("#sheet").innerText()).includes("The pay itself does not change"), "the window says what it will not touch");
+    await page.locator('#sheet [data-action="add-lines-type"]').click();
+    assert.equal(await page.locator("#sheet h3").innerText(), "Add the breakdown");
+    assert.equal(await page.locator("#f-save").isDisabled(), true, "nothing to save yet");
+    await openSection(page, "e"); await openSection(page, "d");
+    await addLine(page, "earning", "Basic salary", "8000", { quick: true });
+    assert.ok((await page.locator("#chk-e").innerText()).includes("Check this"), "8,000 of earnings against the payslip's 9,000 gross says Check this");
+    assert.equal(await page.locator("#f-save").isDisabled(), true, "lines that do not reconcile cannot be saved");
+    await addLine(page, "earning", "Holiday and night pay", "1000", { quick: true });
+    assert.equal(await page.locator("#f-save").isDisabled(), true, "gross matches but net does not yet: still Check this");
+    assert.ok((await page.locator("#chk-net").innerText()).includes("Check this"));
+    await addLine(page, "deduction", "Withholding tax", "1000", { quick: true });
+    assert.equal(await page.locator("#f-save").isDisabled(), false, "gross 9,000, deductions 1,000, net 8,000: it reconciles");
+    await page.locator("#f-save").click();
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem("financialTracker.ledger")).state.payslipItems.length === 3);
+    const after = await ledgerOf(page);
+    for (const k of ["transactions", "entries", "payslips", "payslipLines", "accounts", "categories"]) assert.deepEqual(after.state[k], before.state[k], k + " are exactly as they were");
+    assert.equal(after.state.payslipRevisions.length, 1); assert.equal(after.state.payslipRevisions[0].change, "Breakdown added");
+    assert.deepEqual(after.state.payslipItems.map((i) => [i.section, i.label, i.amount]), [["earning", "Basic salary", 800000], ["earning", "Holiday and night pay", 100000], ["deduction", "Withholding tax", 100000]]);
+    await page.locator('[data-action="open-payslips"]').click();
+    assert.equal(await page.locator('#sheet [data-action="add-lines"]').count(), 0, "the payslip now has its lines");
+    await page.locator("#sheet details.slipc summary").click();
+    assert.equal(await page.locator("#sheet details.slipc .pl").count(), 3, "its three printed lines open from the card");
     await ctx.close();
-    console.log("ok: an old payslip shows Original wording not kept"); }
+    console.log("ok: an old payslip shows Original wording not kept, and Add the breakdown keeps the pay untouched"); }
 
   // ---------- 3. the update from data version 10: the app keeps its own copy first, then adds the two lists; every figure of an old payslip stays ----------
   { const v10 = seeded(); v10.v = 10;
@@ -195,7 +225,7 @@ try {
     await page.evaluate(() => document.querySelector('#sheet [data-action="close-sheet"]')?.click());
     // a past line: change the category of the line that has none (Basic Salary was suggested and saved as Basic pay)
     await goIncome(page); await page.locator('[data-action="open-payslips"]').click();
-    await page.locator("#sheet details.earlier summary", { hasText: "Printed lines" }).click();
+    await page.locator("#sheet details.slipc summary").first().click();
     const before = await ledgerOf(page);
     await page.locator('#sheet .pl-main', { hasText: "Meal Subsidy" }).click();
     assert.ok((await page.locator("#sheet").innerText()).includes("No amount, no income and no transfer"), "the window says what it changes");
@@ -207,12 +237,13 @@ try {
     const changed = after.state.payslipItems.filter((i) => JSON.stringify(i) !== JSON.stringify(before.state.payslipItems.find((b) => b.id === i.id)));
     assert.deepEqual(changed.map((i) => [i.label, i.category, i.amount]), [["Meal Subsidy", "other_earning", 70000]], "one line changed, its amount the same");
     assert.deepEqual(after.state.payslipItemChanges.map((c) => [c.from, c.to]), [["allowance", "other_earning"]], "and there is a visible record");
+    await page.waitForFunction(() => document.querySelector("#sheet")?.innerText.includes("Changed"), null, { timeout: 5000 }).catch(() => {});
     assert.ok((await page.locator("#sheet").innerText()).includes("Changed"), "the record shows in the window");
     // Income groups the printed lines by category; tapping a category shows its lines
     await page.evaluate(() => document.querySelector('#sheet [data-action="close-sheet"]')?.click());
     await page.evaluate(() => document.querySelector('#sheet [data-action="close-sheet"]')?.click());
     await page.locator('[data-action="income-view"][data-view="earnings"]').click();
-    const block = page.locator("#screen details.mrow", { hasText: "Other earnings" }).first();
+    const block = page.locator("#screen details.crow", { hasText: "Other earnings" }).first();
     await block.locator("summary").click();
     assert.ok((await block.innerText()).includes("Meal Subsidy"), "tapping a category shows its printed lines");
     assert.deepEqual(errors, []); await ctx.close();

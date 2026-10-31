@@ -206,6 +206,35 @@ try {
     console.log('ok: Verify anyway makes the deposit verified money in, and the lines stay as read');
   }
 
+  // An old payslip (saved before every printed line was kept) reads the same invented PDF again: the lines must reconcile to what it holds, and the pay is untouched.
+  { const l = await ledgerNow(), at = "2026-10-20T09:00:00.000+08:00";
+    l.state.transactions.push({ id: "tx-oldslip", date: "2026-10-20", payee: "Old Employer", memo: "Payslip", status: "verified", source: "manual", created_at: at, verified_at: at });
+    l.state.entries.push({ transaction_id: "tx-oldslip", account_id: "example-bank", amount: 740000 }, { transaction_id: "tx-oldslip", category_id: "cat-salary", amount: -740000 });
+    l.state.payslips.push({ id: "oldslip", employer: "Old Employer", period_from: "2026-10-01", period_to: "2026-10-15", pay_date: "2026-10-20", account_id: "example-bank", transaction_id: "tx-oldslip", printed_gross: 800000, printed_net: 740000, deposit: 740000, version: 2 });
+    l.state.payslipLines.push({ payslip_id: "oldslip", side: "earning", kind: "basic", amount: 800000 }, { payslip_id: "oldslip", side: "deduction", kind: "sss", amount: 40000 }, { payslip_id: "oldslip", side: "deduction", kind: "tax", amount: 20000 });
+    await page.evaluate(async (l) => {
+      const text = JSON.stringify(l); localStorage.setItem("financialTracker.ledger", text);
+      await new Promise((resolve, reject) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => { const tx = r.result.transaction("kv", "readwrite"); tx.objectStore("kv").put(text, "ledger"); tx.oncomplete = () => { r.result.close(); resolve(); }; tx.onerror = () => reject(tx.error); }; });
+    }, l);
+    await page.reload(); await visible("#nav button");
+    await page.locator('#menuBtn').click(); await page.locator('#menu [data-tab="money"]').click(); await page.locator('#top [data-tab="income"]').click();
+    await page.locator('[data-action="open-payslips"]').click();
+    await page.locator('#sheet .slipcard', { hasText: "Old Employer" }).locator('[data-action="add-lines"]').click();
+    await page.locator('#sheet input[data-scan="payslip"]:not([capture])').setInputFiles(fixture("sample-payslip-open.pdf"));
+    await page.locator('#sheet details.tot[data-keep="e"] .pl').first().waitFor({ state: "attached", timeout: 180000 });
+    assert.equal(await page.locator("#sheet h3").first().innerText(), "Add the breakdown");
+    assert.deepEqual((await lines("e")).map((x) => x.slice(0, 2)), [["Regular", "\u20B18,000.00"]]);
+    assert.equal(await page.locator("#f-save").isDisabled(), false, "the lines read from the PDF reconcile to the payslip as saved");
+    await page.locator("#f-save").click();
+    await page.waitForFunction(() => (JSON.parse(localStorage.getItem("financialTracker.ledger")).state.payslipItems ?? []).some((i) => i.payslip_id === "oldslip"));
+    const after = await ledgerNow();
+    assert.deepEqual(after.state.transactions, l.state.transactions, "transactions unchanged"); assert.deepEqual(after.state.entries, l.state.entries, "entries unchanged");
+    assert.deepEqual(after.state.payslips, l.state.payslips, "the payslip's own figures unchanged");
+    assert.deepEqual(after.state.payslipItems.filter((i) => i.payslip_id === "oldslip").map((i) => [i.label, i.amount]), [["Regular", 800000], ["SSS", 40000], ["Tax Deduction", 20000]]);
+    assert.equal(after.state.payslipRevisions.filter((r) => r.payslip_id === "oldslip").length, 1);
+    console.log("ok: an old payslip keeps its printed lines by reading the same PDF again; the pay is untouched");
+  }
+
   const bankDomains = new Set(BANKS.flatMap((bank) => [bank.domain, ...(bank.alt ?? [])]));
   for (const request of external) {
     const host = new URL(request.url).hostname.replace(/^www\./, "");

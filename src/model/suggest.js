@@ -8,6 +8,7 @@
 // Output per payday: lines [{name, kind, first/second amount, reason, source}] plus `unallocated` (income left over) or `short` (lines are more
 // than the income). The books always balance exactly, in centavos:  lines + unallocated - short = income.  No line is ever cut to fit.
 import { netPerPayday } from "./income.js";
+import { payBase } from "./stablepay.js";
 import { spendingByCategory, addMonths, monthOf } from "./reports.js";
 import { goalProgress } from "./goals.js";
 import { splitSavings } from "./savings.js";
@@ -97,13 +98,13 @@ export function suggestPlan(input) {
   if (input.ratchet && !whole(input.ratchet.amount)) return bad("The ratchet amount must be whole centavos.");
   if (input.rent !== undefined && !whole(input.rent)) return bad("The rent must be whole centavos.");
 
-  // 1. Income of each payday: median of the last 3 base nets (overtime out) of that payday.
-  const slips = netPerPayday(state);
+  // 1. Income of each payday: median of the last 3 STABLE pays of that payday (overtime, holiday and night pay, bonus and back pay left out; a third payday of the month is extra and left out).
+  const slips = payBase(netPerPayday(state)).rows;
   if (!slips.length && !input.income) return { ok: false, code: "NO_PAYSLIPS", message: NO_PAYSLIP_MESSAGE };
   const nets = paydays.map(() => []);
-  for (const r of slips) nets[nearestPayday(paydays, r.date)].push(r.base);   // oldest first
+  for (const r of slips) nets[nearestPayday(paydays, r.date)].push(r.stable);   // oldest first
   const income = input.income ? [...input.income] : nets.map((list) => median(list.slice(-MAX_NETS), "low"));
-  const incomeOf = (i) => (input.income ? "Your base income figure." : nets[i].length ? `Median of the last ${plural(Math.min(MAX_NETS, nets[i].length), "payslip", "payslips")}, overtime left out.` : "No payslip for this payday yet.");
+  const incomeOf = (i) => (input.income ? "Your base income figure." : nets[i].length ? `Median of the last ${plural(Math.min(MAX_NETS, nets[i].length), "payslip", "payslips")}, extra pay left out.` : "No payslip for this payday yet.");
   const monthIncome = income.reduce((a, b) => a + b, 0), inc1 = income[1] ?? 0;
   const { days1, days2, d1, d2 } = paydayDays(paydays, month);
   const payOfDay = (day) => (paydays.length === 1 || (day >= d1 && day < d2) ? 0 : 1);
