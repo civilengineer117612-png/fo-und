@@ -4317,6 +4317,23 @@ console.log("\n-- Cancelled count and Spent today --");
   check(/spent today/i.test(t) && t.includes("\u20B10.00") && !t.includes("11,000.00"), "a cancelled count that found 11,000.00 shows nothing as spent today");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
+// ===== A gap booked as "I spent some of it" is matched by the real charge too (P0-5 fix 3) =====
+console.log("\n-- A spent gap is explained by the real charge --");
+{ const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-09-01" };
+  const TS = "2026-10-03T09:00:00.000+08:00";
+  const cnt = { id: "cnt", date: "2026-10-03", payee: "Weekly check-in", memo: "Reconciliation: counted 970000, ledger 1000000", status: "verified", source: "reconciliation", created_at: TS, verified_at: TS };
+  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [bank], transactions: [cnt], entries: [{ transaction_id: "cnt", account_id: "b", amount: -30000 }, { transaction_id: "cnt", category_id: "cat-unlogged", amount: 30000 }] } };
+  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
+  await page.click('#nav button:has-text("Log")'); await page.click('button[data-action="open-other"]');
+  await page.fill("#f-amount", "300"); await page.click('#sheet [data-action="pick-cat"]:has-text("Food")'); await page.click('#sheet [data-action="pick-acct"]:has-text("Test Bank")'); await page.click("#f-save");
+  check(await seen(page, "#sheet", "This explains the gap?"), "a 300.00 entry on that account is offered the gap that was booked as spending");
+  await page.click('#sheet button[data-action="explain-gap"]'); await seen(page, "#toast", "The gap is cleared"); await page.waitForTimeout(500);
+  const d = JSON.parse((await stored(page)).local), mine = d.state.entries.filter((e) => e.account_id === "b").reduce((n, e) => n + e.amount, 0);
+  check(d.state.transactions.some((t) => t.id === "rev:cnt" && t.reverses === "cnt"), "the gap is cancelled by a correction");
+  check(mine === -30000, "the bank is still what was counted");
+  check(d.state.entries.filter((e) => e.category_id === "cat-unlogged").reduce((n, e) => n + e.amount, 0) === 0, "nothing is left in Unlogged: the 300.00 counts once, in Food");
+  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+
 // ===== Replacing the ledger keeps a safety copy first, and it can be put back =====
 console.log("\n-- Restore safety copy --");
 { const { upgradeLedger, encryptLedgerBackup } = await import("../src/model/index.js");

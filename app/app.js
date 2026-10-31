@@ -3361,7 +3361,7 @@ function renderSheet() {
       <p><button class="primary" data-action="close-sheet">Got it</button></p>
       ${back ? "" : `<p><button data-action="put-back" style="width:100%">Put it back</button></p><p class="note small">Puts back what was here before. What is here now is kept, so this can be undone too.</p>`}`;
   } else if (sh.type === "explain-gap") {
-    const g = M.unexplainedGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }).find((x) => x.transaction_id === sh.gapId), e = S().transactions.find((x) => x.id === sh.entryId);
+    const g = M.explainableGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }).find((x) => x.transaction_id === sh.gapId), e = S().transactions.find((x) => x.id === sh.entryId);
     body = g && e ? `<h3 class="wl-title">This explains the gap?</h3>
       <p>${esc(e.payee || "This entry")}, ${peso(g.amount)} on ${esc(accountName(g.account_id))}, is the same amount as the gap found at the check-in on ${esc(listDate(g.date))}.</p>
       <p class="note">The gap is cancelled, so the money counts once, in this entry. The balance stays what you counted.</p>

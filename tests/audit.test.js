@@ -249,3 +249,26 @@ test("TRIAL BALANCE REPORT: after every kind of operation the ledger check says 
   assert.equal(M.ledgerCheckLine(bad), "Ledger check: 1 problem (tell the project chat)");
   assert.deepEqual(M.validateState(bad), [], "it still opens");
 });
+
+test("RECONCILIATION (match before you record): a real charge that explains a gap counts once, whether the gap was held or booked as spending", () => {
+  for (const why of ["later", undefined]) {
+    let s = checkIn(ledger(), "wal", balanceOf(ledger(), "wal") - 3000, { why, date: "2026-10-13" });
+    const gap = M.findOpenGap(s, { account_id: "wal", amount: 3000, date: "2026-10-12", unlogged_category_id: UL });
+    assert.ok(gap, "the gap is offered to the charge (" + (why ?? "spent") + ")");
+    s = expense(s, "2026-10-12", "food", 3000, "wal");
+    const done = M.applyCorrection(s, M.planCorrection(s, { id: gap.transaction_id, redo_id: nid("x"), today: "2026-10-20" }, NOW));
+    assert.equal(balanceOf(done, "wal"), 47000, "the balance is what was counted");
+    assert.deepEqual(M.spendingByCategory(done, { month: MONTH }).rows.map((r) => [r.name, r.amount]), [["Food", 3000]], "counted once, in its own category");
+    assertTrial(done, "matching a gap");
+  }
+});
+
+test("SUSPENSE: a held gap is not in the Budget view and not on a trip either", () => {
+  let s = { ...ledger(), tags: [{ id: "trip1", name: "Trip", start: "2026-10-10", end: "2026-10-15" }] };
+  s = expense(s, "2026-10-11", "food", 10000, "chk");
+  s = checkIn(s, "chk", balanceOf(s, "chk") - 50000, { why: "later", date: "2026-10-13" });
+  const row = M.budgetStatus(s, { rules: [], month: MONTH }).find((r) => r.category_id === UL);
+  assert.ok(!row || row.spent === 0, "Budget");
+  assert.equal(M.tagSummary(s, "trip1").spent, 10000, "Trips");
+  assert.deepEqual(M.tripEntries(s, "trip1").rows.map((r) => r.amount), [10000]);
+});
