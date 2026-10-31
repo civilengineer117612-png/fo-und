@@ -4335,6 +4335,7 @@ console.log("\n-- A spent gap is explained by the real charge --");
   check(d.state.entries.filter((e) => e.category_id === "cat-unlogged").reduce((n, e) => n + e.amount, 0) === 0, "nothing is left in Unlogged: the 300.00 counts once, in Food");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
+<<<<<<< HEAD
 // ===== A refund brings spending down; past refunds saved as income are put right (P0-5 fix 4) =====
 console.log("\n-- Refunds --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-09-01" };
@@ -4370,6 +4371,8 @@ console.log("\n-- Refunds --");
   check(d.state.entries.filter((e) => e.category_id === "cat-food").reduce((n, e) => n + e.amount, 0) === 5000 && d.state.entries.filter((e) => e.category_id === "cat-refund").reduce((n, e) => n + e.amount, 0) === 0, "the new refund took 100.00 off Food and is not income");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
+=======
+>>>>>>> origin/main
 // ===== Replacing the ledger keeps a safety copy first, and it can be put back =====
 console.log("\n-- Restore safety copy --");
 { const { upgradeLedger, encryptLedgerBackup } = await import("../src/model/index.js");

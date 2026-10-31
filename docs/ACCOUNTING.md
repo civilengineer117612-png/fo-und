@@ -113,5 +113,10 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 
 ## Known gaps (found by the audit, each fixed in its own change; remove a line when it is fixed)
 These are the places where the app does not yet meet a principle above. Each has its own fix task and its own audit test.
+<<<<<<< HEAD
+=======
+- Recognition: a refund is saved as income.
+- Cutoff: payslip income is counted in the month the pay period ended.
+>>>>>>> origin/main
 - Non-recurring: an uncategorised bonus or 13th month line stays in the base.
 - Presentation: Spent today includes drafts and This month does not; "Unlogged by week" counts held gaps; `homeSummary` is unused and disagrees.
