@@ -1646,19 +1646,20 @@ function viewSetup() {
     ${hiddenCats.length ? `<h2>Hidden categories</h2><p class="note">Their entries, budgets and history stay. They are left out of the pickers.</p>${hiddenCats.map((c) => `<div class="row"><div>${esc(c.name)}</div><div class="amt"><button class="link" data-action="show-cat" data-id="${esc(c.id)}">Show again</button></div></div>`).join("")}` : ""}`;
   const pics = (S().attachments ?? []).length;
   // No pictures: only the ledger, so the plain buttons stay. Pictures kept: the two big buttons do everything at once and the single ones fold away.
-  const ledgerBtns = (first) => first ? `<p><button class="primary" data-action="open-backup" data-howto="backup">Back up now</button></p>
-    <p><button data-action="open-restore" style="width:100%">Restore from a backup</button></p>` : `<p><button data-action="open-backup" style="width:100%">Back up the ledger only</button></p>
-    <p><button data-action="open-restore" style="width:100%">Restore the ledger only</button></p>`;
-  const singles = `<p><button data-action="open-check-backup" style="width:100%">Check a backup file</button></p>${pics ? `
+  // ONE backup = one file (owner, Oct 31): "Back up now" makes the ledger and the pictures into one file (parts only when it would be too big). The single-purpose
+  // buttons are the older formats and fold away under More, only when there are pictures to separate.
+  const singles = `<p><button data-action="open-backup" style="width:100%">Back up the ledger only</button></p>
+    <p><button data-action="open-restore" style="width:100%">Restore the ledger only</button></p>
     <p><button data-action="open-pic-backup" style="width:100%">Back up pictures</button></p>
     <p><button data-action="open-pic-restore" style="width:100%">Put pictures back from a file</button></p>
-    <p><button data-action="open-pic-check" style="width:100%">Check a pictures file</button></p>` : ""}`;
+    <p><button data-action="open-pic-check" style="width:100%">Check a pictures file</button></p>`;
   const backupHtml = `    <h2>Backup</h2>
     <p class="note">${backupAgeText()}</p>${M.picturesNote(pics) ? `<p class="note">${esc(M.picturesNote(pics))}</p>` : ""}
-    ${pics ? `<p><button class="primary" data-action="open-backup" data-all="1" data-howto="backup">Back up</button></p>
-    <p><button data-action="open-restore" data-all="1" style="width:100%">Restore</button></p>
-    <p><button class="link" data-action="more-backup" aria-expanded="${Boolean(ui.moreBackup)}">${ui.moreBackup ? "Fewer options" : "More: only the ledger, or only the pictures"}</button></p>
-    ${ui.moreBackup ? `${ledgerBtns(false)}${singles}` : ""}` : `${ledgerBtns(true)}${singles}`}
+    <p><button class="primary" data-action="open-backup" data-howto="backup" data-all="1">Back up now</button></p>
+    <p><button data-action="open-restore" data-all="1" style="width:100%">Restore from a backup</button></p>
+    <p><button data-action="open-check-backup" style="width:100%">Check a backup file</button></p>
+    ${pics ? `<p><button class="link" data-action="more-backup" aria-expanded="${Boolean(ui.moreBackup)}">${ui.moreBackup ? "Fewer options" : "More: only the ledger, or only the pictures"}</button></p>
+    ${ui.moreBackup ? singles : ""}` : ""}
     ${ui.restoreCopies?.[0] ? `<p><button class="link" data-action="undo-restore">${ui.confirmUndo ? "Tap again to put back. What is here now is kept." : ui.restoreCopies[0].kind === "put-back" ? "Undo put back" : "Undo last restore"}</button></p><p class="note small">Saved ${esc(fullDate(ui.restoreCopies[0].at.slice(0, 10)))}, before the data was replaced.</p>` : ""}
     ${ledger.settings.last_pictures_backup_at && pics ? `<p class="note">Pictures last backed up ${esc(longDate(ledger.settings.last_pictures_backup_at.slice(0, 10)))}.</p>` : ""}
     <h2>Spreadsheet</h2>
@@ -3290,7 +3291,7 @@ function renderSheet() {
   } else if (sh.type === "backup") {
     const pn = (S().attachments ?? []).length;
     body = `<h3>${sh.all ? "Back up" : sh.pictures ? "Back up pictures" : "Back up now"}</h3>
-      ${sh.all ? `<p class="note">One passphrase makes the ledger file and the pictures files (${pn} ${pn === 1 ? "picture" : "pictures"}). Each file opens on its own.</p>` : ""}
+      ${sh.all ? `<p class="note">Your ledger${pn ? ` and your ${pn} ${pn === 1 ? "picture" : "pictures"}` : ""} go into one file. If it would be too big for the phone it is cut into parts: keep all the parts together.</p>` : ""}
       ${sh.pictures ? `<p class="note">The pictures go in a file of their own, so the normal backup stays small. Use the same passphrase as your backup.</p><p class="note">A big collection is cut into parts. Each part opens on its own.</p>` : ""}
       <p class="note">Choose a passphrase of at least ${M.MIN_PASSPHRASE} characters. Without it nobody can open the backup, not even me. Your phone may offer to make a strong one and keep it in Passwords: accept that. Or tap "Make one for me" and save it yourself. This app never keeps your passphrase.</p>
       <input class="sr" type="text" name="username" autocomplete="username" value="Finance backup" readonly tabindex="-1" aria-hidden="true">
@@ -3299,7 +3300,7 @@ function renderSheet() {
       <p><button data-action="make-passphrase" style="width:100%">Make one for me</button></p>
       ${ui.form.made ? `<p class="note">Your passphrase. Save it in Passwords (name it Finance backup), or write it on paper:</p><p class="passbox" id="b-made">${esc(ui.form.made)}</p><p><button data-action="copy-passphrase" style="width:100%">Copy it</button></p>` : ""}
       <p id="f-msg" role="alert" class="note"></p>
-      <p><button class="primary" id="f-save" data-action="${sh.pictures ? "make-pic-backup" : "make-backup"}" disabled>${sh.pictures ? "Create pictures file" : sh.all ? "Create backup files" : "Create backup file"}</button></p>
+      <p><button class="primary" id="f-save" data-action="${sh.pictures ? "make-pic-backup" : "make-backup"}" disabled>${sh.pictures ? "Create pictures file" : "Create backup file"}</button></p>
       <p class="note">Next, choose where to keep the file, like Save to Files. It is encrypted, so iCloud Drive or a flash drive is safe.</p>`;
   } else if (sh.type === "howto") {
     const h = M.HOWTOS.find((x) => x.id === sh.id);
@@ -3443,23 +3444,26 @@ function renderSheet() {
         <p><button class="primary" id="f-save" data-action="open-pic-file" disabled>Open pictures file</button></p>`;
   } else if (sh.type === "restore" && !ui.form.restored) {
     body = `<h3>${sh.check ? "Check a backup file" : sh.all ? "Restore" : "Restore from a backup"}</h3>
-      ${sh.check ? `<p class="note">This opens the file to prove the passphrase works. Nothing on this phone changes.</p>` : sh.all ? `<p class="note">Choose the backup file and the pictures files together. The ledger is replaced; missing pictures come back.</p>` : `<p class="note">This replaces everything on this phone with the backup.</p>
+      ${sh.check ? `<p class="note">This opens the file to prove the passphrase works. Nothing on this phone changes.</p>` : sh.all ? `<p class="note">Choose your backup file, or all its parts if there are several. The ledger is replaced; missing pictures come back.</p>` : `<p class="note">This replaces everything on this phone with the backup.</p>
       <p class="note">Receipt and payslip pictures are not in a backup. Entries come back without them.</p>`}
-      <label for="r-file">${sh.all ? "Backup file and pictures files" : "Backup file"}</label>${sh.all ? `<input id="r-file" data-field="file" type="file" multiple accept=".json,.fpics,application/json,application/octet-stream"><p id="r-count" class="note small"></p>` : `<input id="r-file" data-field="file" type="file" accept=".json,application/json">`}
+      <label for="r-file">${sh.all ? "Backup file, or all its parts" : "Backup file"}</label>${sh.all ? `<input id="r-file" data-field="file" type="file" multiple accept=".json,.fpics,application/json,application/octet-stream"><p id="r-count" class="note small"></p>` : `<input id="r-file" data-field="file" type="file" accept=".json,application/json">`}
       <input class="sr" type="text" name="username" autocomplete="username" value="Finance backup" readonly tabindex="-1" aria-hidden="true">
       <label for="r-pass">Passphrase</label><input id="r-pass" data-field="pass" name="password" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false">
       <p id="f-msg" role="alert" class="note"></p>
-      <p><button class="primary" id="f-save" data-action="open-backup-file" disabled>${sh.check ? "Check backup" : sh.all ? "Open the files" : "Open backup"}</button></p>`;
+      <p><button class="primary" id="f-save" data-action="open-backup-file" disabled>${sh.check ? "Check backup" : sh.all ? "Open the backup" : "Open backup"}</button></p>`;
   } else if (sh.type === "restore") {
     const b = M.summarizeLedger(ui.form.restored), now = M.summarizeLedger(ledger);
     const count = (n, one, many) => n + " " + (n === 1 ? one : many);
-    const line = (x) => `${count(x.accounts, "account", "accounts")}, ${x.transactions ? count(x.transactions, "entry", "entries") : "no entries"}${x.latest_date ? ", latest " + longDate(x.latest_date) : ""}`;
+    const line = (x) => `${count(x.accounts, "account", "accounts")}, ${x.transactions ? count(x.transactions, "entry", "entries") : "no entries"}`;
+    const sub = (x, saved) => [x.latest_date ? "Latest entry " + longDate(x.latest_date) : "", saved && x.saved_at ? "saved " + longDate(x.saved_at.slice(0, 10)) : ""].filter(Boolean).join(" \u00b7 ");
+    const sum = (label, x, saved) => `<div class="rs"><span class="rs-l">${label}</span><b>${esc(line(x))}</b>${sub(x, saved) ? `<small>${esc(sub(x, saved))}</small>` : ""}</div>`;
     if (sh.check) body = `<h3>This backup opens</h3>
-      <div class="card" style="border:0;padding:0"><dl><dt>The backup</dt><dd>${esc(line(b))}${b.saved_at ? "<br>saved " + esc(longDate(b.saved_at.slice(0, 10))) : ""}</dd></dl></div>
-      <p class="note">The passphrase works. Nothing on this phone was changed. Pictures are not inside a backup file.</p>`;
+      <div class="rsum">${sum("The backup", b, true)}</div>
+      <p class="note">The passphrase works. Nothing on this phone was changed. ${ui.form.set && ui.form.set.mode !== "old" ? (ui.form.set.parts > 1 ? "All " + ui.form.set.parts + " parts are here and open. " : "") + "It holds " + (ui.form.set.pictures ? ui.form.set.pictures + (ui.form.set.pictures === 1 ? " picture." : " pictures.") : "no pictures.") : "Pictures are not inside this kind of backup file."}</p>`;
     else body = `<h3>Replace this phone's data?</h3>
-      <div class="card" style="border:0;padding:0"><dl><dt>The backup</dt><dd>${esc(line(b))}${b.saved_at ? "<br>saved " + esc(longDate(b.saved_at.slice(0, 10))) : ""}</dd><dt>This phone</dt><dd>${esc(line(now))}</dd></dl></div>
-      ${sh.all ? (ui.form.pictures ? `<div class="card" style="border:0;padding:0"><dl><dt>Pictures</dt><dd>${ui.form.pictures.missing} ${ui.form.pictures.missing === 1 ? "picture" : "pictures"} missing here will be put back, from ${ui.form.pictures.files} ${ui.form.pictures.files === 1 ? "file" : "files"}</dd></dl></div>${ui.form.pictures.total > ui.form.pictures.files ? `<p class="note">You chose ${ui.form.pictures.files} of ${ui.form.pictures.total} pictures files. The pictures in the others will not come back.</p>` : ""}` : `<p class="note">No pictures files were chosen, so entries will say "picture not on this phone".</p>`) : ""}
+      <div class="rsum">${sum("The backup", b, true)}${sum("This phone", now, false)}
+      ${sh.all && ui.form.pictures ? `<div class="rs"><span class="rs-l">Pictures</span><b>${ui.form.pictures.missing ? ui.form.pictures.missing + (ui.form.pictures.missing === 1 ? " picture" : " pictures") + " missing here will be put back" : "No picture is missing here"}</b>${ui.form.pictures.mode === "old" ? `<small>from ${ui.form.pictures.files} ${ui.form.pictures.files === 1 ? "file" : "files"}</small>` : ui.form.pictures.mode === "parts" ? `<small>from all ${ui.form.pictures.parts} parts</small>` : ""}</div>` : ""}</div>
+      ${sh.all && ui.form.pictures ? (ui.form.pictures.mode === "old" && ui.form.pictures.total > ui.form.pictures.files ? `<p class="note">You chose ${ui.form.pictures.files} of ${ui.form.pictures.total} pictures files. The pictures in the others will not come back.</p>` : "") : sh.all ? `<p class="note">${ui.form.set?.mode === "old" ? "No pictures files were chosen, so entries will say \"picture not on this phone\"." : "This backup holds no pictures."}</p>` : ""}
       <p class="note">Anything entered since this backup was made will be gone.${sh.all ? "" : ` Pictures are not in a backup, so those entries will say "picture not on this phone".`}</p>
       <p><button class="primary" id="f-save" data-action="restore-now">${ui.form.confirmRestore ? "Tap again to replace" : "Replace this phone's data"}</button></p>`;
   }
@@ -4831,7 +4835,7 @@ async function onClick(el) {
     case "open-backup": if (ui.menu) { ui.menu = false; renderMenu(); } ui.sheet = { type: "backup", all: el.dataset.all === "1" }; ui.form = {}; renderSheet(); break;   // from the menu: it steps aside
     case "open-restore": ui.sheet = { type: "restore", all: el.dataset.all === "1" }; ui.form = {}; renderSheet(); break;
     case "more-backup": ui.moreBackup = !ui.moreBackup; renderScreen(); break;
-    case "open-check-backup": ui.sheet = { type: "restore", check: true }; ui.form = {}; renderSheet(); break;
+    case "open-check-backup": ui.sheet = { type: "restore", check: true, all: true }; ui.form = {}; renderSheet(); break;
     case "make-backup": await makeBackup(); break;
     case "make-passphrase": { const made = M.makePassphrase(); ui.form = { ...ui.form, pass: made, pass2: made, made }; renderSheet(); break; }   // shown on screen, kept nowhere
     case "copy-repair-check": {   // counts only: nothing from the ledger is in it
@@ -5117,23 +5121,43 @@ async function pictureFiles(pass) {
   return files;
 }
 
+// The pictures this phone holds: [{id, size}], in the order of the entries.
+async function pictureList() {
+  const have = [];
+  for (const a of S().attachments ?? []) { const b = await getPhoto(a.id).catch(() => null); if (b) have.push({ id: a.id, size: b.size }); }
+  return have;
+}
+// ONE file with the ledger and every picture, or, only when that would pass the limit (M.BACKUP_PART_BYTES), parts that share one id. Made one picture at a time.
+async function oneBackupFiles(pass) {
+  const check = M.parseLedger(JSON.stringify(ledger));
+  if (!check.ok) throw new Error("refusing to back up invalid data: " + check.error);
+  const text = JSON.stringify(ledger), have = await pictureList(), plan = M.planBackupParts(new Blob([text]).size, have), id = M.newBackupId(), stamp = M.phTimestamp(), files = [];
+  for (let i = 0; i < plan.length; i++) {
+    if (plan.length > 1) working(true, "Making file " + (i + 1) + " of " + plan.length + "...");
+    const items = plan[i].ids.map((pid) => async () => { const b = await getPhoto(pid).catch(() => null); return b ? { id: pid, bytes: new Uint8Array(await b.arrayBuffer()) } : null; });
+    const blob = await M.sealBackupPart({ ledger: plan[i].ledger ? text : null, items, passphrase: pass, id, part: i + 1, parts: plan.length, savedAt: stamp });
+    files.push(new File([blob], M.oneBackupFileName(stamp, i + 1, plan.length), { type: "application/json" }));
+  }
+  return { files, pictures: have.length };
+}
+
 async function makeBackup() {
   const all = Boolean(ui.sheet?.all);
   working(true, "Working...");
-  let withPictures = 0;
+  let made = null, pictures = 0;
   try {
-    const encrypted = await M.encryptLedgerBackup(ledger, ui.form.pass);
-    const name = M.backupFileName(today());
-    const files = [new File([JSON.stringify(encrypted)], name, { type: "application/json" })];
-    if (all) { const pf = await pictureFiles(ui.form.pass); if (pf) { files.push(...pf); withPictures = pf.length; } }
-    await shareFiles(files, all ? "Finance backup and pictures" : "Finance backup");   // the share sheet: choose Save to Files
+    if (all) { made = await oneBackupFiles(ui.form.pass); pictures = made.pictures; await shareFiles(made.files, "Finance backup"); }   // the share sheet: choose Save to Files; every part goes in one share
+    else {
+      const encrypted = await M.encryptLedgerBackup(ledger, ui.form.pass);
+      await shareFiles([new File([JSON.stringify(encrypted)], M.backupFileName(today()), { type: "application/json" })], "Finance backup");
+    }
   } catch (e) {
-    working(false, e.name === "AbortError" ? "Not saved. Tap " + (all ? "Create backup files" : "Create backup file") + " to try again." : "Could not create the backup: " + e.message);
+    working(false, e.name === "AbortError" ? "Not saved. Tap Create backup file to try again." : "Could not create the backup: " + e.message);
     return;
   }
   ui.sheet = null;
-  await commit(S(), { ...ledger.settings, last_backup_at: M.phTimestamp(), ...(withPictures ? { last_pictures_backup_at: M.phTimestamp() } : {}) });
-  showToast(withPictures ? "Backup made: the ledger file and " + withPictures + (withPictures === 1 ? " pictures file" : " pictures files") + ". Check that they are in Files or on your drive, and keep a second copy off this phone." : "Backup file created. Check that it is in Files or on your drive, and keep a second copy off this phone.");
+  await commit(S(), { ...ledger.settings, last_backup_at: M.phTimestamp(), ...(pictures ? { last_pictures_backup_at: M.phTimestamp() } : {}) });
+  showToast(M.backupDoneText({ parts: made?.files.length ?? 1, pictures }));
 }
 
 async function makePicturesBackup() {
@@ -5176,27 +5200,19 @@ async function restorePictures() {
   }
 }
 
-const isPicturesFile = (f) => /\.fpics$/i.test(f.name);
-// Restore: the pictures files of the backup, counted against the ledger being restored (only pictures its entries name, and that are missing here, come back).
-async function scanPictureFiles(files, restored) {
-  const want = new Set((restored.state?.attachments ?? []).map((a) => a.id)); let missing = 0, parts = 0, total = 0;
-  for (const f of files) {
-    const r = await M.openPictures(f, ui.form.pass, async (id) => { if (want.has(id) && !(await getPhoto(id).catch(() => null))) missing++; });
-    parts++; total = Math.max(total, r.parts ?? 0);
-  }
-  return { files: files.length, parts, total, missing, want };
-}
-
 async function openBackupFile() {
   working(true, "Opening...");
   try {
-    const all = Boolean(ui.sheet?.all), files = all ? ui.form.files ?? [] : [ui.form.file];
-    const ledgerFile = files.find((f) => !isPicturesFile(f));
-    if (!ledgerFile) throw new Error("None of those is the backup file. Choose the backup file as well as the pictures files.");
-    const restored = await M.decryptLedgerBackup(JSON.parse(await ledgerFile.text()), ui.form.pass);
-    const picFiles = all ? files.filter(isPicturesFile) : [];
-    const pictures = picFiles.length ? await scanPictureFiles(picFiles, restored) : null;
-    ui.form = all ? { restored, confirmRestore: false, pass: ui.form.pass, picFiles, pictures } : { restored, confirmRestore: false };
+    const all = Boolean(ui.sheet?.all);
+    if (!all) {   // the ledger only (the older single file)
+      const restored = await M.decryptLedgerBackup(JSON.parse(await ui.form.file.text()), ui.form.pass);
+      ui.form = { restored, confirmRestore: false }; renderSheet(); return;
+    }
+    // One file, the parts of one backup, or an older ledger file with its pictures files: read by what is INSIDE the files (model/onebackup.js). Nothing is restored here.
+    const set = await M.openBackupSet(ui.form.files ?? [], ui.form.pass);
+    const want = new Set((set.ledger.state?.attachments ?? []).map((a) => a.id)); let missing = 0;
+    await set.eachPicture(async (id) => { if (want.has(id) && !(await getPhoto(id).catch(() => null))) missing++; });
+    ui.form = { restored: set.ledger, confirmRestore: false, pass: ui.form.pass, set, pictures: (set.mode === "old" ? set.files : set.pictures) ? { files: set.files, parts: set.parts, total: set.total, missing, want, inside: set.pictures, mode: set.mode } : null };
     renderSheet();
   } catch (e) {
     working(false, e instanceof SyntaxError ? "That file is not a backup." : e.message.startsWith("could not decrypt") ? "Wrong passphrase, or the file is damaged." : e.message);
@@ -5205,11 +5221,11 @@ async function openBackupFile() {
 
 async function restoreNow() {
   if (!ui.form.confirmRestore) { ui.form.confirmRestore = true; renderSheet(); return; }
-  if (ui.form.picFiles?.length) {   // the pictures first: if the ledger then cannot be saved, nothing is lost (they are only pictures this phone was missing)
+  if (ui.form.set && ui.form.pictures) {   // the pictures first: if the ledger then cannot be saved, nothing is lost (they are only pictures this phone was missing)
     working(true, "Putting pictures back...");
     try {
       const want = ui.form.pictures.want;
-      for (const f of ui.form.picFiles) await M.openPictures(f, ui.form.pass, async (id, bytes) => { if (want.has(id) && !(await getPhoto(id).catch(() => null))) await putPhoto(id, new Blob([bytes], { type: "image/jpeg" })); });
+      await ui.form.set.eachPicture(async (id, bytes) => { if (want.has(id) && !(await getPhoto(id).catch(() => null))) await putPhoto(id, new Blob([bytes], { type: "image/jpeg" })); });
     } catch (e) { working(false, "Could not put the pictures back, so nothing was replaced: " + e.message); return; }
   }
   await replaceLedger(M.restoreLedger(ledger, ui.form.restored), { kind: "restore", pictures: ui.form.pictures?.missing ?? 0 });

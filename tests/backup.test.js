@@ -96,9 +96,10 @@ test("the backup sheet asks the phone to offer a new password; the restore sheet
 });
 
 test("Check a backup file only opens it: its own sheet, no replace button, no write; Setup tells you to keep a second copy off the phone", () => {
-  assert.match(appJs, /case "open-check-backup": ui\.sheet = \{ type: "restore", check: true \}/);
+  assert.match(appJs, /case "open-check-backup": ui\.sheet = \{ type: "restore", check: true, all: true \}/);
   const block = appJs.slice(appJs.indexOf("if (sh.check) body = `<h3>This backup opens"), appJs.indexOf("else body = `<h3>Replace this phone's data?"));
   assert.ok(block.includes("Nothing on this phone was changed") && !/restore-now|commit\(|writeBoth/.test(block), "the result has no replace button and writes nothing");
   assert.match(appJs, /Keep a second copy off this phone, like iCloud Drive/);
-  assert.match(appJs, /keep a second copy off this phone\."\)/);
+  assert.match(appJs, /showToast\(M\.backupDoneText\(/, "the finished message comes from the model");
+  assert.match(readFileSync(new URL("../src/model/onebackup.js", import.meta.url), "utf8"), /keep a second copy off this phone\./, "and tells you to keep a second copy off this phone");
 });

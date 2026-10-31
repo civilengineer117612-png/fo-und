@@ -2,6 +2,7 @@
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
   { id: "2026-10-31-uncategorized", date: "2026-10-31", text: "Spending with no category is now called Uncategorized everywhere; \"Not yet explained\" stays for count gaps that are not spending." },
+  { id: "2026-10-31-one-backup", date: "2026-10-31", text: "A backup is now one file with your ledger and pictures together; only a very big one is cut into parts, and Restore takes the file or all its parts." },
   { id: "2026-10-31-checks-cards", date: "2026-10-31", text: "The Checks screen is cleaner: the card reserve and the Uncategorized weeks are white cards with one thin bar each." },
   { id: "2026-10-31-waiting-in-verify", date: "2026-10-31", text: "Spent today and This month now count only verified entries, and show what is still waiting in Verify beneath them." },
   { id: "2026-10-31-repair-twice", date: "2026-10-31", text: "The repair on Weekly review now also puts right an entry that was cancelled twice, and it always shows a card that says why when it cannot run." },
