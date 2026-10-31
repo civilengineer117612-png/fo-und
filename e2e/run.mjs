@@ -939,9 +939,8 @@ check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors
 await menuGo(page, "Checks");
 const ctext = await text(page, "#screen");
 check(/No card reserve|Covered|Short by/.test(ctext), "the card reserve check says covered, short, or that none is set up");
-check(await page.locator(".bars .brow").count() === 1, "the Unlogged chart has one bar for the one week that was counted");
-await page.click(".bars .brow");
-check((await text(page, ".caption")).includes("could not be accounted for"), "tapping the bar says what it means in words");
+check(await page.locator(".catcard .catrow").count() === 1, "Unlogged by week has one row for the one week that was counted");
+check(((await page.locator(".catcard .catbar").first().getAttribute("aria-label")) ?? "").includes("could not be accounted for"), "its bar says what it means in words");
 await page.click('button:has-text("Show as list")');
 check((await text(page, ".tbl >> nth=0")).includes("Not counted"), "the list twin marks weeks nobody counted instead of showing zero");
 check((await text(page, "#screen")).includes("week 3 note"), "the weekly questions review shows the answers");
@@ -4648,6 +4647,31 @@ console.log("\n-- The repair card never hides --");
   check(await seen(page, "#screen", "The repair cannot run: one old count does not add up."), "the card stays and says in one sentence why it cannot run");
   check((await page.innerText("#screen")).includes("Nothing was changed.") && await page.locator('#screen button[data-action="copy-repair-check"]').count() === 1, "and what to do, with a button that copies the check");
   check(await page.locator('#screen button[data-action="open-repair"]').count() === 0, "there is no repair button to tap");
+  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+
+// ===== Checks: the card reserve and Unlogged by week as white cards with thin bars (owner, Oct 31) =====
+console.log("\n-- Checks screen --");
+{ const TSG = "2026-10-01T09:00:00.000+08:00";
+  const acct = (id, name, cls, opening, o = {}) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: opening, opening_date: "2026-01-01", ...o });
+  const tx = (id, date, payee, source) => ({ id, date, payee, memo: source === "reconciliation" ? "Reconciliation: old count" : "", status: "verified", source, created_at: TSG, verified_at: TSG });
+  // Invented, with the owner's figures: the bank holds 8,876.69, the card is owed 9,909.19 (14,557.34 pending less 4,648.15 already paid), so it is short by 1,032.50
+  const transactions = [tx("p1", "2026-09-20", "Big purchase", "manual"), tx("u1", "2026-09-24", "Weekly check-in", "reconciliation"), tx("u2", "2026-10-01", "Weekly check-in", "reconciliation")];
+  const entries = [{ transaction_id: "p1", category_id: "cat-shopping", amount: 1455734 }, { transaction_id: "p1", account_id: "card", amount: -1455734, card_state: "pending" },
+    { transaction_id: "u1", account_id: "bank", amount: -29533 }, { transaction_id: "u1", category_id: "cat-unlogged", amount: 29533 }, { transaction_id: "u2", account_id: "bank", amount: -415510 }, { transaction_id: "u2", category_id: "cat-unlogged", amount: 415510 }];
+  const checkIns = [{ id: "c1", date: "2026-09-24", account_id: "bank", counted_balance: 1, ledger_balance: 1, difference: 0 }, { id: "c2", date: "2026-10-01", account_id: "bank", counted_balance: 1, ledger_balance: 1, difference: 0 }];
+  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acct("bank", "MariBank", "asset", 1332712, { reserve_for: "card" }), acct("card", "MariBank \u00b7 Credit card", "liability", -464815)], transactions, entries, checkIns } };
+  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
+  await menuGo(page, "Checks");
+  const t = (await text(page, "#screen")).replace(/\s+/g, " ");
+  check(/Short by \u20B11,032\.50/.test(t) && /Held in MariBank \u20B18,876\.69/.test(t) && /Owed on the card \u20B19,909\.19/.test(t), "the card reserve card says exactly: short by 1,032.50, held 8,876.69, owed 9,909.19");
+  check(!/pending|posted/.test(t), "no pending or posted line (the owner circled it)");
+  check(await page.locator(".rescard .cover").count() === 1 && await page.locator(".rescard").count() === 1, "one white card with one thin bar for the card");
+  check(await page.locator(".catcard .catrow").count() === 2 && /Week to Sat, Sep 26 \u20B1295\.33/.test(t) && /Week to Sat, Oct 3 \u20B14,155\.10/.test(t), "Unlogged by week: a row for each counted week with its exact figure");
+  check(!/Two things that keep the numbers honest|Tap a bar/.test(t), "the old lines are gone");
+  const box = await page.locator(".rescard .rc-state").boundingBox(), card = await page.locator(".rescard").boundingBox();
+  check(box && card && box.x + box.width <= card.x + card.width, "the status sits inside the card on one line");
+  await page.click('button[data-action="chart-mode"]');
+  check((await text(page, "#screen")).includes("Not accounted for"), "Show as list still gives the table twin");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 await protectionChecks({ browser, base: BASE, open, addAccount, menuGo, check });
