@@ -1964,7 +1964,8 @@ console.log("Log date and Cash first");
   const led = JSON.parse((await stored(page)).local);
   check(led.state.transactions.length === 1 && led.state.transactions[0].date === "2026-10-01", "and it is dated that day in the ledger");
   await page.click('button[data-action="reset-day"]');
-  check(!(await text(page, "#screen")).includes("₱33.00"), "it is not in today's list");
+  check(/^₱0\.00$/.test((await text(page, ".daytotal")).trim()) && ((await page.locator("#entries-list").count()) === 0 || !(await page.locator("#entries-list").textContent()).includes("33.00")) && (await page.locator(".note.waiting").count()) === 0, "it is not in today's total or list");
+  check((await text(page, "#glance")).includes("+ ₱33.00 waiting in Verify"), "it is in this month, shown as waiting in Verify (a draft is not counted as spent)");
   await page.click('button:has-text("Add expense")');
   const paidFrom = await page.locator("#sheet .pick").nth(1).locator(".chip").allInnerTexts();
   check(/Cash/.test(paidFrom[0] ?? "") && /Debit/.test(paidFrom[1] ?? "") && paidFrom.length === 2, "a draft does not make an account the one used last, so Cash comes first and the rest follow A to Z (" + paidFrom.join(" | ") + ")");
@@ -4316,6 +4317,25 @@ console.log("\n-- Cancelled count and Spent today --");
   await page.click('#nav button[data-tab="log"]'); await page.waitForSelector("#glance");
   const t = await text(page, "#screen");
   check(/spent today/i.test(t) && t.includes("\u20B10.00") && !t.includes("11,000.00"), "a cancelled count that found 11,000.00 shows nothing as spent today");
+  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+
+// ===== Spent today and This month count verified entries only; a draft shows apart as waiting in Verify (P0-5 fix 6) =====
+console.log("\n-- Waiting in Verify --");
+{ const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-01-01" };
+  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [bank], transactions: [], entries: [] } };
+  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
+  await page.click('#nav button:has-text("Log")'); await page.click('button[data-action="open-other"]');
+  await page.fill("#f-amount", "95"); await page.click('#sheet [data-action="pick-cat"]:has-text("Food")'); await page.click('#sheet [data-action="pick-acct"]:has-text("Test Bank")'); await page.click("#f-save");
+  await seen(page, "#toast", "Saved"); await page.waitForSelector("#glance");
+  const day = async () => (await text(page, ".daytotal")).trim(), month = async () => (await text(page, "#glance .mc-top b")).trim();
+  check(await day() === "₱0.00", "a draft dated today is NOT in Spent today: the figure is exactly ₱0.00 (" + await day() + ")");
+  check(await month() === "₱0.00", "and NOT in This month: exactly ₱0.00 (" + await month() + ")");
+  check((await text(page, ".note.waiting")).trim() === "+ ₱95.00 waiting in Verify", "Spent today shows it apart: + ₱95.00 waiting in Verify");
+  check((await text(page, "#glance .mc-wait")).trim() === "+ ₱95.00 waiting in Verify", "and This month shows it apart in the same words");
+  await page.click('#nav button:has-text("Verify")'); await page.click('button[data-action="verify-ok"]'); await page.waitForTimeout(400);
+  await page.click('#nav button:has-text("Log")'); await page.waitForSelector("#glance");
+  check(await day() === "₱95.00" && await month() === "₱95.00", "once verified it counts: exactly ₱95.00 in Spent today and in This month (" + await day() + " / " + await month() + ")");
+  check((await page.locator(".note.waiting").count()) === 0 && (await page.locator("#glance .mc-wait").count()) === 0, "and nothing is waiting any more");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 // ===== A gap booked as "I spent some of it" is matched by the real charge too (P0-5 fix 3) =====
