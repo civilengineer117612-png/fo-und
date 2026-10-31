@@ -132,7 +132,7 @@ test("the sweep goes down any ordered list: caps first, the last takes the rest;
 
 test("a new install starts neutral: plain categories, four roles, no tiles, and the scanner finds a rent or food category by role", () => {
   const cats = defaultCategories();
-  assert.deepEqual(cats.filter((c) => c.kind === "expense").map((c) => c.name), ["Food", "Essentials", "Transport", "Rent", "Subscription", "Shopping", "Health", "Fun", "Other", "Unlogged"]);
+  assert.deepEqual(cats.filter((c) => c.kind === "expense").map((c) => c.name), ["Food", "Essentials", "Transport", "Rent", "Subscription", "Shopping", "Health", "Fun", "Other", "Uncategorized"]);
   assert.equal(categoryByRole(cats, "rent").name, "Rent"); assert.equal(categoryByRole(cats, "subscription").id, "cat-subscription");
   assert.equal(readScan("Rent for the month of October\nTotal 5,000.00", "2026-10-05").categoryGuess, "rent");
 });

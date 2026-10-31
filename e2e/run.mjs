@@ -939,7 +939,7 @@ check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors
 await menuGo(page, "Checks");
 const ctext = await text(page, "#screen");
 check(/No card reserve|Covered|Short by/.test(ctext), "the card reserve check says covered, short, or that none is set up");
-check(await page.locator(".catcard .catrow").count() === 1, "Unlogged by week has one row for the one week that was counted");
+check(await page.locator(".catcard .catrow").count() === 1, "Uncategorized by week has one row for the one week that was counted");
 check(((await page.locator(".catcard .catbar").first().getAttribute("aria-label")) ?? "").includes("could not be accounted for"), "its bar says what it means in words");
 await page.click('button:has-text("Show as list")');
 check((await text(page, ".tbl >> nth=0")).includes("Not counted"), "the list twin marks weeks nobody counted instead of showing zero");
@@ -3505,7 +3505,7 @@ console.log("Welcome card, category editing, required marks");
     await page.click('button[data-action="st-month"]'); await page.waitForTimeout(250);
     await page.click('button[data-action="st-compare"]'); await page.waitForTimeout(250);
     const cmpText = await text(page, "#sheet");
-    check((cmpText.match(/money in \u00b7 added as income/g) ?? []).length === 1 && (cmpText.match(/does not say what it was \u00b7 added to Unlogged/g) ?? []).length === 1, "money in says it is added as income, and the line that does not say what it was says it is added to Unlogged");
+    check((cmpText.match(/money in \u00b7 added as income/g) ?? []).length === 1 && (cmpText.match(/does not say what it was \u00b7 added to Uncategorized/g) ?? []).length === 1, "money in says it is added as income, and the line that does not say what it was says it is added to Unlogged");
     check(await page.locator('#sheet button[data-action="st-adddraft"]').count() === 2, "the two interest lines are already in the ledger from the import, so only the transfer in and the line that does not say what it was are offered");
     const before = JSON.parse((await stored(page)).local).state.transactions.length, idsBefore = new Set(JSON.parse((await stored(page)).local).state.transactions.map((t) => t.id));
     await page.locator('#sheet .row:has-text("money in") button[data-action="st-adddraft"]').first().click();
@@ -4204,7 +4204,7 @@ console.log("\n-- Minus row in Category --");
   await menuGo(page, "Spending");
   const t = await text(page, "#screen");
   check(t.includes("\u20B1300.00") && t.includes("Food") && t.includes("\u20B1500.00"), "the month says 300.00 spent, with Food at 500.00");
-  check(t.includes("Unlogged") && t.includes("\u2212\u20B1200.00") && t.includes("brings the total down"), "the count that found 200.00 shows as its own minus row, so the rows add up");
+  check(t.includes("Uncategorized") && t.includes("\u2212\u20B1200.00") && t.includes("brings the total down"), "the count that found 200.00 shows as its own minus row, so the rows add up");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 // ===== A card counted after it was paid: one tap logs the payment; a count gap can be put right =====
@@ -4702,6 +4702,30 @@ console.log("\n-- Checks screen --");
   check(box && card && box.x + box.width <= card.x + card.width, "the status sits inside the card on one line");
   await page.click('button[data-action="chart-mode"]');
   check((await text(page, "#screen")).includes("Not accounted for"), "Show as list still gives the table twin");
+  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+
+// ===== Uncategorized is the name of spending with no category; Not yet explained stays for held count gaps and is never in a total (owner, Oct 31, P1-7) =====
+console.log("\n-- Uncategorized and Not yet explained --");
+{ const TSG = "2026-10-02T09:00:00.000+08:00";
+  const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-01-01" };
+  const tx = (id, payee, source, o = {}) => ({ id, date: "2026-10-02", payee, memo: source === "reconciliation" ? "Reconciliation: old count" : "", status: "verified", source, created_at: TSG, verified_at: TSG, ...o });
+  // An OLDER ledger: its stored category is still named Unlogged. 300.00 of Food, 700.00 spent with no category, and a 500.00 count gap that is held (not spending).
+  const transactions = [tx("f1", "Cafe", "manual"), tx("u1", "Weekly check-in", "reconciliation"), tx("h1", "Weekly check-in", "reconciliation", { adjustment: true })];
+  const entries = [{ transaction_id: "f1", category_id: "cat-food", amount: 30000 }, { transaction_id: "f1", account_id: "b", amount: -30000 },
+    { transaction_id: "u1", category_id: "cat-unlogged", amount: 70000 }, { transaction_id: "u1", account_id: "b", amount: -70000 },
+    { transaction_id: "h1", category_id: "cat-unlogged", amount: 50000 }, { transaction_id: "h1", account_id: "b", amount: -50000 }];
+  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [bank], transactions, entries } };
+  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
+  await menuGo(page, "Spending");
+  const t = (await text(page, "#screen")).replace(/\s+/g, " "), rows = (await text(page, ".catcard")).replace(/\s+/g, " ");
+  check((await text(page, ".hero")).trim() === "\u20B11,000.00", "the month's spending is exactly 1,000.00: the food and the uncategorized, never the held gap (" + (await text(page, ".hero")).trim() + ")");
+  check(/Uncategorized \u20B1700\.00/.test(rows) && /Food \u20B1300\.00/.test(rows), "the spending rows say Uncategorized 700.00 and Food 300.00 (an older ledger's stored name is read as the new one)");
+  check(!/Not yet explained/.test(rows), "Not yet explained is in no spending row");
+  check(await page.locator("h2:has-text('Not yet explained')").count() === 1 && /Not yet explained.*Not part of what you spent\.\s*\u20B1500\.00/i.test(t), "it is its own list apart, with the held 500.00 and the words 'Not part of what you spent'");
+  const names = {};
+  for (const [name, go] of [["Spending", async () => {}], ["Checks", async () => menuGo(page, "Checks")], ["Weekly review", async () => menuGo(page, "Weekly review")], ["Help", async () => menuGo(page, "Help")], ["Verify", async () => page.click('#nav button:has-text("Verify")')]]) { await go(); names[name] = (await text(page, "#screen")); }
+  check(Object.entries(names).every(([, v]) => !/unlogged/i.test(v)), "no screen says Unlogged: " + Object.entries(names).filter(([, v]) => /unlogged/i.test(v)).map(([k]) => k).join(", "));
+  check(/Uncategorized by week/i.test(names["Checks"]), "Checks names the weekly figure Uncategorized by week");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 await protectionChecks({ browser, base: BASE, open, addAccount, menuGo, check });

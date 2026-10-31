@@ -5,6 +5,7 @@
 import { validateState } from "./validate.js";
 import { phTimestamp } from "./util.js";
 import { LEDGER_VERSION, COLLECTION_NAMES } from "./migrate.js";
+import { plainNames } from "./seed.js";
 
 export { LEDGER_VERSION };
 
@@ -27,7 +28,7 @@ export function parseLedger(text) {
   if (typeof raw.settings !== "object" || raw.settings === null) return { ok: false, error: "bad settings" };
   const problems = validateState(raw.state);
   if (problems.length) return { ok: false, error: problems[0].message };
-  return { ok: true, ledger: raw, ...(raw.v < LEDGER_VERSION ? { older: true } : {}) };
+  return { ok: true, ledger: plainNames(raw), ...(raw.v < LEDGER_VERSION ? { older: true } : {}) };
 }
 
 // localText / idbText: the stored text, or null when that store holds nothing.

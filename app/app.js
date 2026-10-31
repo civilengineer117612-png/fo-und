@@ -2245,7 +2245,7 @@ function viewChecks() {
       ${sv.weeks.some((w) => w.q3_annoyance) ? `<h2>What annoyed you</h2>${sv.weeks.filter((w) => w.q3_annoyance).map((w) => `<p class="note"><b>${esc(longDate(w.week_end))}:</b> ${esc(w.q3_annoyance)}</p>`).join("")}` : ""}`;
   return `<h1>Checks</h1>
     <h2>Card reserve</h2>${reserve}
-    <h2>Unlogged by week</h2><p class="note">Money your counts could not explain.</p>${habit}
+    <h2>Uncategorized by week</h2><p class="note">Money your counts could not explain.</p>${habit}
     ${counted.length ? `<p><button class="link" data-action="chart-mode" data-mode="${ui.asList ? "chart" : "list"}">${ui.asList ? "Show as chart" : "Show as list"}</button></p>` : ""}
     <h2>Weekly questions</h2>${survey}`;
 }
@@ -3183,7 +3183,7 @@ function renderSheet() {
       <div class="pmonths">${bars}</div>
       <label for="p-name">Who is this? (only on this phone)</label><input id="p-name" data-field="pname" maxlength="40" autocomplete="off" value="${esc(ui.form.pname ?? "")}" placeholder="e.g. Mama, Landlord">
       <label>Category${REQ}</label>${categoryPicker(cats, ui.form.category_id)}${REQNOTE}
-      <p class="note small">Give two numbers the same name and they show as one person. ${n > 1 ? `All ${n} payments` : "This payment"} to ${esc(sh.label)} leave Unlogged, and the next statement does the same by itself.</p>
+      <p class="note small">Give two numbers the same name and they show as one person. ${n > 1 ? `All ${n} payments` : "This payment"} to ${esc(sh.label)} leave Uncategorized, and the next statement does the same by itself.</p>
       <p><button class="primary" id="f-save" data-action="payee-save"${ui.form.category_id ? "" : " disabled"}>${n > 1 ? `Save for all ${n}` : "Save"}</button></p>
       <p class="center"><button class="link" data-action="close-sheet">Not now</button></p>`;
   } else if (sh.type === "register") {
@@ -3374,7 +3374,7 @@ function renderSheet() {
     else {
       const firstMonth = M.proveMonths(S(), sh.account_id)[0]?.month === sh.month, st = firstMonth && d.carried !== 0 ? M.startFromStatement(S(), sh.account_id) : null;
       const same = Math.sign(d.explained) === Math.sign(d.difference), pct = d.difference === 0 || !same ? 0 : Math.max(0, Math.min(100, Math.round((100 * Math.abs(d.explained)) / Math.abs(d.difference))));
-      const tail = (m) => (m.action === "payment" ? " \u00b7 a payment to the card \u00b7 not added here" : m.action === "move" ? " \u00b7 a move between your own accounts" : m.action === "choose" ? " \u00b7 does not say what it was \u00b7 added to Unlogged" : m.action === "in" ? " \u00b7 money in \u00b7 added as income" : "");
+      const tail = (m) => (m.action === "payment" ? " \u00b7 a payment to the card \u00b7 not added here" : m.action === "move" ? " \u00b7 a move between your own accounts" : m.action === "choose" ? " \u00b7 does not say what it was \u00b7 added to Uncategorized" : m.action === "in" ? " \u00b7 money in \u00b7 added as income" : "");
       body = `<h3 style="margin:0 0 4px">${monthLabel(sh.month)} against your ledger</h3><p class="note" style="margin:0 0 8px">${esc(acct?.name ?? "")}, at ${esc(longDate(d.asOf))}</p>
         <dl style="margin:0"><div class="row"><div>${d.card ? "The statement says you owe" : "The bank closes at"}</div><div class="amt">${peso(d.statementClosing)}</div></div><div class="row"><div>${d.card ? "Your ledger says you owe" : "Your ledger shows"}</div><div class="amt">${peso(d.card ? -d.ledgerBalance : d.ledgerBalance)}</div></div>
         <div class="row"><div><b>Difference</b><small>${d.difference === 0 ? "they agree" : d.card ? (d.difference < 0 ? "your ledger owes more" : "your ledger owes less") : d.difference > 0 ? "your ledger is higher" : "your ledger is lower"}</small></div><div class="amt"><b>${peso(Math.abs(d.difference))}</b></div></div></dl>
