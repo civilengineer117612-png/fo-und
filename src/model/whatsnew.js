@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-10-31-one-off-pay", date: "2026-10-31", text: "A pay line with no category now counts toward your budget only when the same label was on 2 of your last 3 payslips; \"13th month\" and \"Bonus\" are suggested as Bonus." },
   { id: "2026-10-31-refund-cutoff", date: "2026-10-31", text: "A refund now brings spending down in the category it was for, and pay counts in the month it arrived; past refunds saved as income can be counted as less spending." },
   { id: "2026-10-31-suspense", date: "2026-10-31", text: "A gap you booked as \"I spent some of it\" is matched by the real charge too, so it counts once; Budget and Trips no longer count a gap that is not yet explained." },
   { id: "2026-10-31-ledger-check", date: "2026-10-31", text: "Setup, About this app now has a quiet Ledger check line: OK, or how many problems the entries have; it never stops the app opening or backing up." },
