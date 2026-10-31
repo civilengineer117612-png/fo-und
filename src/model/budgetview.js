@@ -3,6 +3,7 @@
 // Reused, not copied: payslip nets (income.js), the suggestion engine (suggest.js), budgetFor and planBudgetChange (budget.js).
 import { netPerPayday } from "./income.js";
 import { median, suggestPlan, NEEDS_ROLES } from "./suggest.js";
+import { payBase, PAYDAYS_A_MONTH } from "./stablepay.js";
 import { formatPesos } from "./money.js";
 import { budgetFor, planBudgetChange } from "./budget.js";
 import { UNLOGGED_CATEGORY_ID } from "./seed.js";
@@ -59,23 +60,31 @@ const whole = (n) => Number.isSafeInteger(n) && n >= 0;
 
 // How many kinds of payday the payslips show when no plan says so: pay dates that all fall within 10 days of the month are ONE kind (monthly pay);
 // otherwise two, split at the biggest gap between the days of the month. Returns the base nets of each kind, oldest first.
-export function netsByKind(slips) {
+export function netsByKind(slips, field = "base") {
   if (!slips.length) return [];
   const day = (r) => Number(r.date.slice(8)), days = [...new Set(slips.map(day))].sort((a, b) => a - b);
-  if (days[days.length - 1] - days[0] <= 10) return [slips.map((r) => r.base)];
+  if (days[days.length - 1] - days[0] <= 10) return [slips.map((r) => r[field])];
   let cut = 0, gap = -1;
   for (let i = 1; i < days.length; i++) if (days[i] - days[i - 1] > gap) { gap = days[i] - days[i - 1]; cut = days[i]; }
-  return [slips.filter((r) => day(r) < cut).map((r) => r.base), slips.filter((r) => day(r) >= cut).map((r) => r.base)];
+  return [slips.filter((r) => day(r) < cut).map((r) => r[field]), slips.filter((r) => day(r) >= cut).map((r) => r[field])];
 }
 
-// The income every share is measured against. The owner's own figure wins, then a loaded plan's expected income, then the payslips: the median of
-// the last 3 nets of each kind of payday, overtime left out, added up for the month. {amount, source, text}; amount is null with no income at all.
+// The income every share is measured against. The owner's own figure wins, then a loaded plan's expected income, then the payslips: STABLE pay (what
+// arrived less every variable line: overtime, holiday and night pay, bonus, back pay), the median of the last 3 payslips of each kind of payday. A bi-weekly
+// employer's monthly base is 2 x the per-payday base; a third payday in a month is an extra payday, never in the base (stablepay.js).
+// {amount, source, text, ...}; amount is null with no income at all. For payslips it also says `perPayday`, `paydays` a month, `frequency` and the `extra` paydays.
 export function baseIncome(state, { plan = null, pin = null } = {}) {
   if (whole(pin) && pin > 0) return { amount: pin, source: "pinned", text: "Your own figure" };
   if (plan?.paydays?.length) return { amount: plan.paydays.reduce((n, p) => n + p.income, 0), source: "plan", text: "From your pay plan (its expected income)" };
-  const kinds = netsByKind(netPerPayday(state));
-  if (!kinds.length) return { amount: null, source: "none", text: NO_INCOME_PROMPT };
-  return { amount: kinds.reduce((n, list) => n + median(list.slice(-3), "low"), 0), source: "payslips", text: "From your last 3 payslips" };
+  const all = netPerPayday(state);
+  if (!all.length) return { amount: null, source: "none", text: NO_INCOME_PROMPT };
+  const { frequency, rows, extra } = payBase(all), kinds = frequency?.kind === "biweekly" ? [rows.map((r) => r.stable)] : netsByKind(rows, "stable");
+  const med = (list) => median(list.slice(-3), "low"), perPayday = kinds.length === 1 ? med(kinds[0]) : null;
+  const amount = frequency?.kind === "biweekly" ? 2 * med(kinds[0]) : kinds.reduce((n, list) => n + med(list), 0);
+  const used = Math.min(3, kinds.length === 1 ? kinds[0].length : Math.max(...kinds.map((k) => k.length)));
+  const how = frequency ? ` ${PAYDAYS_A_MONTH[frequency.kind]} ${PAYDAYS_A_MONTH[frequency.kind] === 1 ? "payday" : "paydays"} a month, ${frequency.from === "period_type" ? `from "${frequency.label}"` : "worked out from your pay dates"}.` : "";
+  return { amount, source: "payslips", perPayday, paydays: frequency ? PAYDAYS_A_MONTH[frequency.kind] : null, frequency, extra,
+    text: `${used === 1 ? "Your last payslip" : `Last ${used} payslips`}, extra pay left out.${how}` };
 }
 
 // The summary of the month: Spending and Saved as a share of the income, each PLAINLY rounded to the nearest tenth of a percent (1000 = 100.0%), and

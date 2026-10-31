@@ -89,6 +89,20 @@
   .pl-t { font-size: 13px; color: var(--muted); }
   button.pl-add { background: none; border: 0; color: var(--accent); padding: 10px 0; font-size: 16px; min-height: 0; width: auto; border-radius: 0; margin-right: 18px; }
   .pl-quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 14px; }
+  /* the payslips list (Oct 31): one white card per payslip; the pay period and what arrived on top, Gross and Deductions one row each, a quiet bar at the bottom */
+  .slipcard { padding: 6px 16px 2px; margin: 12px 0; }
+  .slipsum { display: block; padding: 10px 0 6px; cursor: default; min-height: 0; } details.slipc > summary.slipsum { display: block; min-height: 0; border-bottom: 0; cursor: pointer; list-style: none; } details.slipc > summary.slipsum::-webkit-details-marker { display: none; }
+  .slipline { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; } .sl-t { font-size: 18px; font-weight: 600; } .sl-n { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+  .slipsub { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 14px; margin: 2px 0 8px; }
+  .slipkv { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 15px; } .slipkv span:last-child { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .slipbody { padding-bottom: 6px; border-top: 1px solid var(--line); }
+  /* the lines inside a payslip card read like the Gross and Deductions rows above them: same size, muted label at the left, the figure in ink at the right */
+  .slipbody { padding-top: 4px; } .slipbody .pl { border-top: 0; padding: 0; } .slipbody button.pl-main { font-size: 15px; color: var(--muted); padding: 7px 0; } .slipbody .pl-n { display: none; }
+  .slipbody .pl-amt { font-size: 15px; font-weight: 400; color: var(--ink); } .slipbody .pl-sub { padding-left: 0; } .slipbody h4.dayhead { margin: 12px 0 0; font-size: 13px; }
+  .slipbar { display: flex; flex-wrap: wrap; gap: 4px 18px; border-top: 1px solid var(--line); padding: 4px 0; margin-top: 4px; } .slipbar button.link { color: var(--muted); font-size: 14px; padding: 10px 0; min-height: 0; width: auto; }
+  /* the payslip review form after a photo or PDF (Oct 31): the lines and the totals sit in white cards like every other list */
+  #p-lines, details[data-keep="t"] { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 14px; margin: 10px 0; }
+  #p-lines > details:last-child:not([open]) > summary, details[data-keep="t"]:not([open]) > summary { border-bottom: 0; }
   .pagepeek { margin-top: 10px; } .pagepeek summary { cursor: pointer; padding: 8px 0; } .pagepeek[open] .pg-show, .pagepeek:not([open]) .pg-hide { display: none; }
   .slipask { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
   .shotbtn.enlarge { position: relative; } .shotbtn.enlarge::after { content: "Tap to enlarge"; position: absolute; right: 8px; bottom: 8px; background: var(--ink); color: var(--paper); font-size: 13px; padding: 4px 8px; border-radius: 6px; }

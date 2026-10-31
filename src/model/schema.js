@@ -110,6 +110,7 @@ export const SCHEMAS = {
     id, payslip_id: id, changed_on: date, employer: name, period_from: date, period_to: date, pay_date: date,
     printed_gross: centavos, printed_net: centavos, deposit: centavos, printed_deductions: optional(centavos), lines: { type: "lineList" },
     items: optional({ type: "itemList" }),   // ADDED (data version 11): the printed lines it held, when it had them
+    change: optional(text),   // ADDED (Oct 31, data version unchanged): what this record is about when it is not a changed figure ("Printed lines added")
   },
   PayslipLine: { payslip_id: id, side: oneOf("earning", "deduction"), kind: oneOf("basic", "rice", "skills", "clothing", "transport", "overtime", "thirteenth", "bonus", "tax", "sss", "gsis", "philhealth", "pagibig", "absences", "lates", "loan", "other"), amount: centavos, earned_month: optional({ type: "month" }) },
   // ADDED (data version 11): EVERY line printed on a payslip, as printed. The section decides the direction (an "employer" line is shown and never reduces net); a 0.00 line is kept.

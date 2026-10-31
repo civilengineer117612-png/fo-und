@@ -177,7 +177,7 @@ P0 (loses data, blocks logging or blocks a backup)
 - P0-4 Weekly check-in gaps: #271 cancel-once is merged; the new check-in is #272 (count all first, held gaps, proposed moves); the repair of past months is next (owner approved: both directions, per-month before and after, proposed moves from old pairs).
 
 P1
-- None open. P1-2 (reader leftovers), P1-3 (every printed payslip line kept, data version 11) and P1-4 (a verified entry cannot be saved over, the repeated-id line in About) are done; the owner names the next.
+- None open. P1-2 (reader leftovers), P1-3 (every printed payslip line kept, data version 11) and P1-4 (a verified entry cannot be saved over, the repeated-id line in About) and P1-5 (the budget base income uses stable pay; Add the breakdown for an old payslip; payslips as clean cards) are done; the owner names the next.
 
 P2 (wait for "next"): WebKit e2e run; voice entry disclosure in Help and the first-run notice; library licence note; trim
 contradictions in CLAUDE.md; Android block decision; custom domain plan; Trips year grouping and period picker; ratchet screen;

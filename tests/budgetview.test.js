@@ -66,7 +66,7 @@ test("overtime does not change the income basis, and the base is the median of t
   for (const [d, v, ot] of [["2026-06-28", 2400000, 0], ["2026-07-28", 2500000, 0], ["2026-08-28", 2600000, 0], ["2026-09-28", 2500000, 0]]) { slip(a, d, v); slip(b, d, v + 900000, 900000); }
   const x = baseIncome(a), y = baseIncome(b);
   assert.equal(x.amount, 2500000); assert.equal(y.amount, x.amount, "900,000 of overtime on every payslip changes nothing");
-  assert.equal(x.text, "From your last 3 payslips"); assert.equal(x.source, "payslips");
+  assert.equal(x.text, "Last 3 payslips, extra pay left out. 1 payday a month, worked out from your pay dates."); assert.equal(x.source, "payslips");
   const old = base(); slip(old, "2026-06-28", 100000); slip(old, "2026-07-28", 2800000); slip(old, "2026-08-28", 2000000); slip(old, "2026-09-28", 2200000);
   assert.equal(baseIncome(old).amount, 2200000, "only the last 3 count (2.8M, 2.0M, 2.2M): the small old payslip is left out");
   const two = base(); slip(two, "2026-08-28", 2000000); slip(two, "2026-09-28", 2400000);

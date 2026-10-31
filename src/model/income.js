@@ -7,6 +7,7 @@ import { checkTransactionSave } from "./index.js";
 import { planOvertimeTransfer, splitOvertime } from "./goals.js";
 import { wordsToCentavos } from "./scan.js";
 import { monthOf } from "./reports.js";
+import { stableOf } from "./stablepay.js";
 import { storedItems, checkItems, linesFromItems, itemsOf, categoryOf, categoryName, FALLBACK, EARNING_CATEGORIES, DEDUCTION_CATEGORIES } from "./payslipitems.js";
 
 export const EARNINGS = [["basic", "Basic salary"], ["rice", "Rice subsidy"], ["skills", "Skills allowance"], ["clothing", "Clothing allowance"],
@@ -212,8 +213,9 @@ export function incomeByMonth(state, year) {
 // One row per payslip in the year, oldest first: what arrived, split into base and overtime.
 export function netPerPayday(state, range) {
   return liveSlips(state).filter((p) => inRange(range, p)).sort((a, b) => a.pay_date.localeCompare(b.pay_date) || a.id.localeCompare(b.id)).map((p) => {
-    const t = payslipTotals(linesOf(state, p.id)), overtime = Math.min(t.overtime, p.deposit);
-    return { payslip_id: p.id, date: p.pay_date, employer: p.employer, net: p.deposit, overtime, base: p.deposit - overtime };
+    const lines = linesOf(state, p.id), t = payslipTotals(lines), overtime = Math.min(t.overtime, p.deposit), s = stableOf({ deposit: p.deposit, items: itemsOf(state, p.id), lines });
+    // `base` (deposit less overtime) is what the Income tables show; `stable` (deposit less every variable line) is what the budget counts on (stablepay.js).
+    return { payslip_id: p.id, date: p.pay_date, employer: p.employer, net: p.deposit, overtime, base: p.deposit - overtime, stable: s.stable, variable: s.variable, parts: s.parts, period_type: p.period_type ?? "" };
   });
 }
 
@@ -304,6 +306,34 @@ export function updatePayslip(state, id, input, now = new Date()) {
   if (bad.length) return fail("BAD_REVISION", bad[0].message);
   return { ...r, transaction, draftsRemoved: drafts.size, photoIds: (state.attachments ?? []).filter((a) => dropped.has(a.transaction_id)).map((a) => a.id),
     state: { ...r.state, transactions: r.state.transactions.map((t) => (t.id === transaction.id ? transaction : t)), ...(changed ? { payslipRevisions: [...(state.payslipRevisions ?? []), revision] } : {}) } };
+}
+
+// Printed lines for a payslip saved before every printed line was kept (owner, Oct 31): the lines are read again from the paper (or typed) and must
+// reconcile to the figures this payslip already holds: gross, net, and the deductions total when one was printed. Nothing of the pay itself is touched: the
+// money-in entry, its amount and its status, the payslip's figures and its generated lines stay exactly as they were. The new items are added, a revision
+// records the day ("Breakdown added"), and from then on the payslip's stable pay is read from them. input: {items, overtime_month?}.
+// Returns {ok, state, items, problems} or {ok: false, violations, problems} when the lines do not reconcile ("Check this").
+export function addPrintedLines(state, id, input, now = new Date()) {
+  const p = (state.payslips ?? []).find((x) => x.id === id);
+  if (!p) return fail("UNKNOWN_PAYSLIP", "That payslip is no longer there.");
+  if (itemsOf(state, id).length) return fail("HAS_LINES", "This payslip already has its breakdown.");
+  const why = checkItems(input.items ?? []);
+  if (why) return fail("BAD_ITEM", why);
+  if (!(input.items ?? []).some((i) => i.section === "earning")) return fail("NO_EARNINGS", "add at least one earnings line");
+  const items = storedItems(id, input.items), made = linesFromItems(items, input.overtime_month ?? p.period_to.slice(0, 7));
+  // The same comparison as a new payslip (the deposit is not asked: it is the money already in and is never changed).
+  const problems = payslipProblems({ printed_gross: p.printed_gross, printed_net: p.printed_net, deposit: p.printed_net, printed_deductions: p.printed_deductions }, made);
+  if (problems.flags.length) return { ok: false, violations: [{ code: "DOES_NOT_RECONCILE", severity: "error", message: "The lines differ from this payslip" + (problems.gap ? " by " + peso(problems.gap) : "") + ". Check them against the paper." }], problems, state };
+  const n = (state.payslipRevisions ?? []).filter((x) => x.payslip_id === id).length + 1;
+  const revision = { id: id + "-r" + n, payslip_id: id, changed_on: phTimestamp(now).slice(0, 10), employer: p.employer, period_from: p.period_from, period_to: p.period_to, pay_date: p.pay_date,
+    printed_gross: p.printed_gross, printed_net: p.printed_net, deposit: p.deposit, ...(p.printed_deductions ? { printed_deductions: p.printed_deductions } : {}),
+    lines: linesOf(state, id).map(({ side, kind, amount, earned_month }) => ({ side, kind, amount, ...(earned_month ? { earned_month } : {}) })), change: "Breakdown added" };
+  const bad = validateShape("PayslipRevision", revision);
+  if (bad.length) return fail("BAD_REVISION", bad[0].message);
+  const info = ["pay_rate", "pay_basis", "period_type"].filter((k) => !p[k] && String(input[k] ?? "").trim());
+  return { ok: true, violations: [], problems, items,
+    state: { ...state, payslipItems: [...(state.payslipItems ?? []), ...items], payslipRevisions: [...(state.payslipRevisions ?? []), revision],
+      ...(info.length ? { payslips: state.payslips.map((x) => (x.id === id ? { ...x, ...Object.fromEntries(info.map((k) => [k, String(input[k]).trim()])) } : x)) } : {}) } };
 }
 
 // "Earlier figures": what a payslip held before each change, newest change first.
@@ -428,5 +458,5 @@ export function revisionChanges(state, payslipId) {
     for (const [k, l] of B) if (!A.has(k)) out.push(`${NAME[l.kind] ?? l.kind} added ${peso(l.amount)}`);
     return out;
   };
-  return revs.map((r, i) => ({ revision: r, changes: diff(r, revs[i + 1] ?? now) })).reverse();
+  return revs.map((r, i) => ({ revision: r, changes: [...(r.change ? [r.change] : []), ...diff(r, revs[i + 1] ?? now)] })).reverse();
 }
