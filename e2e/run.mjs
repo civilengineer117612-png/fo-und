@@ -1599,10 +1599,11 @@ await page.fill("#p-ded", "1200");
 await page.click("#f-save");
 check(await seen(page, "#toast", "Payslip saved"), "the payslip is saved");
 check((await text(page, "#toast")).includes("Emergency Fund draft"), "overtime makes an Emergency Fund draft, and says so");
-// the payslip is for September 16-30 and arrived on October 2: it belongs to September
-check((await text(page, ".hero")).includes("₱0.00") && (await text(page, "#screen")).includes("earned in October 2026"), "a payslip for September 16-30 received on October 2 does not count in October");
+// the payslip is for September 16-30 and arrived on October 2: it counts in October, the month the deposit arrived (P0-5 fix 4: the period is only a label)
+check((await text(page, ".hero")).includes("₱10,300.00") && (await text(page, "#screen")).includes("earned in October 2026"), "a payslip for September 16-30 received on October 2 counts in October, the month it arrived");
 await page.click('button[aria-label="Earlier"]');
-check((await text(page, ".hero")).includes("₱10,300.00") && (await text(page, "#screen")).includes("earned in September 2026"), "it counts in September, the month of its pay period");
+check((await text(page, ".hero")).includes("₱0.00") && (await text(page, "#screen")).includes("earned in September 2026"), "and not in September, the month of its pay period");
+await page.click('button[aria-label="Later"]');
 const incText = await text(page, "#screen");
 check(/Gross\s*₱11,500\.00[\s\S]*Deductions\s*-₱1,200\.00[\s\S]*Net\s*₱10,300\.00/.test(incText) && !incText.includes("Basic salary") && (await page.locator("#screen .bars").count()) === 0, "the Overview is gross, deductions and net, with no bar graph");
 { const ov = await page.evaluate(() => { const r = (el) => Math.round(el.getBoundingClientRect().right); return { rows: [...document.querySelectorAll("#screen .mlist .mline .mv")].map(r), net: r(document.querySelector("#screen .mtotal .mv")) }; });
@@ -1618,10 +1619,10 @@ check(await page.locator(".btrack.stack .bfill.ot").count() === 1 && !(await pag
 check(await page.locator('#screen .seg button:has-text("Pay history")').count() === 0 && await page.locator('#screen .seg button:has-text("Months")').count() === 0 && await page.locator('#screen .seg button').count() === 3, "the views are Overview, Earnings and Deductions: no Months, no Pay history");
 await page.click('#screen .seg button:has-text("Overview")');
 await shot(page, "38-income");
-await page.click('button[aria-label="Earlier"]');
+await page.click('button[aria-label="Earlier"]'); await page.click('button[aria-label="Earlier"]');
 const prevMonth = await text(page, "#screen");
 check(prevMonth.includes("Nothing recorded for August 2026") && !prevMonth.includes("Sample Employer") && !prevMonth.includes("Plan against what arrived") && !prevMonth.includes("Employers"), "another month shows only that month");
-await page.click('button[aria-label="Later"]');
+await page.click('button[aria-label="Later"]'); await page.click('button[aria-label="Later"]');
 await page.click('#nav button:has-text("Verify")');
 check((await text(page, "#screen")).includes("Overtime to Emergency Fund") && (await text(page, "#screen")).includes("₱900.00"), "Verify holds the 60% draft: 60% of ₱1,500.00 is ₱900.00");
 await menuGo(page, "Income");
@@ -1661,7 +1662,7 @@ await page.click('button[data-action="income-view"][data-view="earnings"]');
 check(await page.locator(".mlist details.mrow").count() >= 1 && await page.locator(".mlist .mtotal").count() === 0 && await page.locator("#screen table.tbl th:text-is('Month')").count() === 0, "Earnings is a short list: one month, no repeated total line, not a five-column table");
 { const open = await page.locator(".mlist details.mrow").evaluateAll((els) => els.every((d) => d.open));
   const t = await page.locator(".mlist details.mrow").first().innerText();
-  check(open && /Sep\s*₱10,300\.00[\s\S]*Basic salary[\s\S]*Rice subsidy[\s\S]*Overtime[\s\S]*Gross\s*₱11,500\.00[\s\S]*Deductions\s*-₱1,200\.00/.test(t) && !t.includes("Base pay"), "the month is open at once: net at the top, each kind of earning with rice subsidy and overtime apart, then gross and deductions (" + t.replace(/\n/g, " | ").slice(0, 200) + ")"); }
+  check(open && /^Oct\s*₱10,300\.00[\s\S]*Basic salary[\s\S]*Rice subsidy[\s\S]*Overtime[\s\S]*Gross\s*₱11,500\.00[\s\S]*Deductions\s*-₱1,200\.00/.test(t) && !t.includes("Base pay"), "the month is open at once: net at the top, each kind of earning with rice subsidy and overtime apart, then gross and deductions (" + t.replace(/\n/g, " | ").slice(0, 200) + ")"); }
 { const e = (await text(page, "#screen")).toLowerCase();
   check(!e.includes("where it came from") && !e.includes("net, this month"), "no 'where it came from' list and no second gross, deductions and net block under the month");
   const legend = await text(page, ".legend"), th = (await page.locator("#screen table.tbl th").allInnerTexts()).join(",");
@@ -1670,7 +1671,7 @@ await shot(page, "38-months");
 await page.click('button[data-action="income-view"][data-view="overview"]');
 // income added without a payslip (a payslip photo once saved as plain pay received) is listed and can be removed
 await page.click('button:has-text("Add income")'); await page.click('#sheet button:has-text("Other income")');
-await page.fill("#f-amount", "777"); await page.fill("#f-date", "2026-09-20"); await page.click('#sheet .chip:has-text("Salary")'); await page.click('#sheet .chip:has-text("Wallet")'); await page.click("#f-save");
+await page.fill("#f-amount", "777"); await page.fill("#f-date", "2026-10-01"); await page.click('#sheet .chip:has-text("Salary")'); await page.click('#sheet .chip:has-text("Wallet")'); await page.click("#f-save");
 await seen(page, 'button.choice[data-action="open-payslips"]', "without one");
 check(/without one/.test(await text(page, 'button.choice[data-action="open-payslips"]')), "an income entry with no payslip behind it shows on the Payslips row (+ 1 without one)");
 await page.click('button.choice[data-action="open-payslips"]');
@@ -4332,6 +4333,41 @@ console.log("\n-- A spent gap is explained by the real charge --");
   check(d.state.transactions.some((t) => t.id === "rev:cnt" && t.reverses === "cnt"), "the gap is cancelled by a correction");
   check(mine === -30000, "the bank is still what was counted");
   check(d.state.entries.filter((e) => e.category_id === "cat-unlogged").reduce((n, e) => n + e.amount, 0) === 0, "nothing is left in Unlogged: the 300.00 counts once, in Food");
+  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+
+// ===== A refund brings spending down; past refunds saved as income are put right (P0-5 fix 4) =====
+console.log("\n-- Refunds --");
+{ const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-09-01" };
+  const TS = "2026-10-02T09:00:00.000+08:00";
+  const pur = { id: "pur", date: "2026-10-01", payee: "Sample Store", memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS };
+  const rf = { id: "rf", date: "2026-10-02", payee: "Sample Store", memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS };
+  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [bank], transactions: [pur, rf],
+    entries: [{ transaction_id: "pur", category_id: "cat-food", amount: 20000 }, { transaction_id: "pur", account_id: "b", amount: -20000 }, { transaction_id: "rf", account_id: "b", amount: 5000 }, { transaction_id: "rf", category_id: "cat-refund", amount: -5000 }] } };
+  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
+  await menuGo(page, "Income");
+  check((await text(page, "#screen")).includes("A past refund is counted as income."), "Income says a past refund is counted as income");
+  await page.click('[data-action="open-refund-repair"]');
+  check(await seen(page, "#sheet", "Refunds counted as income") && (await text(page, "#sheet")).includes("Food") && (await text(page, "#sheet")).includes("\u20B150.00"), "the window lists it, with the spending its payee had (Food) already chosen");
+  await page.click('#sheet button[data-action="refund-repair-run"]'); await seen(page, "#toast", "less spending"); await page.waitForTimeout(500);
+  let d = JSON.parse((await stored(page)).local);
+  check(d.state.transactions.some((t) => t.id === "rev:rf" && t.reverses === "rf") && d.state.transactions.some((t) => t.id === "refund:rf" && t.corrects === "rf"), "the old refund is cancelled by a correction and entered again");
+  check(d.state.entries.filter((e) => e.category_id === "cat-food").reduce((n, e) => n + e.amount, 0) === 15000 && d.state.entries.filter((e) => e.category_id === "cat-refund").reduce((n, e) => n + e.amount, 0) === 0, "Food spending is 150.00 (200.00 less the refund) and no refund is left as income");
+  check(d.state.entries.filter((e) => e.account_id === "b").reduce((n, e) => n + e.amount, 0) === -15000, "the bank balance is the same as before");
+  await menuGo(page, "Setup");
+  check(await seen(page, "#screen", "Restore the copy from before the repair"), "Setup offers the copy kept before the repair");
+  await menuGo(page, "Income");
+  check(!(await text(page, "#screen")).includes("counted as income."), "the card is gone");
+  // a new refund: choose Refund, then which spending it was for
+  await page.click('button:has-text("Add income")'); await page.click('[data-action="open-income"]');
+  await page.fill("#f-amount", "100");
+  await page.click('#sheet [data-action="pick-toggle"][data-key="cat"]'); await page.click('#sheet [data-action="pick-cat"][data-id="cat-refund"]');
+  check(await page.locator("#f-save").isDisabled(), "Refund asks which spending it was for before it can be saved");
+  await page.click('#sheet [data-action="pick-toggle"][data-key="rcat"]'); await page.click('#sheet [data-action="pick-rcat"][data-id="cat-food"]');
+  await page.click('#sheet [data-action="pick-acct"]:has-text("Test Bank")');
+  check(!(await page.locator("#f-save").isDisabled()), "then it can be saved");
+  await page.click("#f-save"); await seen(page, "#toast", "Recorded"); await page.waitForTimeout(500);
+  d = JSON.parse((await stored(page)).local);
+  check(d.state.entries.filter((e) => e.category_id === "cat-food").reduce((n, e) => n + e.amount, 0) === 5000 && d.state.entries.filter((e) => e.category_id === "cat-refund").reduce((n, e) => n + e.amount, 0) === 0, "the new refund took 100.00 off Food and is not income");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 // ===== Replacing the ledger keeps a safety copy first, and it can be put back =====

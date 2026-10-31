@@ -630,6 +630,21 @@ function payslipRows(range) {
   }).join("")}`;
 }
 
+// Two quiet cards on Income (owner, Oct 31, P0-5 fix 4). Past refunds that were saved as income can be counted as less spending instead (each cancelled by a correction after
+// the owner confirms what it was for); and pay now counts in the month it arrived, which moved some months: said once, with before and after.
+function refundCardHtml() {
+  const n = M.pastRefunds(S()).length;
+  if (!n) return "";
+  return `<div class="card" style="margin:0 0 14px"><p><b>${n === 1 ? "A past refund is" : n + " past refunds are"} counted as income.</b></p>
+    <p class="note small">A refund should bring spending down instead. Choose what ${n === 1 ? "it was" : "each was"} for.</p>
+    <p><button data-action="open-refund-repair">Look at ${n === 1 ? "the refund" : "the refunds"}</button></p></div>`;
+}
+function payMonthCardHtml() {
+  if (ledger.settings.paymonth_seen || !M.payMonthShift(S()).length) return "";
+  return `<div class="card" style="margin:0 0 14px"><p><b>Pay now counts in the month it arrived.</b></p>
+    <p class="note small">Some months changed.</p>
+    <p><button data-action="open-paymonth">See the months</button></p></div>`;
+}
 function viewIncome() {
   const per = period(), [from, to] = periodBounds(per), range = { from, to }, label = periodLabel(per);   // the same period as Spending: a month, a year or a range
   const ytdLabel = per.kind === "month" ? "This month" : per.kind === "year" ? (per.year === Number(today().slice(0, 4)) ? "Year to date" : "Whole year") : "Total";
@@ -639,7 +654,7 @@ function viewIncome() {
   const IVIEWS = [["overview", "Overview"], ["earnings", "Earnings"], ["deductions", "Deductions"]], view = IVIEWS.some(([v]) => v === ui.incomeView) ? ui.incomeView : "overview";
   const earned = per.kind === "range" ? "earned from " + fullDate(per.from) + " to " + fullDate(per.to) : "earned in " + label;
   const head = `<h1>Income</h1>${step}<div class="hero">${peso(y.ytd.total)}</div><p class="sub">${esc(earned)}</p>
-    <p><button class="primary compact" data-action="open-payslip-choice">Add income</button></p>
+    <p><button class="primary compact" data-action="open-payslip-choice">Add income</button></p>${refundCardHtml()}${payMonthCardHtml()}
     <button class="choice" data-action="open-payslips"><span>Payslips</span><span class="bval">${slips.length}${loose.length ? " + " + loose.length + " without one" : ""} \u203A</span></button>
     <div class="seg" role="group" aria-label="What to show">${IVIEWS.map(([v, t]) => `<button data-action="income-view" data-view="${v}" aria-pressed="${view === v}">${t}</button>`).join("")}</div><div class="viewmark"></div>`;
   if (!rows.length && !slips.length && !loose.length) return head + `<p class="note">Nothing recorded for ${esc(label)} yet. Add a payslip to see where your income comes from, your raises, and what went to government.</p>`;
@@ -2780,6 +2795,7 @@ function renderSheet() {
       <label for="f-amount">Amount received (\u20B1)${REQ}</label><input id="f-amount" data-field="amount" inputmode="decimal" value="${esc(ui.form.amount ?? "")}" autocomplete="off" placeholder="e.g. 9776.98">
       <label for="f-date">Date it arrived</label><input id="f-date" data-field="date" type="date" value="${esc(ui.form.date)}" max="${esc(today())}">
       <label>What it is${REQ}</label>${categoryPicker(incomeCategories(), ui.form.category_id, "cat", "pick-cat", "Choose what it is")}
+      ${ui.form.category_id === M.REFUND_CATEGORY_ID ? `<label>Refund of${REQ}</label>${categoryPicker(expenseCategories(), ui.form.refund_cat, "rcat", "pick-rcat", "Choose the spending")}` : ""}
       <label>Arrived in${REQ}</label>${paidChips(ui.form.account_id)}
       ${REQNOTE}
       <p class="note">Pay, interest or a refund. For a full payslip, use Add a payslip in Income. Saved as verified, since you copy it from paper.</p>
@@ -2855,6 +2871,24 @@ function renderSheet() {
       <p><button class="primary" data-action="repair-run">Repair ${p.count} ${p.count === 1 ? "count" : "counts"}</button></p>
       <p class="note small">The app first keeps a copy of your data as it is now: Setup, About this app, "Restore the copy from before the repair".</p>
       <p><button data-action="close-sheet" style="width:100%">Not now</button></p>` : `<h3>Nothing to repair</h3><p class="note">Every past weekly count is already right.</p><p><button class="primary" data-action="close-sheet">Got it</button></p>`;
+  } else if (sh.type === "refund-repair") {
+    const rows = M.pastRefunds(S()), chosen = Object.fromEntries(rows.filter((r) => ui.form["rc_" + r.transaction_id]).map((r) => [r.transaction_id, ui.form["rc_" + r.transaction_id]]));
+    const p = M.planRefundRepair(S(), chosen, {}), n = Object.keys(chosen).length;
+    const kv = (l, a, b) => `<div class="slipkv"><span>${l}</span><span>${peso(a)} \u2192 ${peso(b)}</span></div>`;
+    body = rows.length ? `<h3>Refunds counted as income</h3>
+      <p class="note">Choose what each was for. It then counts as less spending, not as income. No balance changes.</p>
+      <div class="group">${rows.map((r) => `<div class="row"><div>${esc(r.payee || "Refund")}<small>${esc(listDate(r.date))} \u00b7 ${esc(accountName(r.account_id))}</small></div><div class="amt">${peso(r.amount)}</div></div>
+        ${categoryPicker(expenseCategories(), ui.form["rc_" + r.transaction_id], "rr:" + r.transaction_id, "pick-refund-cat", "Choose the spending")}`).join("")}</div>
+      ${p.ok && p.months.length ? `<div class="group">${p.months.map((m) => `<div class="row"><div>${esc(M.monthLabel(m.month))}</div></div>${kv("Spending", m.spendingBefore, m.spendingAfter)}${kv("Income", m.incomeBefore, m.incomeAfter)}`).join("")}</div>` : ""}
+      <p><button class="primary" id="f-save" data-action="refund-repair-run"${n ? "" : " disabled"}>Count ${n || ""} ${n === 1 ? "refund" : "refunds"} as less spending</button></p>
+      <p class="note small">A copy of your data is kept first. A refund with nothing chosen stays as it is.</p>
+      <p><button data-action="close-sheet" style="width:100%">Not now</button></p>` : `<h3>Nothing to change</h3><p class="note">No past refund is counted as income.</p><p><button class="primary" data-action="close-sheet">Got it</button></p>`;
+  } else if (sh.type === "paymonth") {
+    const m = M.payMonthShift(S());
+    body = `<h3>Pay counts when it arrives</h3>
+      <p class="note">Pay counts in the month the money reached your account, not the month the pay period ended.</p>
+      ${m.length ? `<div class="group">${m.map((x) => `<div class="slipkv"><span>${esc(M.monthLabel(x.month))}</span><span>${peso(x.before)} \u2192 ${peso(x.after)}</span></div>`).join("")}</div>` : ""}
+      <p><button class="primary" data-action="paymonth-done">Got it</button></p>`;
   } else if (sh.type === "gap-big") {
     const a = S().accounts.find((x) => x.id === sh.id), r = pendingCounts()[sh.id], q = a && r ? pendingGap(a, r) : null;
     body = q ? `<h3>This is most of the balance</h3>
@@ -3412,8 +3446,8 @@ function renderSheet() {
       <p class="note">Anything entered since this backup was made will be gone.${sh.all ? "" : ` Pictures are not in a backup, so those entries will say "picture not on this phone".`}</p>
       <p><button class="primary" id="f-save" data-action="restore-now">${ui.form.confirmRestore ? "Tap again to replace" : "Replace this phone's data"}</button></p>`;
   }
-  const closer = sh.type === "notice" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
-  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""} data-action="close-sheet"></div><div class="sheet${opening ? " enter" : ""}${sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
+  const closer = sh.type === "notice" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
+  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""} data-action="close-sheet"></div><div class="sheet${opening ? " enter" : ""}${sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
   const box = document.querySelector("#sheet .sheet"); if (box && keepAt) box.scrollTop = keepAt;
   if (voiceListener && sh.type === "voice") { const b = $("v-mic"); if (b) b.innerHTML = micLabel("Listening in " + LANG_NAME[ui.form.lang ?? firstLanguage()] + "... tap to stop"); setWave(true); }
   refreshSave();
@@ -3564,6 +3598,7 @@ function refreshSave() {
   } else if (type === "income") {
     const a = M.parsePesos(f.amount);
     btn.disabled = !(a.ok && a.centavos > 0 && f.account_id && f.category_id && f.date);
+    if (f.category_id === M.REFUND_CATEGORY_ID && !f.refund_cat) btn.disabled = true;   // a refund also says which spending it was for
   } else if (type === "planform") {
     const t = M.planTextFromForm(f), r = t.ok ? M.parsePlan(t.text) : null;
     btn.disabled = !r?.ok;
@@ -3878,6 +3913,22 @@ async function onClick(el) {
       break;
     }
     case "open-repair": ui.sheet = { type: "repair" }; ui.form = {}; renderSheet(); break;
+    case "open-refund-repair": ui.sheet = { type: "refund-repair" }; ui.form = Object.fromEntries(M.pastRefunds(S()).filter((r) => r.guess).map((r) => ["rc_" + r.transaction_id, r.guess])); renderSheet(); break;
+    case "pick-refund-cat": { const key = ui.sheet?.pick ?? ""; if (key.startsWith("rr:")) ui.form["rc_" + key.slice(3)] = id; if (ui.sheet) ui.sheet.pick = null; renderSheet(); break; }
+    case "refund-repair-run": {   // past data is changed: the app first keeps a copy of the ledger by the same mechanism as before an upgrade, reads it back, and stops if it cannot
+      const chosen = Object.fromEntries(M.pastRefunds(S()).filter((r) => ui.form["rc_" + r.transaction_id]).map((r) => [r.transaction_id, ui.form["rc_" + r.transaction_id]]));
+      const plan = M.planRefundRepair(S(), chosen, { now: new Date() });
+      if (!plan.ok || !plan.count) { ui.sheet = null; renderSheet(); showToast(plan.ok ? "Nothing to repair." : "Could not repair: " + plan.violations[0].message); break; }
+      const next = M.nextLedger(ledger, M.applyRefundRepair(S(), plan), ledger.settings);
+      const r = await M.replaceWithCopy({ current: ledger, next, io: { readCopies, writeCopies, writeLedger: (text) => writeBoth(text) }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });
+      if (!r.ok) { ui.sheet = null; ui.error = r.message.replace("Your data was not replaced", "The repair was not made"); renderAll(); break; }
+      if (!M.saveOutcome(r.written).ok) { ui.sheet = null; ui.error = "The repair could not be saved. Nothing was changed, and the copy is kept."; renderAll(); break; }
+      ledger = next; ui.copies = await readCopies(); ui.sheet = null; renderAll();
+      showToast("Counted " + plan.count + (plan.count === 1 ? " refund" : " refunds") + " as less spending. Your data from before is kept.");
+      break;
+    }
+    case "open-paymonth": ui.sheet = { type: "paymonth" }; renderSheet(); break;
+    case "paymonth-done": ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, paymonth_seen: true }, { quiet: true }); renderScreen(); break;
     case "repair-run": {   // past data is changed: the app first keeps a copy of the ledger by the same mechanism as before an upgrade, reads it back, and stops if it cannot
       const plan = M.planGapRepair(S(), { now: new Date() });
       if (!plan.ok || !plan.count) { ui.sheet = null; renderSheet(); showToast(plan.ok ? "Nothing to repair." : "Could not repair: " + plan.violations[0].message); break; }
@@ -4198,7 +4249,9 @@ async function onClick(el) {
     case "save-income": {
       const amount = M.parsePesos(ui.form.amount);
       if (!amount.ok) { showToast("Enter the pay like 9776.98"); break; }
-      const plan = M.planPayReceived(S(), { transaction_id: newId("tx"), date: ui.form.date, amount: amount.centavos, account_id: ui.form.account_id, category_id: ui.form.category_id }, new Date());
+      const plan = ui.form.category_id === M.REFUND_CATEGORY_ID   // a refund brings spending down in the category it was for; it is never income
+        ? M.planRefund(S(), { transaction_id: newId("tx"), date: ui.form.date, amount: amount.centavos, account_id: ui.form.account_id, category_id: ui.form.refund_cat }, new Date())
+        : M.planPayReceived(S(), { transaction_id: newId("tx"), date: ui.form.date, amount: amount.centavos, account_id: ui.form.account_id, category_id: ui.form.category_id }, new Date());
       if (!plan.ok) { showToast("Could not save: " + plan.violations[0].message); break; }
       ui.sheet = null; renderSheet();
       await commit(plan.state);
@@ -4486,6 +4539,7 @@ async function onClick(el) {
     }
     case "open-other": ui.sheet = { type: "other" }; ui.form = { amount: "", category_id: null, account_id: accountsFor(null)[0]?.id }; renderSheet(); break;
     case "pick-toggle": if (ui.sheet) { ui.sheet.pick = ui.sheet.pick === el.dataset.key ? null : el.dataset.key; renderSheet(); } break;
+    case "pick-rcat": if (ui.sheet) ui.sheet.pick = null; form.refund_cat = id; renderSheet(); break;
     case "pick-cat": if (ui.sheet) ui.sheet.pick = null; form.category_id = id; if (form.split_cat === id) form.split_cat = null; renderSheet(); break;
     case "toggle-split": form.split = !form.split; renderSheet(); break;
     case "pick-split": if (ui.sheet) ui.sheet.pick = null; form.split_cat = id; renderSheet(); break;

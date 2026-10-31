@@ -140,17 +140,20 @@ test("looking at a year lists only that year's raises, employers and payslips, b
   assert.equal(employerHistory(s).length, 2, "with no year, all of them");
 });
 
-test("a payslip belongs to the month of the period it pays for, not the day it arrived", () => {
+test("a payslip's pay belongs to the month its deposit arrived (cutoff), not the month the period ended; the period stays a label", () => {
   let s = ledger();
   s = planPayslip(s, base({ id: "j", transaction_id: "tj", period_from: "2026-06-16", period_to: "2026-06-30", pay_date: "2026-07-02" }), NOW).state;
   s = planPayslip(s, base({ id: "k", transaction_id: "tk", period_from: "2026-07-01", period_to: "2026-07-15", pay_date: "2026-07-15" }), NOW).state;
-  assert.equal(slipDate(s.payslips[0]), "2026-06-30");
-  const m = Object.fromEntries(incomeMonths(s, { from: "2026-06-01", to: "2026-07-31" }).months.map((x) => [x.month, x.total]));
-  assert.deepEqual(m, { "2026-06": 880000, "2026-07": 880000 }, "the July 2 payslip counts in June");
-  assert.equal(incomeBySource(s, { from: "2026-06-01", to: "2026-06-30" }).total, 880000);
-  assert.deepEqual(deductionsByMonth(s, { from: "2026-06-01", to: "2026-06-30" }).months.map((x) => x.month), ["2026-06"]);
-  assert.deepEqual(employerHistory(s, { from: "2026-07-01", to: "2026-07-31" }).map((e) => e.payslips), [1]);
-  assert.equal(netPerPayday(s, { from: "2026-06-01", to: "2026-06-30" }).length, 1);
+  assert.equal(slipDate(s.payslips[0]), "2026-07-02");
+  assert.equal(s.payslips[0].period_to, "2026-06-30", "the period worked is kept as a label");
+  const m = Object.fromEntries(incomeMonths(s, { from: "2026-06-01", to: "2026-07-31" }).months.filter((x) => x.total).map((x) => [x.month, x.total]));
+  assert.deepEqual(m, { "2026-07": 1760000 }, "the July 2 payslip counts in July, when it reached the account");
+  assert.equal(incomeBySource(s, { from: "2026-06-01", to: "2026-06-30" }).total, 0);
+  assert.equal(incomeBySource(s, { from: "2026-07-01", to: "2026-07-31" }).total, 1760000);
+  assert.deepEqual(deductionsByMonth(s, { from: "2026-06-01", to: "2026-06-30" }).months.map((x) => x.month), []);
+  assert.deepEqual(deductionsByMonth(s, { from: "2026-07-01", to: "2026-07-31" }).months.map((x) => x.month), ["2026-07"]);
+  assert.deepEqual(employerHistory(s, { from: "2026-07-01", to: "2026-07-31" }).map((e) => e.payslips), [2]);
+  assert.equal(netPerPayday(s, { from: "2026-06-01", to: "2026-06-30" }).length, 0);
 });
 
 test("incomeMonths clamps the first and last month to the range asked for", () => {
