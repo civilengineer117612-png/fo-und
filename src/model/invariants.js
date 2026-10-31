@@ -91,6 +91,21 @@ export function checkEntryFinal(state, transaction) {
   return old && old.status === "verified" ? [err("ENTRY_FINAL", "this entry is already verified and cannot be saved again (" + transaction.id + ")")] : [];
 }
 
+// 4c. A correction (a transaction with `reverses`) is a REVERSING ENTRY (docs/ACCOUNTING.md, principle 7): it names ONE verified entry that exists, that entry is
+// cancelled only once, a cancelling entry is never itself cancelled, and its legs are the exact opposite of the entry's (same accounts, categories and card state,
+// every amount negated). Anything else is refused, so a wrong reference can never move money.
+const legKey = (e, sign) => JSON.stringify([e.account_id ?? null, e.category_id ?? null, e.envelope_id ?? null, e.card_state ?? null, sign * e.amount]);
+export function checkReversal(state, transaction, entries) {
+  if (transaction.reverses == null) return [];
+  const target = state.transactions.find((t) => t.id === transaction.reverses);
+  if (!target) return [err("REVERSES_MISSING", "a correction must name an entry that exists (" + transaction.reverses + ")")];
+  if (target.status !== "verified") return [err("REVERSES_NOT_VERIFIED", "only a verified entry is cancelled by a correction (" + target.id + ")")];
+  if (target.reverses != null) return [err("REVERSAL_OF_REVERSAL", "a correction cannot itself be cancelled (" + target.id + ")")];
+  if (state.transactions.some((t) => t.reverses === target.id && t.id !== transaction.id)) return [err("ALREADY_REVERSED", "this entry was already cancelled (" + target.id + ")")];
+  const mine = entries.map((e) => legKey(e, 1)).sort(), theirs = state.entries.filter((e) => e.transaction_id === target.id).map((e) => legKey(e, -1)).sort();
+  return JSON.stringify(mine) === JSON.stringify(theirs) ? [] : [err("REVERSAL_NOT_EXACT", "a correction must be the exact opposite of the entry it cancels (" + target.id + ")")];
+}
+
 // Read-only count for Setup, About this app: how many transaction ids appear more than once (each extra copy counts one). Never blocks or repairs anything.
 export const repeatedIds = (transactions) => { const seen = new Set(); let n = 0; for (const t of transactions ?? []) { if (seen.has(t.id)) n += 1; else seen.add(t.id); } return n; };
 export const repeatsLine = (state) => { const n = repeatedIds(state.transactions); return "Repeated entry numbers: " + (n === 0 ? "none" : n + " (tell the project chat)"); };

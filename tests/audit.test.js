@@ -226,3 +226,19 @@ test("DOUBLE ENTRY at the door: an entry whose legs do not add to zero, or that 
   const one = M.checkTransactionSave(s, { transaction: t, entries: [{ transaction_id: "bad", account_id: "chk", amount: 0 }] });
   assert.equal(one.ok, false); assert.ok(one.violations.some((v) => v.code === "TOO_FEW_ENTRIES"));
 });
+
+test("AUDIT TRAIL: changing or removing a payslip, or removing an income entry, never deletes or rewrites a verified entry; the money moves by corrections", () => {
+  const s0 = ledger(), mk = (st, id, d, amount) => { const r = M.planPayslip(st, { id, transaction_id: "tx" + id, employer: "Co", period_from: d, period_to: d, pay_date: d, account_id: "chk", printed_gross: amount, printed_net: amount, deposit: amount, earnings: [{ kind: "basic", amount }], deductions: [] }, NOW); assert.ok(r.ok); return r.state; };
+  let s = mk(mk(s0, "x", "2026-10-02", 800000), "y", "2026-10-16", 800000);
+  s = received(s, "2026-10-09", "cat-interest", 5000, "chk"); const inx = s.transactions[s.transactions.length - 1].id;
+  const frozen = s.transactions.filter((t) => t.status === "verified").map((t) => JSON.stringify([t, s.entries.filter((e) => e.transaction_id === t.id)]));
+  const changed = M.updatePayslip(s, "x", { employer: "Co", period_from: "2026-10-02", period_to: "2026-10-02", pay_date: "2026-10-02", account_id: "chk", printed_gross: 700000, printed_net: 700000, deposit: 700000, earnings: [{ kind: "basic", amount: 700000 }], deductions: [] }, NOW);
+  assert.ok(changed.ok);
+  const removedSlip = M.deletePayslip(changed.state, "y", NOW), removedIn = M.removeIncomeEntry(removedSlip.state, inx, NOW);
+  assert.ok(removedSlip.ok && removedIn.ok);
+  const after = removedIn.state, now = after.transactions.filter((t) => t.status === "verified").map((t) => JSON.stringify([t, after.entries.filter((e) => e.transaction_id === t.id)]));
+  assert.ok(frozen.every((x) => now.includes(x)), "every verified entry that was there is still there, unchanged");
+  assertTrial(after, "changing and removing");
+  assert.equal(balanceOf(after, "chk"), 1000000 + 700000, "only the changed payslip is left, once");
+  assert.ok(after.transactions.filter((t) => t.reverses != null).every((t, _i, all) => all.filter((x) => x.reverses === t.reverses).length === 1), "each entry cancelled once");
+});

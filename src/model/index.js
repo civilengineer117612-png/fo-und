@@ -1,7 +1,7 @@
 // Entry points. A "save" is validated against the state as it WOULD be after the save;
 // nothing is written here. The caller persists only if result.ok is true.
 import { validateShape } from "./schema.js";
-import { checkEntriesBalance, checkReferences, checkReserve, checkDuplicate, checkEntryFinal, checkRulesAppendOnly } from "./invariants.js";
+import { checkEntriesBalance, checkReferences, checkReserve, checkDuplicate, checkEntryFinal, checkReversal, checkRulesAppendOnly } from "./invariants.js";
 import { countedEntries } from "./balances.js";
 
 export { SCHEMAS, validateShape } from "./schema.js";
@@ -41,6 +41,7 @@ export function checkTransactionSave(state, { transaction, entries }) {
     ...checkReserve(state.accounts, countedEntries(state), countedEntries(after)),
     ...checkDuplicate(state, transaction, entries),
     ...checkEntryFinal(state, transaction),
+    ...checkReversal(state, transaction, entries),
   ]);
 }
 

@@ -4563,7 +4563,7 @@ async function onClick(el) {
     case "del-slip": ui.confirmDelSlip = id; renderSheet(); break;
     case "del-inc": ui.confirmDelInc = id; renderSheet(); break;
     case "del-inc-yes": {
-      const r = M.removeIncomeEntry(S(), id);
+      const r = M.removeIncomeEntry(S(), id, new Date());
       if (!r.ok) { showToast(r.error); break; }
       ui.confirmDelInc = null;
       if (await commit(r.state)) for (const ph of r.photoIds) deletePhoto(ph).catch(() => {});
@@ -4571,7 +4571,7 @@ async function onClick(el) {
       break;
     }
     case "del-slip-yes": {
-      const r = M.deletePayslip(S(), id);
+      const r = M.deletePayslip(S(), id, new Date());
       if (!r.ok) { showToast(r.error); break; }
       ui.confirmDelSlip = null;
       if (await commit(r.state)) for (const ph of r.photoIds) deletePhoto(ph).catch(() => {});

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { planPayslip, payslipChecks, payslipTotals, linesOf, overtimeDraft, overtimeFreeDraft, incomeBySource, incomeByMonth, netPerPayday, raiseHistory, deductionsByMonth, employerHistory, incomeMonths, slipDate, deletePayslip, updatePayslip, payslipNotes, incomeBreakdown, missingPayPeriods, samePeriodPayslips, markPayslipChecked, revisionChanges, revisionsOf, PAYSLIP_VERSION, planAttachment, incomeWithoutPayslip, removeIncomeEntry, planPayReceived,
   ensureIncomeCategories, validateState, applyDrafts } from "../src/model/index.js";
+import { liveSlips } from "../src/model/index.js";
 import { makeState, account } from "./fixtures.js";
 
 const NOW = new Date("2026-10-16T04:00:00Z");   // every figure below is invented
@@ -161,23 +162,27 @@ test("incomeMonths clamps the first and last month to the range asked for", () =
   assert.equal(r.ytd.total, 880000);
 });
 
-test("removing a payslip removes its lines, its pay, its photo link and draft overtime transfers, and the ledger stays valid", () => {
+test("removing a payslip cancels its verified pay by a correction (the entry stays), drops a waiting overtime draft, and the ledger stays valid", () => {
   let s = ledger();
   const r0 = planPayslip(s, base({ printed_gross: 1150000, printed_net: 1030000, deposit: 1030000, earnings: [{ kind: "basic", amount: 900000 }, { kind: "rice", amount: 100000 }, { kind: "overtime", amount: 150000, earned_month: "2026-09" }] }), NOW);
   s = r0.state;
   const ot = overtimeDraft(s, "ps1", { transaction_id: "ot-ps1", emergency_account_id: "ef" }, NOW);
-  s = { ...s, transactions: [...s.transactions, ot.transaction], entries: [...s.entries, ...ot.entries], attachments: [{ id: "ph1", transaction_id: "tx-ps1", mime: "image/jpeg", created_at: "2026-10-16T12:00:00.000+08:00" }] };
-  const d = deletePayslip(s, "ps1");
+  s = { ...s, transactions: [...s.transactions, ot.transaction], entries: [...s.entries, ...ot.entries] };
+  s = planAttachment(s, { id: "ph1", transaction_id: "tx-ps1" }).state;
+  const d = deletePayslip(s, "ps1", NOW);
   assert.equal(d.ok, true);
-  assert.deepEqual(d.photoIds, ["ph1"]);
+  assert.deepEqual(d.photoIds, [], "the photo stays with the cancelled pay entry; only a dropped draft's picture goes");
   assert.equal(d.keptTransfers, 0);
-  assert.equal(d.state.payslips.length, 0);
-  assert.equal(d.state.payslipLines.length, 0);
-  assert.equal(d.state.transactions.some((t) => t.id === "tx-ps1" || t.id === "ot-ps1"), false);
-  assert.equal(d.state.entries.some((e) => e.transaction_id === "tx-ps1" || e.transaction_id === "ot-ps1"), false);
+  assert.equal(liveSlips(d.state).length, 0, "the payslip no longer counts");
+  assert.equal(d.state.payslips.length, 1, "its record is kept");
+  assert.equal(d.state.transactions.some((t) => t.id === "tx-ps1" && t.status === "verified"), true, "the verified pay entry is never deleted");
+  assert.equal(d.state.transactions.some((t) => t.id === "rev:tx-ps1" && t.reverses === "tx-ps1"), true, "its correction cancels it once");
+  assert.equal(d.state.transactions.some((t) => t.id === "ot-ps1"), false, "a waiting draft goes");
+  assert.equal(d.state.attachments.length, 1);
   assert.equal(incomeBySource(d.state, { from: "2026-10-01", to: "2026-10-31" }).total, 0);
   assert.deepEqual(validateState(d.state), []);
   assert.equal(deletePayslip(s, "nope").ok, false);
+  assert.equal(deletePayslip(d.state, "ps1", NOW).ok, false, "a removed payslip cannot be removed again");
 });
 
 test("a verified overtime transfer stays when its payslip is removed, and the result says so", () => {
@@ -203,7 +208,7 @@ test("the same payslip saved twice is refused: same period and same net pay", ()
   assert.equal(planPayslip(first.state, base({ id: "ps4", transaction_id: "tx-ps4", period_from: "2026-10-16", period_to: "2026-10-31", pay_date: "2026-10-31" }), NOW).ok, true, "the next period with the same net pay is allowed");
 });
 
-test("editing a payslip replaces it in place: same ids, new figures, photo kept, the ledger stays valid and nothing is counted twice", () => {
+test("editing a payslip: same payslip id, new figures, the pay entry corrected (reversed once, a new one made), photo kept, the ledger stays valid and nothing is counted twice", () => {
   let s = planPayslip(ledger(), base(), NOW).state;
   s = planAttachment(s, { id: "ph1", transaction_id: "tx-ps1" }).state;
   const r = updatePayslip(s, "ps1", base({ employer: "Sample Employer Inc.", printed_gross: 1100000, printed_net: 980000, deposit: 980000, earnings: [{ kind: "basic", amount: 1000000 }, { kind: "rice", amount: 100000 }] }), NOW);
@@ -211,9 +216,12 @@ test("editing a payslip replaces it in place: same ids, new figures, photo kept,
   assert.equal(r.state.payslips.length, 1);
   assert.equal(r.state.payslips[0].employer, "Sample Employer Inc.");
   assert.equal(r.state.payslips[0].deposit, 980000);
-  assert.equal(r.state.transactions.filter((t) => t.id === "tx-ps1").length, 1);
-  assert.equal(r.state.transactions.find((t) => t.id === "tx-ps1").payee, "Sample Employer Inc.");
-  assert.equal(r.state.attachments.length, 1, "the photo stays with the pay");
+  const pay = r.state.payslips[0].transaction_id;
+  assert.notEqual(pay, "tx-ps1", "the money changed, so the old pay entry is cancelled and a new one takes its place");
+  assert.equal(r.state.transactions.find((t) => t.id === "tx-ps1").payee, "Sample Employer Inc", "the old verified entry is exactly as it was");
+  assert.equal(r.state.transactions.some((t) => t.id === "rev:tx-ps1" && t.reverses === "tx-ps1"), true);
+  assert.equal(r.state.transactions.find((t) => t.id === pay).payee, "Sample Employer Inc.");
+  assert.deepEqual(r.state.attachments.map((a) => a.transaction_id), [pay], "the photo follows the payslip to its new pay entry");
   assert.equal(incomeBySource(r.state, { from: "2026-10-01", to: "2026-10-31" }).total, 980000);
   assert.deepEqual(validateState(r.state), []);
 });
@@ -258,14 +266,15 @@ test("income without a payslip is listed, and it is what makes a month count twi
   assert.equal(incomeWithoutPayslip(planPayslip(ledger(), base(), NOW).state, oct).length, 0, "a payslip's own pay is not listed");
 });
 
-test("removing a stray income entry takes it out of the totals and the account, and leaves the payslip alone", () => {
+test("removing a stray income entry cancels it: it leaves the totals and the account, stays in the history, and the payslip is left alone", () => {
   const { s } = withStray(), oct = { from: "2026-10-01", to: "2026-10-31" };
-  const r = removeIncomeEntry(s, "tx-stray");
+  const r = removeIncomeEntry(s, "tx-stray", NOW);
   assert.equal(r.ok, true);
   assert.equal(incomeBySource(r.state, oct).total, 880000);
   assert.equal(r.state.payslips.length, 1);
-  assert.equal(r.state.transactions.some((t) => t.id === "tx-stray"), false);
-  assert.equal(r.state.entries.some((e) => e.transaction_id === "tx-stray"), false);
+  assert.equal(r.state.transactions.some((t) => t.id === "tx-stray"), true, "a verified entry is cancelled, never deleted");
+  assert.equal(r.state.transactions.some((t) => t.id === "rev:tx-stray" && t.reverses === "tx-stray"), true);
+  assert.equal(r.state.entries.filter((e) => e.transaction_id === "tx-stray").length, s.entries.filter((e) => e.transaction_id === "tx-stray").length);
   assert.deepEqual(validateState(r.state), []);
   assert.equal(removeIncomeEntry(s, "tx-ps1").ok, false, "a payslip's pay is removed with the payslip");
   assert.equal(removeIncomeEntry(s, "nope").ok, false);
@@ -352,7 +361,7 @@ test("changing a payslip keeps the old figures and the change date; ids stay; an
   const s = saved();
   const r = updatePayslip(s, "ps1", base({ deposit: 870000, printed_net: 870000, printed_gross: 990000, earnings: [{ kind: "basic", amount: 890000 }, { kind: "rice", amount: 100000 }] }), NOW);
   assert.ok(r.ok, JSON.stringify(r.violations));
-  assert.equal(r.state.payslips[0].id, "ps1"); assert.equal(r.state.payslips[0].transaction_id, "tx-ps1");
+  assert.equal(r.state.payslips[0].id, "ps1"); assert.equal(r.state.payslips[0].transaction_id, "pay:ps1:1", "the money changed: a new pay entry after the old one was cancelled");
   const [rev] = revisionsOf(r.state, "ps1");
   assert.equal(rev.changed_on, "2026-10-16");
   assert.equal(rev.deposit, 880000); assert.equal(rev.printed_gross, 1000000);
@@ -364,8 +373,9 @@ test("changing a payslip keeps the old figures and the change date; ids stay; an
   assert.deepEqual(revisionsOf(third.state, "ps1").map((x) => x.deposit), [870000, 880000], "newest first");
   assert.equal(new Set(third.state.payslipRevisions.map((x) => x.id)).size, 2, "each earlier version has its own id");
   assert.equal(updatePayslip(s, "ps1", base(), NOW).state.payslipRevisions, undefined, "no change at all adds no collection entry");
-  const gone = deletePayslip(r.state, "ps1");
-  assert.deepEqual(gone.state.payslipRevisions, [], "removing the payslip removes its history");
+  const gone = deletePayslip(r.state, "ps1", NOW);
+  assert.equal(gone.state.payslipRevisions.length, 1, "removing the payslip keeps its history (nothing verified is erased)");
+  assert.equal(liveSlips(gone.state).length, 0);
 });
 
 // ---- Income round 5: several employers, mark as checked, what changed ----

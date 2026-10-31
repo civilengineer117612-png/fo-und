@@ -61,8 +61,12 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 - **Rule.** A verified entry is never edited or deleted. A mistake is put right by a new entry that reverses exactly one entry, once, with a reference to
   it, followed by a new correct entry. The old entry stays visible as cancelled.
 - **In the app.** `planCorrection` makes `rev:<id>` (it `reverses` the entry); one entry can be cancelled once; a corrected expense also gets a fresh draft
-  that `corrects` it. A save over a verified entry is refused (`ENTRY_FINAL`).
-- **Guarded by.** "REVERSING ENTRIES" (twice), "AUDIT TRAIL".
+  that `corrects` it. A save over a verified entry is refused (`ENTRY_FINAL`). The save check also refuses a correction that names a missing or unverified
+  entry, an entry already cancelled, a correction itself, or legs that are not the exact opposite (`checkReversal`). Removing a payslip or an income entry,
+  and changing the money of a payslip, are corrections too: the old entry stays, its reversal sits beside it, and a changed payslip gets a new pay entry.
+  Only a draft is ever deleted. (Fixed forward on Oct 31: an earlier payslip change or removal had already rewritten or deleted the entry, and that
+  history cannot be recovered.)
+- **Guarded by.** "REVERSING ENTRIES" (twice), "AUDIT TRAIL" (both), `tests/audittrail.test.js`.
 
 ### 8. Cutoff
 - **Rule.** An item belongs to the period in which it happened. Money in belongs to the day the deposit arrives; the period worked is a label.
@@ -105,8 +109,6 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 
 ## Known gaps (found by the audit, each fixed in its own change; remove a line when it is fixed)
 These are the places where the app does not yet meet a principle above. Each has its own fix task and its own audit test.
-- Audit trail: updating, removing or deleting a payslip, and removing an income entry, still rewrite or delete a verified entry; the save check does not
-  enforce that a reversal names an existing entry once.
 - Integrity: the trial balance is not checked when the ledger loads or is restored.
 - Suspense: "I spent some of it" books the gap as spending, and a later real charge counts again; the Budget view and trip totals still include held gaps.
 - Recognition: a refund is saved as income.
