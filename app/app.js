@@ -2209,12 +2209,15 @@ function viewTripDetail(id) {
 // ---------- checks: card reserve and the weekly Unlogged habit ----------
 function viewChecks() {
   const rs = M.reserveShortfalls(S().accounts, M.countedEntries(S()));
+  const cover = new Map(M.reserveCover(S().accounts, M.countedEntries(S())).map((c) => [c.reserve_id + "|" + c.card_id, c]));
   const reserve = rs.length ? rs.map((r) => {
     const card = S().accounts.find((a) => a.id === r.card_id), res = S().accounts.find((a) => a.id === r.reserve_id), o = M.cardOutstanding(card, M.countedEntries(S()));
-    const ok = r.shortfall === 0;
-    return `<div class="bcard"><div class="btop"><span class="bname who">${iconOf(card, 24)}<span>${esc(card.name)}</span></span></div>
-      <dl><dt>${esc(res.name)} holds</dt><dd>${peso(r.reserve)}</dd><dt>${esc(card.name)} owes</dt><dd>${peso(r.outstanding)}<small> (${peso(o.pending)} pending + ${peso(o.posted)} posted)</small></dd></dl>
-      <div class="status">${glyph(ok ? "good" : "serious")}${ok ? "Covered" : "Short by " + peso(r.shortfall)}</div></div>`;
+    const ok = r.shortfall === 0, share = cover.get(r.reserve_id + "|" + r.card_id)?.share ?? 0;
+    return `<div class="card rescard"><div class="rc-top"><span class="bname who">${iconOf(card, 24)}<span>${esc(card.name)}</span></span></div>
+      <p class="rc-state">${glyph(ok ? "good" : "serious")}${ok ? "Covered" : "Short by " + peso(r.shortfall)}</p>
+      ${coverBar(share, ok ? "The money set aside covers what the card is owed" : "The money set aside is short of what the card is owed")}
+      <div class="rc-row"><span>Held in ${esc(res.name)}</span><b>${peso(r.reserve)}</b></div>
+      <div class="rc-row"><span>Owed on the card</span><b>${peso(r.outstanding)}</b></div></div>`;
   }).join("") : `<p class="note">No card reserve is set up. You can add one in Setup.</p>`;
 
   const weeks = M.unloggedByWeek(S(), M.UNLOGGED_CATEGORY_ID, today(), 8);
@@ -2224,9 +2227,9 @@ function viewChecks() {
   if (!counted.length) habit = `<p class="note">No weekly count yet. <button class="link" data-action="tab" data-tab="checkin">Do the check-in</button></p>`;
   else if (ui.asList) habit = `<table class="tbl"><tr><th>Week</th><th class="n">Not accounted for</th></tr>${weeks.map((w) => `<tr><td>${esc(wlabel(w))}</td><td class="n">${w.amount === null ? "Not counted" : w.amount < 0 ? peso(-w.amount) + " found" : peso(w.amount)}</td></tr>`).join("")}</table>`;
   else {
-    const rows = counted.map((w) => ({ id: w.week_end, label: esc(wlabel(w)), amount: Math.max(0, w.amount) }));
-    const hit = counted.find((w) => w.week_end === ui.sel);
-    habit = barChart(rows, ui.sel) + `<p class="caption" aria-live="polite">${hit ? esc(wlabel(hit) + ": " + (hit.amount < 0 ? peso(-hit.amount) + " more than your records said." : hit.amount === 0 ? "everything was accounted for." : peso(hit.amount) + " could not be accounted for.")) : "Tap a bar. Weeks you did not count are left out, not shown as zero."}</p>`;
+    const top = Math.max(1, ...counted.map((w) => Math.max(0, w.amount)));
+    habit = barCard(counted.map((w) => ({ name: esc(wlabel(w)), fig: w.amount < 0 ? peso(-w.amount) + " found" : peso(w.amount), pct: w.amount > 0 ? (w.amount / top) * 100 : 0,
+      label: wlabel(w) + ": " + (w.amount < 0 ? peso(-w.amount) + " more than your records said" : w.amount === 0 ? "everything was accounted for" : peso(w.amount) + " could not be accounted for") })));
   }
   const sv = M.surveyReview(S(), S().surveyResponses, M.UNLOGGED_CATEGORY_ID);
   const ago = (w) => w.unlogged_net < 0 ? peso(-w.unlogged_net) + " found" : peso(w.unlogged_net);
@@ -2235,9 +2238,9 @@ function viewChecks() {
     : `<table class="tbl"><tr><th>Week to</th><th class="n">Not accounted for</th><th class="n">Missed</th><th class="n">Easier (1-5)</th><th class="n">Fixes</th></tr>${sv.weeks.map((w) => `<tr><td>${esc(longDate(w.week_end))}</td><td class="n">${esc(ago(w))}</td><td class="n">${w.q1_missed_count}${w.q1_missed_amount ? " · " + peso(w.q1_missed_amount) : ""}</td><td class="n">${w.q2_ease}</td><td class="n">${w.q4_corrections_count}</td></tr>`).join("")}</table>
       ${sv.trend ? `<p class="note">${sv.trend.change < 0 ? "\u25BC" : sv.trend.change > 0 ? "\u25B2" : "\u25AC"} Not accounted for went from ${esc(ago({ unlogged_net: sv.trend.first }))} in the first week to ${esc(ago({ unlogged_net: sv.trend.last }))} in the latest. ${sv.trend.change < 0 ? "Smaller is better logging." : sv.trend.change > 0 ? "It is growing." : "No change."}</p>` : ""}
       ${sv.weeks.some((w) => w.q3_annoyance) ? `<h2>What annoyed you</h2>${sv.weeks.filter((w) => w.q3_annoyance).map((w) => `<p class="note"><b>${esc(longDate(w.week_end))}:</b> ${esc(w.q3_annoyance)}</p>`).join("")}` : ""}`;
-  return `<h1>Checks</h1><p class="sub">Two things that keep the numbers honest.</p>
+  return `<h1>Checks</h1>
     <h2>Card reserve</h2>${reserve}
-    <h2>Unlogged by week</h2><p class="note">Money your counts could not explain. A smaller number means better logging.</p>${habit}
+    <h2>Unlogged by week</h2><p class="note">Money your counts could not explain.</p>${habit}
     ${counted.length ? `<p><button class="link" data-action="chart-mode" data-mode="${ui.asList ? "chart" : "list"}">${ui.asList ? "Show as chart" : "Show as list"}</button></p>` : ""}
     <h2>Weekly questions</h2>${survey}`;
 }
