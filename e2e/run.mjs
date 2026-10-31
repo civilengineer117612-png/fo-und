@@ -1662,7 +1662,7 @@ await page.click('button[data-action="income-view"][data-view="earnings"]');
 check(await page.locator(".mlist details.mrow").count() >= 1 && await page.locator(".mlist .mtotal").count() === 0 && await page.locator("#screen table.tbl th:text-is('Month')").count() === 0, "Earnings is a short list: one month, no repeated total line, not a five-column table");
 { const open = await page.locator(".mlist details.mrow").evaluateAll((els) => els.every((d) => d.open));
   const t = await page.locator(".mlist details.mrow").first().innerText();
-  check(open && /Oct\s*₱10,300\.00[\s\S]*Basic salary[\s\S]*Rice subsidy[\s\S]*Overtime[\s\S]*Gross\s*₱11,500\.00[\s\S]*Deductions\s*-₱1,200\.00/.test(t) && !t.includes("Base pay"), "the month is open at once: net at the top, each kind of earning with rice subsidy and overtime apart, then gross and deductions (" + t.replace(/\n/g, " | ").slice(0, 200) + ")"); }
+  check(open && /^Oct\s*₱10,300\.00[\s\S]*Basic salary[\s\S]*Rice subsidy[\s\S]*Overtime[\s\S]*Gross\s*₱11,500\.00[\s\S]*Deductions\s*-₱1,200\.00/.test(t) && !t.includes("Base pay"), "the month is open at once: net at the top, each kind of earning with rice subsidy and overtime apart, then gross and deductions (" + t.replace(/\n/g, " | ").slice(0, 200) + ")"); }
 { const e = (await text(page, "#screen")).toLowerCase();
   check(!e.includes("where it came from") && !e.includes("net, this month"), "no 'where it came from' list and no second gross, deductions and net block under the month");
   const legend = await text(page, ".legend"), th = (await page.locator("#screen table.tbl th").allInnerTexts()).join(",");
