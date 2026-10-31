@@ -13,6 +13,7 @@ jobs:
     timeout-minutes: 45
     env:
       ENGINE: webkit
+      E2E_SHOW_CONSOLE: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,11 +56,11 @@ jobs:
           {
             echo "### e2e-webkit: ${passed} checks passed, ${failed} failed, ${skipped} skipped, ${crashed} script(s) stopped early"
             echo '```'
-            grep -E '^(##### |  FAIL |  skip |       page console: )' e2e-webkit.log
+            grep -E '^(##### |  FAIL |  skip )' e2e-webkit.log
             echo '```'
             echo "First lines of each script's error (a script stops at its first step that throws):"
             echo '```'
-            awk '/^##### e2e\/.*\.mjs$/{name=$2; n=0} /Error|assert|triggerUncaught|AssertionError|expected|actual|Timeout|^ +at .*e2e\//{ if (n<30 && name!="") { print name ": " substr($0,1,300); n++ } }' e2e-webkit.log
+            awk '/^##### e2e\/.*\.mjs$/{name=$2; n=0; c=0} /^       page (console|error): /{ if (c<12 && name!="") { print name ": " substr($0,8,300); c++ } } /Error|assert|triggerUncaught|AssertionError|expected|actual|Timeout|intercepts|waiting for|locator resolved|^ +at .*e2e\//{ if (n<30 && name!="") { print name ": " substr($0,1,300); n++ } }' e2e-webkit.log
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Keep the log

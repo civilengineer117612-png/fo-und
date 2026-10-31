@@ -10,7 +10,21 @@ if (!["chromium", "webkit"].includes(ENGINE)) throw new Error("ENGINE must be ch
 
 export const playwright = () => require(process.env.PLAYWRIGHT_MODULE ?? execSync("npm root -g").toString().trim() + "/playwright");
 
-export const launchBrowser = () => playwright()[ENGINE].launch(ENGINE === "chromium" && process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+// With E2E_SHOW_CONSOLE set (the WebKit job does), every page's console errors and uncaught errors are printed as they happen, so a step that
+// times out says what the page itself complained about. Nothing else changes.
+const showConsole = (context) => context.on("page", (page) => {
+  page.on("pageerror", (e) => console.log("       page error: " + String(e.message).slice(0, 300)));
+  page.on("console", (m) => { if (m.type() === "error") console.log("       page console: " + m.text().slice(0, 300)); });
+});
+
+export async function launchBrowser() {
+  const browser = await playwright()[ENGINE].launch(ENGINE === "chromium" && process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+  if (process.env.E2E_SHOW_CONSOLE) {
+    const make = browser.newContext.bind(browser);
+    browser.newContext = async (...args) => { const context = await make(...args); showConsole(context); return context; };
+  }
+  return browser;
+}
 
 // The test tools that only one engine has. Chromium has all of them; WebKit lacks the ones named here.
 export const TOOLS = {
