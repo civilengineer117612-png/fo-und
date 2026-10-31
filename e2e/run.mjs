@@ -4594,6 +4594,62 @@ console.log("\n-- Repair of past counts --");
   check(await seen(page, "#screen", "Restore the copy from before the repair"), "Setup offers the copy from before the repair");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
+// ===== An entry cancelled twice is put right by the same repair; the card never hides (owner's real-phone bug, Oct 31) =====
+console.log("\n-- Repair of an entry cancelled twice --");
+{ const { naturalBalance, countedEntries, spendingByCategory } = await import("../src/model/index.js");
+  const TSG = "2026-10-13T09:00:00.000+08:00";
+  const acct = (id, opening) => ({ id, name: "Test " + id, class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: opening, opening_date: "2026-01-01" });
+  const tx = (id, date, payee, source, o = {}) => ({ id, date, payee, memo: source === "reconciliation" ? "Reconciliation: old count" : "", status: "verified", source, created_at: TSG, verified_at: TSG, ...o });
+  // Invented, the owner's shape: one big grocery, two Oct 29 counts booked as spending, and one count of 993.00 on Oct 13 that was cancelled twice.
+  const transactions = [tx("groc", "2026-10-05", "Grocer", "manual"), tx("gX", "2026-10-29", "Weekly check-in", "reconciliation"), tx("gY", "2026-10-29", "Weekly check-in", "reconciliation"),
+    tx("C", "2026-10-13", "Weekly check-in", "reconciliation"), tx("rev:C", "2026-10-13", "Weekly check-in", "correction", { reverses: "C" }), tx("rev:C:again", "2026-10-20", "Weekly check-in", "correction", { reverses: "C" })];
+  const entries = [{ transaction_id: "groc", category_id: "cat-food", amount: 3733241 }, { transaction_id: "groc", account_id: "X", amount: -3733241 },
+    { transaction_id: "gX", account_id: "X", amount: -125000 }, { transaction_id: "gX", category_id: "cat-unlogged", amount: 125000 },
+    { transaction_id: "gY", account_id: "Y", amount: -650000 }, { transaction_id: "gY", category_id: "cat-unlogged", amount: 650000 },
+    { transaction_id: "C", account_id: "X", amount: -99300 }, { transaction_id: "C", category_id: "cat-unlogged", amount: 99300 },
+    { transaction_id: "rev:C", account_id: "X", amount: 99300 }, { transaction_id: "rev:C", category_id: "cat-unlogged", amount: -99300 },
+    { transaction_id: "rev:C:again", account_id: "X", amount: 99300 }, { transaction_id: "rev:C:again", category_id: "cat-unlogged", amount: -99300 }];
+  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acct("X", 20000000), acct("Y", 9000000)], transactions, entries } };
+  const read = async () => JSON.parse((await stored(page)).local);
+  const balances = (l) => Object.fromEntries(l.state.accounts.map((a) => [a.id, naturalBalance(a, countedEntries(l.state))]));
+  const oct = (l) => spendingByCategory(l.state, { month: "2026-10" }).total;
+  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
+  const L0 = await read(), bal0 = balances(L0);
+  check(oct(L0) === 3733241 + 125000 + 650000 - 99300, "before: October spending includes the two counts and the extra cancellation (" + oct(L0) + ")");
+  await menuGo(page, "Weekly review");
+  check(await seen(page, "#screen", "Past counts booked"), "the card shows");
+  check((await page.innerText("#screen")).includes("One entry was cancelled twice; that is put right too."), "and says an entry was cancelled twice");
+  await page.click('button[data-action="open-repair"]');
+  const sheet = await page.innerText("#sheet");
+  check(sheet.includes("\u20B144,089.41") && sheet.includes("\u20B137,332.41") && /goes down by \u20B16,757\.00/.test(sheet.replace(/\s+/g, " ")), "the window shows October before 44,089.41 and after 37,332.41, the exact change 6,757.00");
+  check(sheet.includes("3 entries") && /Repair 3 entries/.test(sheet), "three entries are put right: two counts and the second cancellation");
+  await page.click('button[data-action="repair-run"]');
+  check(await seen(page, "#toast", "Repaired 3 entries"), "the repair runs");
+  const L1 = await read();
+  check(oct(L1) === 3733241, "October spending is now exactly the grocery, 37,332.41");
+  check(JSON.stringify(balances(L1)) === JSON.stringify(bal0), "every account balance is exactly what it was");
+  check(L0.state.transactions.every((t, i) => JSON.stringify(L1.state.transactions[i]) === JSON.stringify(t)), "no old entry was edited or removed");
+  check(L1.state.transactions.some((t) => t.restores === "C" && t.source === "correction"), "the second cancellation is put right by a visible correction that names the entry");
+  check(L1.state.entries.reduce((n, e) => n + e.amount, 0) === 0, "the entries still add up to zero");
+  await menuGo(page, "Weekly review");
+  check(!(await seen(page, "#screen", "Past counts booked", 600)), "the card is gone once nothing is left");
+  await menuGo(page, "Setup");
+  check(await seen(page, "#screen", "Ledger check: OK"), "Setup says Ledger check: OK afterwards");
+  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+
+console.log("\n-- The repair card never hides --");
+{ const TSG = "2026-10-29T09:00:00.000+08:00";
+  // Invented: ONE old count whose two sides do not add up, so the repair cannot run. The card must still be there and say why.
+  const transactions = [{ id: "gbad", date: "2026-10-29", payee: "Weekly check-in", memo: "Reconciliation: old count", status: "verified", source: "reconciliation", created_at: TSG, verified_at: TSG }];
+  const entries = [{ transaction_id: "gbad", account_id: "X", amount: -500 }, { transaction_id: "gbad", category_id: "cat-unlogged", amount: 400 }];
+  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [{ id: "X", name: "Test X", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-01-01" }], transactions, entries } };
+  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
+  await menuGo(page, "Weekly review");
+  check(await seen(page, "#screen", "The repair cannot run: one old count does not add up."), "the card stays and says in one sentence why it cannot run");
+  check((await page.innerText("#screen")).includes("Nothing was changed.") && await page.locator('#screen button[data-action="copy-repair-check"]').count() === 1, "and what to do, with a button that copies the check");
+  check(await page.locator('#screen button[data-action="open-repair"]').count() === 0, "there is no repair button to tap");
+  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+
 await protectionChecks({ browser, base: BASE, open, addAccount, menuGo, check });
 await appLockChecks({ browser, base: BASE, open, menuGo, check, seen, text, stored, OWNER_STYLE, ANDROID });
 

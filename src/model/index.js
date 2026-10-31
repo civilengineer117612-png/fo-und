@@ -1,7 +1,7 @@
 // Entry points. A "save" is validated against the state as it WOULD be after the save;
 // nothing is written here. The caller persists only if result.ok is true.
 import { validateShape } from "./schema.js";
-import { checkEntriesBalance, checkReferences, checkReserve, checkDuplicate, checkEntryFinal, checkReversal, checkRulesAppendOnly } from "./invariants.js";
+import { checkEntriesBalance, checkReferences, checkReserve, checkDuplicate, checkEntryFinal, checkReversal, checkRestore, checkRulesAppendOnly } from "./invariants.js";
 import { countedEntries } from "./balances.js";
 
 export { SCHEMAS, validateShape } from "./schema.js";
@@ -42,6 +42,7 @@ export function checkTransactionSave(state, { transaction, entries }) {
     ...checkDuplicate(state, transaction, entries),
     ...checkEntryFinal(state, transaction),
     ...checkReversal(state, transaction, entries),
+    ...checkRestore(state, transaction, entries),
   ]);
 }
 
@@ -65,7 +66,7 @@ export { netWorthSeries } from "./networth.js";
 export { GOAL_SYMBOLS, goalSymbolSvg } from "./goalicons.js";
 export { REFUND_CATEGORY_ID, planRefund, pastRefunds, planRefundRepair, applyRefundRepair } from "./refunds.js";
 export { ledgerProblems, ledgerCheckLine } from "./ledgercheck.js";
-export { repairableGaps, planGapRepair, applyGapRepair, matchHeldGaps, planGapMove } from "./gaprepair.js";
+export { repairableGaps, extraCancellations, repairStatus, repairReport, planGapRepair, applyGapRepair, matchHeldGaps, planGapMove } from "./gaprepair.js";
 export { proposeMoves, planProposedMove } from "./gapmatch.js";
 export { heldIds, unexplainedGaps, spentGaps, explainableGaps, findOpenGap, bigGap, GAP_DAYS } from "./held.js";
 export { replaceWithCopy, copyHolds, holdsData, RESTORE_COPIES_KEPT } from "./restorecopy.js";

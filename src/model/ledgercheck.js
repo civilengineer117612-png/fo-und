@@ -19,6 +19,7 @@ export function ledgerProblems(state) {
   for (const id of orphans) out.push({ code: "ORPHAN_ENTRIES", id, message: "Some amounts belong to no entry." });
   const cancelled = new Map();
   for (const t of txs) {
+    if (t.restores != null) cancelled.set(t.restores, (cancelled.get(t.restores) ?? 0) - 1);   // a second cancellation that was put right (the repair) no longer stands
     if (t.reverses == null) continue;
     if (!ids.has(t.reverses)) out.push({ code: "REVERSES_MISSING", id: t.id, message: "A correction names an entry that is not there." });
     cancelled.set(t.reverses, (cancelled.get(t.reverses) ?? 0) + 1);
