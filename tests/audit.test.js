@@ -208,6 +208,14 @@ test("CONSISTENCY: Spent today, This month, Category and Accounts agree for the 
   assert.equal([...M.dailySpending(S, { from: FROM, to: TO }).values()].reduce((a, b) => a + b, 0), cat, "the Trends line");
 });
 
+test("CONSISTENCY: the day and the month show the same waiting amount, and Unlogged and the summary follow the same held-gap rule", () => {
+  const draft = M.applyDrafts(S, M.planExpense(S, { transaction_id: "wait", date: FROM, payee: "Kiosk", category_id: "food", amount: 7000, account_id: "chk" }, NOW).drafts);
+  const day = M.dayTotal(draft, FROM), month = M.spendingByCategory(draft, { month: MONTH });
+  assert.equal(day.draft, month.pending - (M.spendingByCategory(S, { month: MONTH }).pending), "what waits on the day is what the month shows as waiting, apart from the total");
+  assert.equal(M.homeSummary(S, { from: FROM, to: TO }).spent, M.spendingByCategory(S, { month: MONTH }).total, "the unused summary agrees with the month");
+  assert.equal(M.unloggedTotal(S, UL, FROM, TO), M.spendingByCategory(S, { month: MONTH }).rows.find((r) => r.category_id === UL)?.amount ?? 0, "Unlogged: the gauge is the Category row");
+});
+
 test("CONTROL TOTALS: a payslip saved with its printed lines gives the printed gross, deductions and net, and the checks say nothing", () => {
   const items = [["earning", "Basic Salary", 1000000], ["earning", "Overtime", 200000], ["deduction", "SSS", 200000], ["deduction", "Withholding Tax", 100000]].map(([section, label, amount]) => { const { via, via_overtime, ...d } = M.draftItem({ section, label, amount, employer: "Co", settings: {} }); return d; });
   const r = M.planPayslip(ledger(), { id: "ps", transaction_id: "ptx", employer: "Co", period_from: "2026-10-01", period_to: "2026-10-15", pay_date: "2026-10-15", account_id: "chk", printed_gross: 1200000, printed_net: 900000, deposit: 900000, printed_deductions: 300000, items }, NOW);
