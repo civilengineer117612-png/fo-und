@@ -34,7 +34,7 @@ export function resolveSettings(given = {}) {
   if (!whole(s.needs_variable_floor) || s.needs_variable_floor > 10000) return { ok: false, message: "The share kept for everyday needs must be a whole number of basis points, 0 to 10000." };
   if (!whole(s.nudge_bps) || s.nudge_bps > 10000) return { ok: false, message: "The step toward your targets must be a whole number of basis points, 0 to 10000." };
   if (!whole(s.min_entries)) return { ok: false, message: "The minimum number of entries must be a whole number." };
-  if (!whole(s.max_unlogged_bps) || s.max_unlogged_bps > 10000) return { ok: false, message: "The Unlogged limit must be a whole number of basis points, 0 to 10000." };
+  if (!whole(s.max_unlogged_bps) || s.max_unlogged_bps > 10000) return { ok: false, message: "The Uncategorized limit must be a whole number of basis points, 0 to 10000." };
   if (!whole(s.wants_cap_bps) || s.wants_cap_bps > 10000) return { ok: false, message: "The wants cap must be a whole number of basis points, 0 to 10000." };
   if (!whole(s.savings_floor)) return { ok: false, message: "The savings floor must be whole centavos." };
   if (s.buffer_amount !== null && !whole(s.buffer_amount)) return { ok: false, message: "The buffer must be whole centavos." };

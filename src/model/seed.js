@@ -23,12 +23,15 @@ export function dropUnusedCardCategory(state) {
 
 // What a NEW install starts with: plain categories anyone can use, and no quick tiles (nobody's names or amounts). Eight carry a ROLE so the scanner
 // and the voice guess can find them whatever they are renamed to. Existing ledgers are never touched (migrate.js gave them roles by name, once).
+// What the screens call spending that has no category yet (owner, Oct 31, P1-7). The stored id never changes. A ledger saved before this change holds the older name
+// for this one category; it is read as the new one (`plainNames`, used when a ledger is read), so every screen and report shows one name.
+export const UNCATEGORIZED_NAME = "Uncategorized";
 export function defaultCategories() {
   const e = (id, name, role) => ({ id, name, kind: "expense", ...(role ? { role } : {}) });
   return [
     e("cat-food", "Food", "food"), e("cat-essentials", "Essentials", "essentials"), e("cat-transport", "Transport", "transport"), e("cat-rent", "Rent", "rent"),
     e("cat-subscription", "Subscription", "subscription"), e("cat-shopping", "Shopping", "shopping"), e("cat-health", "Health", "health"), e("cat-fun", "Fun", "fun"), e("cat-other", "Other", "other"),
-    e("cat-unlogged", "Unlogged"),
+    e("cat-unlogged", UNCATEGORIZED_NAME),
     ...INCOME_CATEGORIES,
   ];
 }
@@ -38,6 +41,12 @@ export function defaultPresets() {
 }
 
 export const UNLOGGED_CATEGORY_ID = "cat-unlogged";
+// The ledger with that one category named for what it is. The same ledger comes back when nothing needs changing. Only the name changes: the id, every entry and every budget stay.
+export function plainNames(ledger) {
+  const cats = ledger?.state?.categories;
+  if (!Array.isArray(cats) || !cats.some((c) => c.id === UNLOGGED_CATEGORY_ID && c.name !== UNCATEGORIZED_NAME)) return ledger;
+  return { ...ledger, state: { ...ledger.state, categories: cats.map((c) => (c.id === UNLOGGED_CATEGORY_ID ? { ...c, name: UNCATEGORIZED_NAME } : c)) } };
+}
 
 // Spending categories the owner can add and rename (Setup). A rename keeps the id, so every entry, budget and role stays attached. Unlogged and the
 // income categories are the app's own and are left alone. Names are unique ignoring capitals, 1 to 40 characters.
