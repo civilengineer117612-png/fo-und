@@ -10,6 +10,7 @@ import { alreadyCancelled } from "./corrections.js";
 import { isPocket } from "./banks.js";
 import { planTransfer } from "./transfers.js";
 import { phTimestamp } from "./util.js";
+import { repeatedIds } from "./invariants.js";
 
 const isCountGap = (t) => t.source === "reconciliation" && String(t.memo ?? "").startsWith("Reconciliation:");
 const dayMs = 86400000, dayNum = (d) => Math.floor(Date.parse(d + "T00:00:00Z") / dayMs);
@@ -24,32 +25,91 @@ export function repairableGaps(state) {
     && (byTx.get(t.id) ?? []).some((e) => e.category_id != null && expense.has(e.category_id)) && (byTx.get(t.id) ?? []).some((e) => e.account_id != null));
 }
 
+// An entry cancelled MORE THAN ONCE (owner, Oct 31): before the app refused it (#271) a stale screen could add a second cancelling entry, which moves the same money twice. One
+// cancelling entry is the right one (the one numbered rev:<id> when there is one, else the first); every other still standing is an extra, unless an entry that `restores` it
+// already put it right. Returns [{target, id, date, payee}], one row for each extra still to put right.
+export function extraCancellations(state) {
+  const by = new Map(), restored = new Map();
+  for (const t of state.transactions) {
+    if (t.reverses != null) by.set(t.reverses, [...(by.get(t.reverses) ?? []), t]);
+    if (t.restores != null) restored.set(t.restores, (restored.get(t.restores) ?? 0) + 1);
+  }
+  const out = [];
+  for (const [target, list] of by) {
+    const T = state.transactions.find((t) => t.id === target && t.reverses == null);
+    if (!T || T.status !== "verified" || list.length < 2) continue;
+    const keep = Math.max(0, list.findIndex((t) => t.id === "rev:" + target)), extras = list.filter((_, i) => i !== keep), open = extras.length - (restored.get(target) ?? 0);
+    for (const d of extras.slice(Math.max(0, extras.length - open))) out.push({ target, id: d.id, date: d.date, payee: d.payee });
+  }
+  return out;
+}
+
 // What the repair would do: the cancelling entries and the held copies to add, and for each month the spending before and after.
-// Returns {ok, violations, transactions, entries, months: [{month, count, before, after, change}], count, raised, lowered}.
+// A past count booked as spending is cancelled by a correction and counted again as not yet explained. An entry cancelled twice gets its extra cancellation put right: an entry
+// that restores it (`restores`) takes the extra away, and the same amount is kept apart as not yet explained. Every balance stays exactly what it was.
+// A piece that does not pass the ledger's own checks is SKIPPED and listed in `skipped` ({id, code, message}); the rest is still repaired.
+// Returns {ok, violations, transactions, entries, months: [{month, count, before, after, change}], count, gapCount, extraCount, skipped, raised, lowered}.
 export function planGapRepair(state, { now = new Date() } = {}) {
-  const gaps = repairableGaps(state), stamp = phTimestamp(now);
+  const gaps = repairableGaps(state), extras = extraCancellations(state), held = heldIds(state), stamp = phTimestamp(now);
   let probe = state;
-  const transactions = [], entries = [];
+  const transactions = [], entries = [], skipped = [], dates = [];
+  // add a group of (transaction, legs) pairs only when every one passes; otherwise none of them and the reason is recorded
+  const add = (id, pairs) => {
+    let p = probe;
+    for (const [t, es] of pairs) {
+      const check = checkTransactionSave(p, { transaction: t, entries: es });
+      if (!check.ok) { skipped.push({ id, code: check.violations[0].code, message: check.violations[0].message }); return false; }
+      p = { ...p, transactions: [...p.transactions, t], entries: [...p.entries, ...es] };
+    }
+    probe = p; for (const [t, es] of pairs) { transactions.push(t); entries.push(...es); }
+    return true;
+  };
+  let gapCount = 0, extraCount = 0;
   for (const g of gaps) {
     if (state.transactions.some((t) => t.id === "rev:" + g.id || t.id === "held:" + g.id)) continue;
     const mine = state.entries.filter((e) => e.transaction_id === g.id);
     const rev = { id: "rev:" + g.id, date: g.date, payee: g.payee, memo: "Correction of " + (g.payee || "an entry") + (g.memo ? " (" + g.memo + ")" : ""), status: "verified", source: "correction", reverses: g.id, created_at: stamp, verified_at: stamp };
-    const held = { id: "held:" + g.id, date: g.date, payee: g.payee, memo: g.memo + " · kept apart as not yet explained", status: "verified", source: "reconciliation", adjustment: true, created_at: stamp, verified_at: stamp };
+    const heldTx = { id: "held:" + g.id, date: g.date, payee: g.payee, memo: g.memo + " \u00b7 kept apart as not yet explained", status: "verified", source: "reconciliation", adjustment: true, created_at: stamp, verified_at: stamp };
     const revEntries = mine.map(({ transaction_id, ...e }) => ({ ...e, transaction_id: rev.id, amount: -e.amount }));
-    const heldEntries = mine.map(({ transaction_id, ...e }) => ({ ...e, transaction_id: held.id }));
-    for (const [t, es] of [[rev, revEntries], [held, heldEntries]]) {
-      const check = checkTransactionSave(probe, { transaction: t, entries: es });
-      if (!check.ok) return { ok: false, violations: check.violations, transactions: [], entries: [], months: [], count: 0, raised: 0, lowered: 0 };
-      probe = { ...probe, transactions: [...probe.transactions, t], entries: [...probe.entries, ...es] };
-      transactions.push(t); entries.push(...es);
-    }
+    const heldEntries = mine.map(({ transaction_id, ...e }) => ({ ...e, transaction_id: heldTx.id }));
+    if (add(g.id, [[rev, revEntries], [heldTx, heldEntries]])) { gapCount += 1; dates.push(g.date); }
   }
-  const after = probe, monthsSet = [...new Set(gaps.map((g) => g.date.slice(0, 7)))].sort();
+  const putBack = new Map();
+  for (const x of extras) {
+    const n = (state.transactions.filter((t) => t.restores === x.target).length) + (putBack.get(x.target) ?? 0) + 1, id = "undo:" + x.target + ":" + n;
+    if (state.transactions.some((t) => t.id === id)) continue;
+    const mine = state.entries.filter((e) => e.transaction_id === x.target);
+    // the extra cancellation holds the entry's opposite legs; putting it right holds the entry's own legs, and the same opposite legs are kept apart as not yet explained
+    const undo = { id, date: x.date, payee: x.payee, memo: "Correction of a second cancellation of " + (x.payee || "an entry"), status: "verified", source: "correction", restores: x.target, ...(held.has(x.id) ? { adjustment: true } : {}), created_at: stamp, verified_at: stamp };
+    const keep = { id: "held:" + id, date: x.date, payee: x.payee, memo: "Reconciliation: a second cancellation of one entry, kept apart as not yet explained", status: "verified", source: "reconciliation", adjustment: true, created_at: stamp, verified_at: stamp };
+    const undoEntries = mine.map(({ transaction_id, ...e }) => ({ ...e, transaction_id: id })), keepEntries = mine.map(({ transaction_id, ...e }) => ({ ...e, transaction_id: keep.id, amount: -e.amount }));
+    if (add(x.id, [[undo, undoEntries], [keep, keepEntries]])) { extraCount += 1; putBack.set(x.target, (putBack.get(x.target) ?? 0) + 1); dates.push(x.date); }
+  }
+  const after = probe, monthsSet = [...new Set(dates.map((d) => d.slice(0, 7)))].sort();
   const months = monthsSet.map((month) => {
     const before = spendingByCategory(state, { month }).total, now2 = spendingByCategory(after, { month }).total;
-    return { month, count: gaps.filter((g) => g.date.startsWith(month)).length, before, after: now2, change: now2 - before };
+    return { month, count: dates.filter((d) => d.startsWith(month)).length, before, after: now2, change: now2 - before };
   });
-  return { ok: true, violations: [], transactions, entries, months, count: transactions.length / 2, raised: months.filter((m) => m.change > 0).reduce((n, m) => n + m.change, 0), lowered: months.filter((m) => m.change < 0).reduce((n, m) => n - m.change, 0) };
+  return { ok: true, violations: [], transactions, entries, months, count: gapCount + extraCount, gapCount, extraCount, skipped,
+    raised: months.filter((m) => m.change > 0).reduce((n, m) => n + m.change, 0), lowered: months.filter((m) => m.change < 0).reduce((n, m) => n - m.change, 0) };
+}
+
+// What the Weekly review card needs, so it can NEVER hide silently: how many past entries want repairing, how many the repair can do, and, when it can do none, one plain
+// sentence for why and one for what to do. `note` is said when only some can be done.
+const CAUSE = { UNBALANCED: "one old count does not add up", TOO_FEW_ENTRIES: "one old count has fewer than two sides", ENTRY_FINAL: "one entry number is already used", UNKNOWN_REFERENCE: "one old count names an account or a category that is gone" };
+export function repairStatus(state) {
+  const gaps = repairableGaps(state).length, extras = extraCancellations(state).length, candidates = gaps + extras, plan = planGapRepair(state, { now: new Date() });
+  const cause = plan.skipped[0] ? CAUSE[plan.skipped[0].code] ?? "one old entry does not pass the app's own checks" : "these entries already have a correction but still count as spending";
+  const reason = candidates > 0 && plan.count === 0 ? "The repair cannot run: " + cause + "." : null;
+  return { gaps, extras, candidates, plan, count: plan.count, skipped: plan.skipped, reason, action: reason ? "Nothing was changed. Tap \"Copy the repair check\" and send it to the project chat." : null,
+    note: plan.count > 0 && plan.skipped.length ? plan.skipped.length + " could not be repaired and stay as they are." : null };
+}
+
+// Counts only, for the owner to paste: nothing from the ledger (no name, amount, date or account) is in it.
+export function repairReport(state) {
+  const st = repairStatus(state);
+  return ["Repair check (counts only)", "past counts booked as spending: " + st.gaps, "cancelled twice: " + st.extras, "repeated entry numbers: " + repeatedIds(state.transactions),
+    "the repair can do: " + st.count, "could not be repaired: " + st.skipped.length, "first reason: " + (st.skipped[0]?.code ?? "none")].join("\n");
 }
 
 // The state after the repair. The very same state comes back when any of it is already there, so a repeat tap changes nothing.

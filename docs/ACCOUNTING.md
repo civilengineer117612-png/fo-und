@@ -69,7 +69,11 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
   and changing the money of a payslip, are corrections too: the old entry stays, its reversal sits beside it, and a changed payslip gets a new pay entry.
   Only a draft is ever deleted. (Fixed forward on Oct 31: an earlier payslip change or removal had already rewritten or deleted the entry, and that
   history cannot be recovered.)
-- **Guarded by.** "REVERSING ENTRIES" (twice), "AUDIT TRAIL" (both), `tests/audittrail.test.js`.
+  **Stated exception (Oct 31):** before the app refused it (#271) a stale screen could cancel the same entry twice, which moves its money twice. A cancellation
+  is still never itself cancelled. The repair puts the extra one right with an entry that names the cancelled entry in `restores` and holds its own legs, accepted
+  only while that entry has more cancelling entries standing than it should (`checkRestore`); the same amount is kept apart as not yet explained, so every balance
+  stays what it was. The ledger check no longer counts a second cancellation that was put right.
+- **Guarded by.** "REVERSING ENTRIES" (twice), "AUDIT TRAIL" (three), `tests/audittrail.test.js`, `tests/doublecancel.test.js`.
 
 ### 8. Cutoff
 - **Rule.** An item belongs to the period in which it happened. Money in belongs to the day the deposit arrives; the period worked is a label.

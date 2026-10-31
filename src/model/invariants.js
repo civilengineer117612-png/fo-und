@@ -106,6 +106,20 @@ export function checkReversal(state, transaction, entries) {
   return JSON.stringify(mine) === JSON.stringify(theirs) ? [] : [err("REVERSAL_NOT_EXACT", "a correction must be the exact opposite of the entry it cancels (" + target.id + ")")];
 }
 
+// A SECOND cancellation put right (owner, Oct 31): before the app refused it, a stale screen could cancel the same entry twice, which moves its money twice. The way back is
+// NOT a cancellation of the cancellation (that stays refused above): it is an entry that names the cancelled entry in `restores` and holds that entry's own legs, which puts one
+// extra cancellation back. It is accepted only while that entry has more cancelling entries standing than restoring ones allow (one stands, the rest are extras).
+export function checkRestore(state, transaction, entries) {
+  if (transaction.restores == null) return [];
+  const target = state.transactions.find((t) => t.id === transaction.restores && t.reverses == null);
+  if (!target) return [err("RESTORE_MISSING", "a second cancellation can be put right only for an entry that exists (" + transaction.restores + ")")];
+  if (target.status !== "verified") return [err("RESTORE_NOT_VERIFIED", "only a verified entry can have been cancelled (" + target.id + ")")];
+  const standing = state.transactions.filter((t) => t.reverses === target.id).length - state.transactions.filter((t) => t.restores === target.id && t.id !== transaction.id).length;
+  if (standing < 2) return [err("RESTORE_NOT_NEEDED", "this entry is not cancelled more than once (" + target.id + ")")];
+  const mine = entries.map((e) => legKey(e, 1)).sort(), theirs = state.entries.filter((e) => e.transaction_id === target.id).map((e) => legKey(e, 1)).sort();
+  return JSON.stringify(mine) === JSON.stringify(theirs) ? [] : [err("RESTORE_NOT_EXACT", "the entry that puts a second cancellation right must hold the cancelled entry's own legs (" + target.id + ")")];
+}
+
 // Read-only count for Setup, About this app: how many transaction ids appear more than once (each extra copy counts one). Never blocks or repairs anything.
 export const repeatedIds = (transactions) => { const seen = new Set(); let n = 0; for (const t of transactions ?? []) { if (seen.has(t.id)) n += 1; else seen.add(t.id); } return n; };
 export const repeatsLine = (state) => { const n = repeatedIds(state.transactions); return "Repeated entry numbers: " + (n === 0 ? "none" : n + " (tell the project chat)"); };

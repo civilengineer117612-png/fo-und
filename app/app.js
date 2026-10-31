@@ -220,6 +220,7 @@ function transferFields(t, d) {
 const shortPayee = (p) => /^\d{10,}$/.test(String(p ?? "").trim()) ? M.payeeLabel(p) : p;
 function describe(t) {
   const es = S().entries.filter((e) => e.transaction_id === t.id);
+  if (t.restores) return { kind: "other", editable: false, title: "Puts right a second cancellation: " + (t.payee || "an entry"), amount: es.filter((e) => e.amount > 0).reduce((n, e) => n + e.amount, 0), detail: "puts an extra cancellation right" };
   if (t.reverses) return { kind: "other", editable: false, title: "Cancels: " + (t.payee || "an entry"), amount: es.filter((e) => e.amount > 0).reduce((n, e) => n + e.amount, 0), detail: "cancels an earlier entry" };   // shown without a sign: it only takes back what was entered
   const cat = es.find((e) => e.category_id != null), acct = es.find((e) => e.account_id != null);
   if (cat && acct && es.filter((e) => e.category_id == null).every((e) => e.account_id === acct.account_id) && es.filter((e) => e.category_id != null).length === 1) {
@@ -455,7 +456,7 @@ function monthGlance() {
 // The day's entries stay out of sight until you tap the heading (less on the screen, nothing to scroll past). The choice is kept until the app is closed.
 const logOpen = () => { try { return sessionStorage.getItem("logOpen") === "1"; } catch { return false; } };
 // An entry cancelled at the Weekly review and the entry that cancels it stay in the ledger but are kept out of the lists, unless "Show cancelled" is on.
-const cancelledIds = () => new Set(S().transactions.filter((t) => t.reverses).flatMap((t) => [t.id, t.reverses]));
+const cancelledIds = () => new Set(S().transactions.flatMap((t) => (t.reverses ? [t.id, t.reverses] : t.restores ? [t.id] : [])));
 function entriesBlock(list, label) {
   const gone = cancelledIds(); list = list.filter((t) => !gone.has(t.id));
   const anim = ui.entriesAnim; ui.entriesAnim = false;   // only the tap itself animates, not every redraw
@@ -2338,13 +2339,20 @@ function viewGoals() {
 }
 
 // Past weekly counts that still count a gap as spending (or as found money lowering it): the owner can put them right in one step (owner, Oct 29), with the months before and after.
+// "counts" when only weekly counts are put right, "entries" once an entry cancelled twice is part of it
+const repairUnit = (plan, n) => (plan.extraCount ? (n === 1 ? "entry" : "entries") : (n === 1 ? "count" : "counts"));
 function repairCardHtml() {
-  if (!M.repairableGaps(S()).length) return "";
-  const p = M.planGapRepair(S(), {});
-  if (!p.ok || !p.count) return "";
-  const net = p.months.reduce((n, m) => n + m.change, 0);
+  const st = M.repairStatus(S());
+  if (!st.candidates) return "";   // nothing booked as spending and nothing cancelled twice: the only case with no card
+  // The card never hides silently (owner, Oct 31): when the repair cannot run it stays and says why and what to do.
+  if (st.reason) return `<div class="card" style="margin-bottom:14px"><p><b>${esc(st.reason)}</b></p>
+    <p class="note small">${esc(st.action)}</p>
+    <p><button data-action="copy-repair-check" style="width:100%">Copy the repair check</button></p></div>`;
+  const p = st.plan, net = p.months.reduce((n, m) => n + m.change, 0);
+  const twice = p.extraCount ? ` ${p.extraCount === 1 ? "One entry was" : p.extraCount + " entries were"} cancelled twice; that is put right too.` : "";
   return `<div class="card" style="margin-bottom:14px"><p><b>${net < 0 ? "Past counts booked " + peso(-net) + " as spending." : net > 0 ? "Past counts hid " + peso(net) + " of spending." : "Past weekly counts are counted as spending."}</b></p>
-    <p class="note small">${p.count} weekly ${p.count === 1 ? "count" : "counts"} counted a gap you did not explain as money spent, or as money found. You can put ${p.count === 1 ? "it" : "them"} right.</p>
+    <p class="note small">${p.gapCount ? p.gapCount + " weekly " + (p.gapCount === 1 ? "count" : "counts") + " counted a gap you did not explain as money spent, or as money found. You can put " + (p.gapCount === 1 ? "it" : "them") + " right." : "An old mistake can be put right."}${esc(twice)}</p>
+    ${st.note ? `<p class="note small">${esc(st.note)} <button class="link" data-action="copy-repair-check">Copy the repair check</button></p>` : ""}
     <p><button class="primary" data-action="open-repair">Look at the repair</button></p></div>`;
 }
 // Held gaps that look like ONE move between two own accounts (a short and an equal extra, counted within 3 days): one tap makes the move and clears both.
@@ -2863,12 +2871,15 @@ function renderSheet() {
       ${REQNOTE}
       <p><button class="primary" id="f-save" data-action="save-deposit" style="margin-top:6px" disabled>Save</button></p>`;
   } else if (sh.type === "repair") {
-    const p = M.planGapRepair(S(), {}), net = p.months.reduce((n, m) => n + m.change, 0);
-    body = p.ok && p.count ? `<h3>Repair past weekly counts</h3>
-      <p class="note">Each count is cancelled by a correction and counted again as not yet explained. Nothing is edited or deleted. No balance changes.</p>
-      <div class="group">${p.months.map((m) => `<div class="row"><div>${esc(M.monthLabel(m.month))}<small>${m.count} ${m.count === 1 ? "count" : "counts"}</small></div><div class="amt">${peso(m.before)} \u2192 ${peso(m.after)}<small style="display:block;text-align:right">${m.change < 0 ? "\u2212" : "+"}${peso(Math.abs(m.change))} ${m.change < 0 ? "less spending" : m.change > 0 ? "more spending" : ""}</small></div></div>`).join("")}</div>
+    const st = M.repairStatus(S()), p = st.plan, net = p.months.reduce((n, m) => n + m.change, 0);
+    body = st.reason ? `<h3>The repair cannot run</h3><p>${esc(st.reason)}</p><p class="note">${esc(st.action)}</p>
+      <p><button data-action="copy-repair-check" style="width:100%">Copy the repair check</button></p><p><button class="primary" data-action="close-sheet">Got it</button></p>`
+    : p.ok && p.count ? `<h3>Repair past weekly counts</h3>
+      <p class="note">Each count is cancelled by a correction and counted again as not yet explained.${p.extraCount ? " An entry cancelled twice has its extra cancellation put right, and that amount is kept apart too." : ""} Nothing is edited or deleted. No balance changes.</p>
+      <div class="group">${p.months.map((m) => `<div class="row"><div>${esc(M.monthLabel(m.month))}<small>${m.count} ${repairUnit(p, m.count)}</small></div><div class="amt">${peso(m.before)} \u2192 ${peso(m.after)}<small style="display:block;text-align:right">${m.change < 0 ? "\u2212" : "+"}${peso(Math.abs(m.change))} ${m.change < 0 ? "less spending" : m.change > 0 ? "more spending" : ""}</small></div></div>`).join("")}</div>
       <p class="note small">Spending in these months ${net < 0 ? "goes down by " + peso(-net) : net > 0 ? "goes up by " + peso(net) : "stays the same"} in total. Gaps that match as one move between your accounts are offered next, on the Weekly review.</p>
-      <p><button class="primary" data-action="repair-run">Repair ${p.count} ${p.count === 1 ? "count" : "counts"}</button></p>
+      ${st.note ? `<p class="note small">${esc(st.note)}</p>` : ""}
+      <p><button class="primary" data-action="repair-run">Repair ${p.count} ${repairUnit(p, p.count)}</button></p>
       <p class="note small">The app first keeps a copy of your data as it is now: Setup, About this app, "Restore the copy from before the repair".</p>
       <p><button data-action="close-sheet" style="width:100%">Not now</button></p>` : `<h3>Nothing to repair</h3><p class="note">Every past weekly count is already right.</p><p><button class="primary" data-action="close-sheet">Got it</button></p>`;
   } else if (sh.type === "refund-repair") {
@@ -3937,7 +3948,7 @@ async function onClick(el) {
       if (!r.ok) { ui.sheet = null; ui.error = r.message.replace("Your data was not replaced", "The repair was not made"); renderAll(); break; }
       if (!M.saveOutcome(r.written).ok) { ui.sheet = null; ui.error = "The repair could not be saved. Nothing was changed, and the copy is kept."; renderAll(); break; }
       ledger = next; ui.copies = await readCopies(); ui.sheet = null; renderAll();
-      showToast("Repaired " + plan.count + (plan.count === 1 ? " count" : " counts") + ". Your data from before is kept.");
+      showToast("Repaired " + plan.count + " " + repairUnit(plan, plan.count) + ". Your data from before is kept.");
       break;
     }
     case "past-move": {
@@ -4817,6 +4828,11 @@ async function onClick(el) {
     case "open-check-backup": ui.sheet = { type: "restore", check: true }; ui.form = {}; renderSheet(); break;
     case "make-backup": await makeBackup(); break;
     case "make-passphrase": { const made = M.makePassphrase(); ui.form = { ...ui.form, pass: made, pass2: made, made }; renderSheet(); break; }   // shown on screen, kept nowhere
+    case "copy-repair-check": {   // counts only: nothing from the ledger is in it
+      try { await navigator.clipboard.writeText(M.repairReport(S())); showToast("Copied. It holds counts only, no names or amounts."); }
+      catch { showToast("Could not copy the repair check."); }
+      break;
+    }
     case "copy-layout": {   // the report was masked when the PDF was read: only digits turned to 9 and unknown words turned to x are ever copied
       try { await navigator.clipboard.writeText(ui.form.layoutText ?? ""); showToast("Layout report copied. It holds no digits or names."); }
       catch { showToast("Could not copy the layout report."); }
