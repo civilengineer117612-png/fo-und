@@ -458,9 +458,9 @@ await shot(page, "10-backup-sheet");
 const [download] = await Promise.all([page.waitForEvent("download"), page.click("#f-save")]);
 const file = join(mkdtempSync(join(tmpdir(), "bk-")), download.suggestedFilename());
 await download.saveAs(file);
-check(download.suggestedFilename() === "finance-backup-2026-10-03.json", "the file is named with the date: " + download.suggestedFilename());
-const raw = readFileSync(file, "utf8"), box1 = JSON.parse(raw);
-check(box1.kind === "ledger" && box1.v === 1 && box1.iterations === 600000, "it is an encrypted ledger container");
+check(/^fo-und backup 2026-10-03 \d\d-\d\d\.json$/.test(download.suggestedFilename()), "the file is named fo-und backup, the date and the time: " + download.suggestedFilename());
+const raw = readFileSync(file, "latin1"), { readBackupHeader } = await import("../src/model/index.js"), box1 = (await readBackupHeader(new Blob([readFileSync(file)]))).header;
+check(box1.kind === "backup" && box1.v === 2 && box1.iterations === 600000 && box1.parts === 1 && box1.part === 1, "it is ONE encrypted backup file, with the same 600,000 rounds of key stretching");
 check(!["Test Cash", "Test Card", "Lunch", "9500"].some((x) => raw.includes(x)), "the file contains none of your data in the clear");
 check(await seen(page, "#toast", "Backup file created"), "the app says what to do next");
 { const st = await stored(page); check(!st.local.includes(made) && !st.local.includes(PASS) && !(JSON.stringify(st).includes(made)), "neither passphrase is kept anywhere on the phone"); }
@@ -488,11 +488,11 @@ await page.click('button:has-text("Restore from a backup")');
 check(await page.locator("#f-save").isDisabled(), "opening is off until a file and passphrase are given");
 await page.setInputFiles("#r-file", file);
 await page.fill("#r-pass", "a different passphrase");
-await page.click('button:has-text("Open backup")');
+await page.click('button:has-text("Open the backup")');
 check(await seen(page, "#sheet", "Wrong passphrase, or the file is damaged"), "a wrong passphrase is refused plainly");
 check((await page.inputValue("#r-pass")) === "a different passphrase" && await page.locator("#f-save").isEnabled(), "and you can try again without choosing the file again");
 await page.fill("#r-pass", PASS);
-await page.click('button:has-text("Open backup")');
+await page.click('button:has-text("Open the backup")');
 check(await seen(page, "#sheet", "Replace this phone's data?"), "the right passphrase shows what will be replaced");
 check((await text(page, "#sheet")).includes("2 accounts, 1 entry") && (await text(page, "#sheet")).includes("0 accounts, no entries"), "with the backup's counts beside the phone's own");
 await shot(page, "11-restore-sheet");
@@ -512,7 +512,7 @@ check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors
 await menuGo(page, "Setup"); await page.click('button:has-text("Restore from a backup")');
 const junk = join(mkdtempSync(join(tmpdir(), "bk-")), "notes.json"); (await import("node:fs")).writeFileSync(junk, "hello");
 await page.setInputFiles("#r-file", junk); await page.fill("#r-pass", PASS);
-await page.click('button:has-text("Open backup")');
+await page.click('button:has-text("Open the backup")');
 check(await seen(page, "#sheet", "That file is not a backup"), "a file that is not a backup is refused plainly");
 await ctx.close();
 
@@ -528,7 +528,7 @@ for (const cancel of [false, true]) {
   if (!cancel) {
     check(await seen(page, "#toast", "Backup file created"), "the share sheet path completes");
     const shared = await page.evaluate(() => window.__shared);
-    check(shared?.name === "finance-backup-2026-10-03.json" && shared.type === "application/json", "it hands the share sheet a named JSON file");
+    check(/^fo-und backup 2026-10-03 \d\d-\d\d\.json$/.test(shared?.name ?? "") && shared.type === "application/json", "it hands the share sheet one named backup file");
   } else {
     check(await seen(page, "#sheet", "Not saved. Tap Create backup file to try again."), "cancelling the share sheet is not counted as a backup");
     check(!(await text(page, "#sheet")).includes("Last backup"), "and no backup date is recorded");
@@ -2626,37 +2626,67 @@ console.log("Pictures file");
   await page.fill("#r-pass", PW); await page.click("#f-save");
   check(await seen(page, "#sheet", "every picture is whole. Nothing on this phone was changed") && await page.locator("#f-save").count() === 0, "and with the right one says it is whole, with no button to change anything");
   await page.click("#scrim");
-  // Back up and Restore do the ledger and the pictures together: one passphrase, the ledger file and the pictures files, put back in one go
+  // Back up now makes ONE file with the ledger and the pictures together (P1-6); Restore takes that file, or all its parts, or an older ledger file with its pictures files
   await idb(async (db) => { await new Promise((res) => { const t = db.transaction("photos", "readwrite"); t.objectStore("photos").put(new Blob([new Uint8Array(200).fill(7)], { type: "image/jpeg" }), "pic-a"); t.oncomplete = res; }); });
   const madeBoth = await idb(async (db) => new Promise((res) => { const q = db.transaction("photos").objectStore("photos").get("pic-a"); q.onsuccess = () => res(q.result.size); }));
+  const gotIt = async () => { await page.waitForSelector('#sheet button:has-text("Got it")', { timeout: 15000 }).catch(() => {}); const b = page.locator('#sheet button:has-text("Got it")'); if (await b.count()) await b.click(); };   // the window "Your data was replaced" after a restore
+  const gone = () => idb(async (db) => { await new Promise((res) => { const t = db.transaction("photos", "readwrite"); t.objectStore("photos").delete("pic-a"); t.oncomplete = res; }); });
+  const picSize = async () => { let size = null; for (let n = 0; n < 40 && size === null; n++) { await page.waitForTimeout(250); size = await idb(async (db) => { const b = await new Promise((res) => { const q = db.transaction("photos").objectStore("photos").get("pic-a"); q.onsuccess = () => res(q.result); }); return b ? b.size : null; }).catch(() => null); } return size; };
   await menuGo(page, "Setup");
-  check(await page.locator('button[data-action="open-backup"][data-all="1"]').innerText() === "Back up" && await page.locator('button[data-action="open-restore"][data-all="1"]').innerText() === "Restore", "with pictures, Setup offers Back up and Restore, which do the ledger and the pictures together");
+  check(await page.locator('button[data-action="open-backup"][data-all="1"]').innerText() === "Back up now" && await page.locator('button[data-action="open-restore"][data-all="1"]').innerText() === "Restore from a backup", "Setup offers Back up now and Restore from a backup, which do the ledger and the pictures together");
   await page.click('button[data-action="open-backup"][data-all="1"]');
   await page.fill("#b-pass", PW); await page.fill("#b-pass2", PW);
   const got = []; page.on("download", (d) => got.push(d));
   await page.click("#f-save");
-  await page.waitForFunction(() => /Backup made/.test(document.querySelector("#toast")?.innerText ?? ""), null, { timeout: 60000 });
+  await page.waitForFunction(() => /Backup file created/.test(document.querySelector("#toast")?.innerText ?? ""), null, { timeout: 60000 });
   await page.waitForTimeout(500);
   const both = []; for (const d of got) { const f = join(tmpdir(), "both-" + Date.now() + "-" + d.suggestedFilename()); await d.saveAs(f); both.push({ name: d.suggestedFilename(), file: f }); }
-  const ledgerFile = both.find((x) => /^finance-backup-.*\.json$/.test(x.name)), picsFile = both.find((x) => /\.fpics$/.test(x.name));
-  check(!!ledgerFile && !!picsFile && both.length === 2, "one tap made the ledger file and the pictures file: " + both.map((x) => x.name).join(", "));
-  check(await seen(page, "#toast", "the ledger file and 1 pictures file") && !!JSON.parse((await stored(page)).local).settings.last_pictures_backup_at, "the app says so, and both last-backup dates are kept");
-  await idb(async (db) => { await new Promise((res) => { const t = db.transaction("photos", "readwrite"); t.objectStore("photos").delete("pic-a"); t.oncomplete = res; }); });
+  check(both.length === 1 && /^fo-und backup 2026-10-03 \d\d-\d\d\.json$/.test(both[0].name), "one tap made ONE file: " + both.map((x) => x.name).join(", "));
+  check((await text(page, "#toast")).includes("your ledger and 1 picture in one file") && !!JSON.parse((await stored(page)).local).settings.last_pictures_backup_at, "the app says what is inside, and both last-backup dates are kept");
+  check(!readFileSync(both[0].file).toString("latin1").includes("pic-a"), "the pictures are inside the one encrypted file, not beside it");
+  await gone();
   await menuGo(page, "Setup"); await page.click('button[data-action="open-restore"][data-all="1"]');
-  check(await page.locator("#r-file").getAttribute("multiple") !== null, "Restore takes several files at once");
-  await page.setInputFiles("#r-file", [ledgerFile.file, picsFile.file]); await page.fill("#r-pass", "not the passphrase at all"); await page.click("#f-save");
+  check(await page.locator("#r-file").getAttribute("multiple") !== null, "Restore takes one file or several parts");
+  await page.setInputFiles("#r-file", [both[0].file]); await page.fill("#r-pass", "not the passphrase at all"); await page.click("#f-save");
   check(await seen(page, "#f-msg", "Wrong passphrase, or the file is damaged"), "a wrong passphrase is refused in plain words");
-  await page.setInputFiles("#r-file", [picsFile.file]); await page.fill("#r-pass", PW); await page.click("#f-save");
-  check(await seen(page, "#f-msg", "Choose the backup file as well"), "pictures files alone are not enough: the backup file is needed too");
-  await page.setInputFiles("#r-file", [ledgerFile.file, picsFile.file]); await page.click("#f-save");
+  await page.setInputFiles("#r-file", [file]); await page.fill("#r-pass", PW); await page.click("#f-save");
+  check(await seen(page, "#f-msg", "Choose the backup file as well"), "an older pictures file alone is not a backup");
+  await page.setInputFiles("#r-file", [both[0].file]); await page.click("#f-save");
   check(await seen(page, "#sheet", "Replace this phone's data?") && (await text(page, "#sheet")).includes("1 picture missing here will be put back"), "the right passphrase shows the ledger and how many pictures will come back");
   await page.click("#f-save"); await page.click("#f-save");
-  let backAgain = null;   // the app restarts itself after the restore: poll until the pictures are in
-  for (let n = 0; n < 40 && backAgain === null; n++) {
-    await page.waitForTimeout(250);
-    backAgain = await idb(async (db) => { const b = await new Promise((res) => { const q = db.transaction("photos").objectStore("photos").get("pic-a"); q.onsuccess = () => res(q.result); }); return b ? b.size : null; }).catch(() => null);
+  check(await picSize() === madeBoth, "the picture came back with the ledger, byte for byte in size");
+  await gotIt();
+
+  // an OLDER backup (the ledger .json and a .fpics pictures file, as before this change) still restores
+  { const { encryptLedgerBackup: encOld, sealPictures: sealOld } = await import("../src/model/index.js");
+    const cur = JSON.parse((await stored(page)).local), oldLedger = join(mkdtempSync(join(tmpdir(), "old-")), "finance-backup-2026-10-02.json"), oldPics = oldLedger.replace("finance-backup-2026-10-02.json", "finance-pictures-2026-10-02.fpics");
+    writeFileSync(oldLedger, JSON.stringify(await encOld(cur, PW))); writeFileSync(oldPics, Buffer.from(await (await sealOld([{ id: "pic-a", bytes: new Uint8Array(200).fill(7) }], PW, { savedAt: "2026-10-02" })).arrayBuffer()));
+    await gone();
+    await menuGo(page, "Setup"); await page.click('button[data-action="open-restore"][data-all="1"]');
+    await page.setInputFiles("#r-file", [oldLedger, oldPics]); await page.fill("#r-pass", PW); await page.click("#f-save");
+    check(await seen(page, "#sheet", "Replace this phone's data?") && (await text(page, "#sheet")).includes("1 picture missing here will be put back, from 1 file"), "an older ledger file with its pictures file still opens, as before");
+    await page.click("#f-save"); await page.click("#f-save");
+    check(await picSize() === madeBoth, "and puts the picture back");
+    await gotIt();
+    // PARTS: the same ledger in three files that share one id (the limit is made tiny for the test)
+    const { planBackupParts: plan, sealBackupPart: sealPart, newBackupId: newId } = await import("../src/model/index.js");
+    const led = JSON.parse((await stored(page)).local), text0 = JSON.stringify(led), pics = [{ id: "pic-a", bytes: new Uint8Array(200).fill(7) }, { id: "x1", bytes: new Uint8Array(300).fill(1) }, { id: "x2", bytes: new Uint8Array(300).fill(2) }];
+    const mk = async (id) => { const pl = plan(new TextEncoder().encode(text0).length, pics.map((p) => ({ id: p.id, size: p.bytes.length })), 250), out = [];   // a tiny limit: the ledger alone is over it, so every picture ends up in a part of its own
+      for (let i = 0; i < pl.length; i++) { const f = join(mkdtempSync(join(tmpdir(), "part-")), "fo-und backup 2026-10-03 11-00 (" + (i + 1) + " of " + pl.length + ").json"); writeFileSync(f, Buffer.from(await (await sealPart({ ledger: pl[i].ledger ? text0 : null, items: pl[i].ids.map((x) => pics.find((p) => p.id === x)), passphrase: PW, id, part: i + 1, parts: pl.length, iterations: 100000 })).arrayBuffer())); out.push(f); } return out; };
+    const setA = await mk(newId()), setB = await mk(newId());
+    const N = setA.length; check(N === 4, "a big backup is cut into parts (" + N + ")");
+    await gone();
+    await menuGo(page, "Setup"); await page.click('button[data-action="open-restore"][data-all="1"]');
+    await page.setInputFiles("#r-file", [setA[0], setA[1], setA[3]]); await page.fill("#r-pass", PW); await page.click("#f-save");
+    check(await seen(page, "#f-msg", "Part 3 of 4 is missing. Choose all 4 files of this backup together."), "a missing part is named plainly");
+    await page.setInputFiles("#r-file", [setA[0], setB[1], setA[2], setA[3]]); await page.click("#f-save");
+    check(await seen(page, "#f-msg", "These files are from different backups"), "parts of two different backups are refused");
+    check(await page.locator('#f-save[data-action="open-backup-file"]').count() === 1 && await idb(async (db) => { const b = await new Promise((res) => { const q = db.transaction("photos").objectStore("photos").get("pic-a"); q.onsuccess = () => res(q.result); }); return b ? b.size : null; }) === null, "nothing was restored: the window is still on Open the backup and no picture came back");
+    await page.setInputFiles("#r-file", setA.slice().reverse()); await page.click("#f-save");
+    check(await seen(page, "#sheet", "Replace this phone's data?") && (await text(page, "#sheet")).includes("1 picture missing here will be put back, from all 4 parts"), "all the parts, chosen in any order, open together");
+    await page.click("#f-save"); await page.click("#f-save");
+    check(await picSize() === madeBoth, "and the picture comes back");
   }
-  check(backAgain === madeBoth, "the picture came back with the ledger, byte for byte in size (" + backAgain + " of " + madeBoth + ")");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
 
@@ -4390,7 +4420,7 @@ console.log("\n-- Restore safety copy --");
     const out = { lsRestore: ls("financialTracker.restorecopy"), lsPre: ls("financialTracker.preupgrade"), idbRestore: await get("restore-copies"), idbPre: await get("copies") };
     db.close(); return out; });
   const ids = (l) => l.state.transactions.map((t) => t.id).sort().join(",");
-  const startRestore = async (page, pass = PASSR) => { await menuGo(page, "Setup"); await page.click('button:has-text("Restore from a backup")'); await page.setInputFiles("#r-file", fileB); await page.fill("#r-pass", pass); await page.click('button:has-text("Open backup")'); };
+  const startRestore = async (page, pass = PASSR) => { await menuGo(page, "Setup"); await page.click('button:has-text("Restore from a backup")'); await page.setInputFiles("#r-file", fileB); await page.fill("#r-pass", pass); await page.click('button:has-text("Open the backup")'); };
 
   ({ ctx, page, errors } = await open({ blockSw: true, seed: mk(3) }));
   await menuGo(page, "Setup");

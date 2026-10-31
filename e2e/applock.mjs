@@ -130,7 +130,7 @@ export async function appLockChecks({ browser, base, open, menuGo, check, seen, 
   const up = upgradeLedger(live), file = join(mkdtempSync(join(tmpdir(), "lk-")), "finance-backup-lock.json"); writeFileSync(file, JSON.stringify(await encryptLedgerBackup(up.ledger, "correct horse battery")));
   await ctx.close();
   ({ ctx, page, errors } = await open({ blockSw: true, seed: null, styled: false }));
-  await menuGo(page, "Setup"); await page.click('button:has-text("Restore from a backup")'); await page.setInputFiles("#r-file", file); await page.fill("#r-pass", "correct horse battery"); await page.click('button:has-text("Open backup")');
+  await menuGo(page, "Setup"); await page.click('button:has-text("Restore from a backup")'); await page.setInputFiles("#r-file", file); await page.fill("#r-pass", "correct horse battery"); await page.click('button:has-text("Open the backup")');
   await page.click("#f-save"); await page.click("#f-save");
   await page.waitForFunction(() => /Your data was replaced/.test(document.body.innerText), null, { timeout: 15000 }).catch(() => {});
   await reload(page).catch(() => {});
