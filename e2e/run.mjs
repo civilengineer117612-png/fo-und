@@ -29,7 +29,8 @@ const OWNER_STYLE = { v: 6, rev: 1, saved_at: "2026-10-01T08:00:00.000+08:00", s
   presets: [{ id: "pre-breakfast", name: "Breakfast", amount: 2000, category_id: "cat-food" }, { id: "pre-lunch", name: "Lunch", amount: 9500, category_id: "cat-food" }, { id: "pre-dinner", name: "Dinner", amount: 9500, category_id: "cat-food" }] } };
 
 let failures = 0;
-const check = (cond, label) => { console.log((cond ? "  ok   " : "  FAIL ") + label); if (!cond) failures++; };
+const recentConsole = [];   // the last few console errors any page printed, shown under a failed check so a failure on another engine says why
+const check = (cond, label) => { console.log((cond ? "  ok   " : "  FAIL ") + label); if (!cond) { failures++; for (const m of recentConsole.slice(-3)) console.log("       page console: " + m.slice(0, 240)); } };
 const browser = await launchBrowser();
 console.log("Engine: " + ENGINE);
 
@@ -83,6 +84,7 @@ async function open({ storageMode = null, logOpen = true, setupFlat = true, ua =
   };
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  page.on("pageerror", (e) => recentConsole.push("pageerror: " + e.message)); page.on("console", (m) => { if (m.type() === "error") recentConsole.push(m.text()); });
   page.on("console", (m) => { if (/Content Security Policy|Refused to (load|execute|connect|create)/i.test(m.text())) errors.push("CSP: " + m.text().slice(0, 200)); });   // the content security policy must never refuse something the app needs
   page.on("console", (m) => { if (m.type() === "error" && !/favicon|gstatic|duckduckgo|icon\.horse|apple-touch-icon|wikipedia|wikimedia/.test(m.location().url ?? "")) errors.push(m.text()); });   // blocked icon requests are staged on purpose
   if (!keepIntro) await page.addLocatorHandler(page.locator('#sheet button[data-action="intro-done"]'), async (b) => { await b.click(); });   // a new install has no switched-off popups: any other test just says Got it when one gets in the way
