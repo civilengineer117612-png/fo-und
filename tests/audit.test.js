@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import * as fs from "node:fs";
 import assert from "node:assert/strict";
 import * as M from "../src/model/index.js";
 import { UNLOGGED_CATEGORY_ID } from "../src/model/seed.js";
@@ -189,6 +190,36 @@ test("AUDIT TRAIL: no entry stays cancelled twice, and an entry that WAS cancell
   assert.ok(standing(fixed).every((k) => k <= 1), "after the repair no entry stays cancelled twice"); assert.deepEqual(M.ledgerProblems(fixed), []);
   for (const a of fixed.accounts) assert.equal(balanceOf(fixed, a.id), balanceOf(twice, a.id), a.id + " is the same"); assertTrial(fixed, "repairing an entry cancelled twice");
   assert.equal(M.spendingByCategory(fixed, { month: MONTH }).total, M.spendingByCategory(once, { month: MONTH }).total, "spending is what a single cancellation gives");
+});
+
+test("PRESENTATION: the word Unlogged is in no visible text, an older ledger reads as Uncategorized, and the stored id is unchanged", () => {
+  const { readFileSync, readdirSync } = fs;
+  const strip = (src) => src.replace(/\/\*[^]*?\*\//g, "").split("\n").filter((l) => !/^\s*\/\//.test(l)).map((l) => { for (let i = 1; i < l.length; i++) { if (l[i] === "/" && l[i - 1] === "/" && /\s/.test(l[i - 2] ?? " ") && (l.slice(0, i - 1).match(/["'`]/g) ?? []).length % 2 === 0) return l.slice(0, i - 1); } return l; }).join("\n");
+  // Capitalised, on its own, it is text. In lower case it is text only inside a sentence ("unlogged spending"); a variable called unlogged is not.
+  const word = /(?<![A-Za-z_\-])Unlogged(?![A-Za-z_])|(?<=["'`\s>])unlogged(?=\s+[a-z])/, hits = [];
+  const files = ["app/app.js", "app/index.html", ...readdirSync(new URL("../src/model/", import.meta.url)).filter((f) => f.endsWith(".js")).map((f) => "src/model/" + f)];
+  for (const f of files) strip(readFileSync(new URL("../" + f, import.meta.url), "utf8")).split("\n").forEach((l) => { if (word.test(l)) hits.push(f + ": " + l.trim().slice(0, 100)); });
+  assert.deepEqual(hits, [], "no string the app can show says Unlogged");
+  const shown = [M.defaultCategories().map((c) => c.name), M.CHANGES.map((c) => c.text), M.HELP_TOPICS.flatMap((t) => t.lines), M.QUICK_NOTES, M.FIRST_RUN_NOTICE, M.INTROS ? Object.values(M.INTROS).flatMap((x) => Object.values(x).filter((v) => typeof v === "string")) : []].flat().join("\n");
+  assert.ok(!word.test(shown), "the names, What's new and Help say Uncategorized");
+  assert.equal(M.defaultCategories().find((c) => c.id === M.UNLOGGED_CATEGORY_ID).name, "Uncategorized"); assert.equal(M.UNLOGGED_CATEGORY_ID, "cat-unlogged", "the stored id never changes");
+  const old = M.emptyLedger(); old.state.categories = M.defaultCategories().map((c) => (c.id === "cat-unlogged" ? { ...c, name: "Unlogged" } : c));
+  const read = M.parseLedger(JSON.stringify(old));
+  assert.ok(read.ok); assert.equal(read.ledger.state.categories.find((c) => c.id === "cat-unlogged").name, "Uncategorized", "an older ledger shows the new name");
+  assert.deepEqual(read.ledger.state.entries, old.state.entries, "only the name changed");
+  const sp = M.spendingByCategory(M.plainNames({ ...old, state: { ...S, categories: S.categories.map((c) => (c.id === UL ? { ...c, name: "Unlogged" } : c)) } }).state, { month: MONTH });
+  assert.ok(!sp.rows.some((r) => /unlogged/i.test(r.name)), "reports name it Uncategorized");
+});
+
+test("PRESENTATION: Not yet explained is never inside a spending total: no category has that name, and held gaps are in no row and no total", () => {
+  assert.ok(!S.categories.some((c) => /not yet explained/i.test(c.name)) && !M.defaultCategories().some((c) => /not yet explained/i.test(c.name)));
+  const held = M.heldIds(S); assert.ok(held.size > 0, "the ledger holds some gaps");
+  const by = M.spendingByCategory(S, { month: MONTH });
+  assert.ok(!by.rows.some((r) => /not yet explained/i.test(r.name)), "no spending row is called Not yet explained");
+  assert.equal(by.rows.reduce((n, r) => n + r.amount, 0), by.total, "the rows add up to the total");
+  const without = { ...S, transactions: S.transactions.filter((t) => !held.has(t.id)), entries: S.entries.filter((e) => !held.has(e.transaction_id)) };
+  assert.equal(M.spendingByCategory(without, { month: MONTH }).total, by.total, "taking every held gap away changes no total: none of it is in there");
+  for (const [name, total] of [["Accounts", M.spendingByAccount(S, { month: MONTH }).total], ["Trends line", [...M.dailySpending(S, { from: FROM, to: TO }).values()].reduce((a, b) => a + b, 0)]]) assert.equal(total, M.spendingByCategory(without, { month: MONTH }).total, name + " has no held gap in it");
 });
 
 test("AUDIT TRAIL: a verified entry cannot be saved over", () => {
