@@ -1654,6 +1654,7 @@ function viewSetup() {
     ${ui.ledgerBytes ? `<p class="note" id="about-size">Your ledger: ${esc(M.formatBytes(ui.ledgerBytes))}. ${ui.mirror === false ? "The spare copy is full. The main copy is safe." : "Saved twice: a main copy and a spare."}</p>` : ""}
     <p class="note" id="about-protection">Storage protected: no</p>
     <p class="note" id="about-repeats">${esc(M.repeatsLine(S()))}</p>
+    <p class="note" id="about-ledgercheck">${esc(M.ledgerCheckLine(S()))}</p>
     <h2>Photo reader and space</h2>
     <p class="note" id="about-reader">Checking the photo reader\u2026</p>
     <p><button data-action="warm-reader" id="warm-btn" style="width:100%" hidden>Download the photo reader now</button></p>

@@ -38,6 +38,8 @@ jobs:
         run: |
           node e2e/pdf-scan.mjs
           node e2e/spending-details.mjs
+          node e2e/payslip-items.mjs
+          node e2e/ledger-check.mjs
           node e2e/run.mjs 2>&1 | tee e2e.log
       - name: Pass count
         if: always()
