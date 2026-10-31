@@ -1,12 +1,12 @@
 // Serve the repo on port 8124, then node e2e/ledger-check.mjs. Every name and figure here is invented.
 // The ledger check is a REPORT, never a block: a ledger with a problem still opens and still backs up, and Setup, About this app says how many problems were found.
 import assert from "node:assert/strict";
+import { launchBrowser } from "./engine.mjs";
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
 import { emptyLedger, CHANGES } from "../src/model/index.js";
 const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE ?? execSync("npm root -g").toString().trim() + "/playwright");
-const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const browser = await launchBrowser();
 const base = process.env.BASE ?? "http://127.0.0.1:8124/app/index.html";
 const errors = [], TS = "2026-10-22T03:00:00Z", AT = "2026-10-20T09:00:00.000+08:00";
 async function open(seedLedger) {

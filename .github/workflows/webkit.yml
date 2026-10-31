@@ -1,0 +1,66 @@
+name: WebKit
+
+# The same e2e scripts as the "e2e" job in test.yml, on Playwright's WebKit (Safari's engine, the one on the owner's iPhone).
+# This is a SEPARATE workflow on purpose: pages.yml reuses test.yml, and the deploy must keep waiting for "test" and "e2e" only.
+# "e2e-webkit" becomes a required check (and a deploy gate) only after 10 green runs in a row, by the owner's decision.
+on:
+  push:
+  pull_request:
+
+jobs:
+  e2e-webkit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ENGINE: webkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Playwright 1.64.1 was published on 2026-10-14; the same pin as the "e2e" job (tests/webkit-ci.test.js keeps them equal).
+      - name: Install Playwright and WebKit
+        run: |
+          npm install -g playwright@1.64.1
+          npx playwright install --with-deps webkit
+      - name: Serve the repository
+        run: |
+          python3 -m http.server 8124 >/dev/null 2>&1 &
+          for i in $(seq 1 20); do curl -fs http://localhost:8124/app/index.html >/dev/null && exit 0; sleep 1; done
+          echo "the local server did not start"; exit 1
+      # Every script runs even when an earlier one fails, so one run reports all the failures it can. A script stops at its first
+      # step that throws (a missing button); every check that merely fails is collected. Nothing is retried or marked flaky.
+      - name: Run every e2e script on WebKit
+        shell: bash {0}
+        run: |
+          status=0
+          : > e2e-webkit.log
+          for script in pdf-scan spending-details payslip-items ledger-check run; do
+            echo "##### e2e/${script}.mjs" | tee -a e2e-webkit.log
+            start=$(date +%s)
+            node "e2e/${script}.mjs" 2>&1 | tee -a e2e-webkit.log
+            code=${PIPESTATUS[0]}
+            echo "##### e2e/${script}.mjs exit ${code} after $(( $(date +%s) - start )) s" | tee -a e2e-webkit.log
+            [ "$code" -eq 0 ] || status=1
+          done
+          exit $status
+      - name: What passed, what was skipped, what failed
+        if: always()
+        shell: bash {0}
+        run: |
+          passed=$(grep -cE '^(  ok |ok: )' e2e-webkit.log)
+          failed=$(grep -c '^  FAIL ' e2e-webkit.log)
+          skipped=$(grep -c '^  skip ' e2e-webkit.log)
+          crashed=$(grep -cE '^##### .* exit [1-9]' e2e-webkit.log)
+          {
+            echo "### e2e-webkit: ${passed} checks passed, ${failed} failed, ${skipped} skipped, ${crashed} script(s) stopped early"
+            echo '```'
+            grep -E '^(##### |  FAIL |  skip )' e2e-webkit.log
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Keep the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-webkit-log
+          path: e2e-webkit.log

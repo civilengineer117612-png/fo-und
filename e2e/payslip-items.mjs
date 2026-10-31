@@ -1,12 +1,12 @@
 // Serve the repo on port 8124, then node e2e/payslip-items.mjs. Every payslip, name and figure here is invented.
 // The review form lists ONLY the lines printed on a payslip; a typed payslip starts with none; every line is kept and can be given a category.
 import assert from "node:assert/strict";
+import { launchBrowser } from "./engine.mjs";
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
 import { emptyLedger, CHANGES, LEDGER_VERSION } from "../src/model/index.js";
 const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE ?? execSync("npm root -g").toString().trim() + "/playwright");
-const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const browser = await launchBrowser();
 const base = process.env.BASE ?? "http://127.0.0.1:8124/app/index.html";
 const errors = [];
 const TS = "2026-10-22T03:00:00Z";
