@@ -89,3 +89,43 @@ test("a removed payslip nets to nothing in the deposit month, and pay periods wi
   for (const [from, to, pay] of [["2026-08-01", "2026-08-15", "2026-08-20"], ["2026-08-16", "2026-08-31", "2026-09-05"], ["2026-09-01", "2026-09-15", "2026-09-20"], ["2026-10-01", "2026-10-15", "2026-10-20"]]) t = slip(t, "p" + from, from, to, pay);
   assert.deepEqual(M.missingPayPeriods(t, null, "2026-10-25").map((g) => g.from), ["2026-09-16"], "the half-month with no payslip is found by its period, not its pay date");
 });
+
+// ---- the safety copy: repairing past refunds first keeps the whole ledger as it is, read back, and stops if it cannot ----
+import { readFileSync } from "node:fs";
+function phone(opts = {}) {
+  const p = { copies: [], text: null, ledgerWrites: 0, failCopy: false, dropCopy: false, ...opts };
+  p.io = {
+    readCopies: async () => p.copies,
+    writeCopies: async (list) => { if (p.failCopy) return { local: false, idb: false }; if (!p.dropCopy) p.copies = list; return { local: true, idb: true }; },
+    writeLedger: async (text) => { p.ledgerWrites++; p.text = text; return { local: true, idb: true }; },
+  };
+  return p;
+}
+function repairable() {
+  let s = spend(base(), "2026-10-05", "food", 100000); s = oldRefund(s, "2026-10-09", 30000);
+  const cur = M.emptyLedger(); cur.rev = 5; cur.saved_at = TS; cur.state = s;
+  const first = M.pastRefunds(s)[0], plan = M.planRefundRepair(s, { [first.transaction_id]: "food" }, { now: NOW });
+  assert.ok(plan.ok && plan.count === 1);
+  return { cur, next: M.nextLedger(cur, M.applyRefundRepair(s, plan), cur.settings) };
+}
+const run = ({ cur, next }, p) => M.replaceWithCopy({ current: cur, next, io: p.io, meta: { at: "2026-10-31T12:00:00+08:00", from_version: cur.v, build: "test", kind: "repair" } });
+test("SAFETY COPY: before past refunds are put right the whole ledger is kept as a copy that reads back, and only then is it replaced", async () => {
+  const p = phone(), c = repairable(), r = await run(c, p);
+  assert.equal(r.ok, true); assert.equal(r.copied, true);
+  assert.equal(p.copies.length, 1); assert.equal(p.copies[0].kind, "repair");
+  assert.deepEqual(JSON.parse(p.copies[0].text), c.cur, "the copy is the ledger exactly as it was");
+  assert.equal(M.copyHolds(p.copies[0], c.cur), true);
+  assert.deepEqual(JSON.parse(p.text).state, c.next.state, "and the ledger is now the repaired one");
+  assert.equal(month(JSON.parse(p.text).state, "2026-10"), 70000, "the refund now counts as less spending");
+});
+test("SAFETY COPY: a copy that cannot be saved, or does not read back, stops the refund repair", async () => {
+  const a = phone({ failCopy: true }), r1 = await run(repairable(), a);
+  assert.equal(r1.ok, false); assert.equal(r1.stage, "copy"); assert.equal(a.ledgerWrites, 0);
+  const b = phone({ dropCopy: true }), r2 = await run(repairable(), b);
+  assert.equal(r2.ok, false); assert.equal(r2.stage, "check"); assert.equal(b.ledgerWrites, 0);
+});
+test("SAFETY COPY: the screen's refund repair goes only through the copy", () => {
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8"), run = app.slice(app.indexOf('case "refund-repair-run": {'), app.indexOf('case "open-paymonth"'));
+  assert.match(run, /M\.replaceWithCopy\(\{ current: ledger, next, io: \{ readCopies, writeCopies, writeLedger/); assert.match(run, /kind: "repair"/);
+  assert.ok(!/await commit\(/.test(run), "never saved by any other way"); assert.match(run, /if \(!r\.ok\)[^]*?break;/, "a failed copy stops before the ledger is replaced");
+});
