@@ -3748,7 +3748,7 @@ console.log("\n-- Arrange categories and accounts by holding and dragging --");
 
 
 console.log("\n-- Goals in the flat look --");
-{ const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), ym = today.slice(0, 7), day = (n) => `${ym}-${String(n).padStart(2, "0")}`;
+{ const today = new Date(T0.getTime() + 8 * 3600e3).toISOString().slice(0, 10), ym = today.slice(0, 7), day = (n) => `${ym}-${String(n).padStart(2, "0")}`;   // the TEST clock (every page runs at T0), never the real one: the real month moved on and the budgets here started after the page's own today
   const TSS = `${today}T09:00:00.000+08:00`;
   const acc2 = (id, name, cls, extra = {}) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: `${ym}-01`, ...extra });
   const txs = [], ens = []; let n = 0;
