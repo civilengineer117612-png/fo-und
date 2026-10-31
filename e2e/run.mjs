@@ -4334,6 +4334,41 @@ console.log("\n-- A spent gap is explained by the real charge --");
   check(d.state.entries.filter((e) => e.category_id === "cat-unlogged").reduce((n, e) => n + e.amount, 0) === 0, "nothing is left in Unlogged: the 300.00 counts once, in Food");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
+// ===== A refund brings spending down; past refunds saved as income are put right (P0-5 fix 4) =====
+console.log("\n-- Refunds --");
+{ const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-09-01" };
+  const TS = "2026-10-02T09:00:00.000+08:00";
+  const pur = { id: "pur", date: "2026-10-01", payee: "Sample Store", memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS };
+  const rf = { id: "rf", date: "2026-10-02", payee: "Sample Store", memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS };
+  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [bank], transactions: [pur, rf],
+    entries: [{ transaction_id: "pur", category_id: "cat-food", amount: 20000 }, { transaction_id: "pur", account_id: "b", amount: -20000 }, { transaction_id: "rf", account_id: "b", amount: 5000 }, { transaction_id: "rf", category_id: "cat-refund", amount: -5000 }] } };
+  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
+  await menuGo(page, "Income");
+  check((await text(page, "#screen")).includes("A past refund is counted as income."), "Income says a past refund is counted as income");
+  await page.click('[data-action="open-refund-repair"]');
+  check(await seen(page, "#sheet", "Refunds counted as income") && (await text(page, "#sheet")).includes("Food") && (await text(page, "#sheet")).includes("\u20B150.00"), "the window lists it, with the spending its payee had (Food) already chosen");
+  await page.click('#sheet button[data-action="refund-repair-run"]'); await seen(page, "#toast", "less spending"); await page.waitForTimeout(500);
+  let d = JSON.parse((await stored(page)).local);
+  check(d.state.transactions.some((t) => t.id === "rev:rf" && t.reverses === "rf") && d.state.transactions.some((t) => t.id === "refund:rf" && t.corrects === "rf"), "the old refund is cancelled by a correction and entered again");
+  check(d.state.entries.filter((e) => e.category_id === "cat-food").reduce((n, e) => n + e.amount, 0) === 15000 && d.state.entries.filter((e) => e.category_id === "cat-refund").reduce((n, e) => n + e.amount, 0) === 0, "Food spending is 150.00 (200.00 less the refund) and no refund is left as income");
+  check(d.state.entries.filter((e) => e.account_id === "b").reduce((n, e) => n + e.amount, 0) === -15000, "the bank balance is the same as before");
+  await menuGo(page, "Setup");
+  check(await seen(page, "#screen", "Restore the copy from before the repair"), "Setup offers the copy kept before the repair");
+  await menuGo(page, "Income");
+  check(!(await text(page, "#screen")).includes("counted as income."), "the card is gone");
+  // a new refund: choose Refund, then which spending it was for
+  await page.click('button:has-text("Add income")'); await page.click('[data-action="open-income"]');
+  await page.fill("#f-amount", "100");
+  await page.click('#sheet [data-action="pick-toggle"][data-key="cat"]'); await page.click('#sheet [data-action="pick-cat"][data-id="cat-refund"]');
+  check(await page.locator("#f-save").isDisabled(), "Refund asks which spending it was for before it can be saved");
+  await page.click('#sheet [data-action="pick-toggle"][data-key="rcat"]'); await page.click('#sheet [data-action="pick-rcat"][data-id="cat-food"]');
+  await page.click('#sheet [data-action="pick-acct"]:has-text("Test Bank")');
+  check(!(await page.locator("#f-save").isDisabled()), "then it can be saved");
+  await page.click("#f-save"); await seen(page, "#toast", "Recorded"); await page.waitForTimeout(500);
+  d = JSON.parse((await stored(page)).local);
+  check(d.state.entries.filter((e) => e.category_id === "cat-food").reduce((n, e) => n + e.amount, 0) === 5000 && d.state.entries.filter((e) => e.category_id === "cat-refund").reduce((n, e) => n + e.amount, 0) === 0, "the new refund took 100.00 off Food and is not income");
+  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+
 // ===== Replacing the ledger keeps a safety copy first, and it can be put back =====
 console.log("\n-- Restore safety copy --");
 { const { upgradeLedger, encryptLedgerBackup } = await import("../src/model/index.js");

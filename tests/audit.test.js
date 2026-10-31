@@ -272,3 +272,23 @@ test("SUSPENSE: a held gap is not in the Budget view and not on a trip either", 
   assert.equal(M.tagSummary(s, "trip1").spent, 10000, "Trips");
   assert.deepEqual(M.tripEntries(s, "trip1").rows.map((r) => r.amount), [10000]);
 });
+
+test("RECOGNITION: a refund reduces spending in its category and is never income", () => {
+  let s = expense(ledger(), "2026-10-05", "food", 100000, "chk");
+  const r = M.planRefund(s, { transaction_id: nid("rf"), date: "2026-10-09", amount: 40000, account_id: "chk", category_id: "food" }, NOW); assert.ok(r.ok);
+  assert.equal(M.spendingByCategory(r.state, { month: MONTH }).total, 60000);
+  assert.equal(M.incomeBySource(r.state, { from: FROM, to: TO }).total, 0);
+  assert.equal(balanceOf(r.state, "chk"), balanceOf(s, "chk") + 40000);
+  assertTrial(r.state, "a refund");
+  assert.equal(M.planRefund(s, { transaction_id: "x", date: "2026-10-09", amount: 1, account_id: "chk", category_id: "cat-refund" }, NOW).ok, false, "money cannot be booked as a refund of an income category");
+});
+
+test("CUTOFF: pay counts in the month its deposit arrived, the period worked is only a label, and a removed payslip nets to nothing in that month", () => {
+  const r = M.planPayslip(ledger(), { id: "pz", transaction_id: "ptz", employer: "Co", period_from: "2026-09-16", period_to: "2026-09-30", pay_date: "2026-10-05", account_id: "chk", printed_gross: 800000, printed_net: 800000, deposit: 800000, earnings: [{ kind: "basic", amount: 800000 }], deductions: [] }, NOW);
+  assert.ok(r.ok);
+  assert.equal(M.incomeBySource(r.state, { from: "2026-09-01", to: "2026-09-30" }).total, 0);
+  assert.equal(M.incomeBySource(r.state, { from: FROM, to: TO }).total, 800000);
+  assert.equal(r.state.payslips[0].period_to, "2026-09-30", "the period is kept as a label");
+  const gone = M.deletePayslip(r.state, "pz", NOW).state;
+  assert.equal(M.incomeBySource(gone, { from: FROM, to: TO }).total, 0);
+});

@@ -55,8 +55,10 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 ### 6. Classification
 - **Rule.** Every entry is classed once: income, expense, transfer, card payment. The employer's share of a payslip is shown and never reduces net pay.
 - **In the app.** An entry with a category leg is income or an expense; an entry with only account legs is a transfer; a card payment is a transfer to a
-  card.
-- **Guarded by.** "TRANSFERS", "CARDS", `tests/payslipitems.test.js` (employer share).
+  card. A refund is money in whose other leg is a credit to the spending category it came back to, so that spending goes down; it is not income (`planRefund`).
+  Past refunds that were saved as income under "Refund" are counted as less spending through corrections, after the owner confirms each category and the app
+  has kept a copy of the ledger (`planRefundRepair`).
+- **Guarded by.** "TRANSFERS", "CARDS", "RECOGNITION", `tests/refund.test.js`, `tests/payslipitems.test.js` (employer share).
 
 ### 7. Reversing entries and the audit trail
 - **Rule.** A verified entry is never edited or deleted. A mistake is put right by a new entry that reverses exactly one entry, once, with a reference to
@@ -71,8 +73,9 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 
 ### 8. Cutoff
 - **Rule.** An item belongs to the period in which it happened. Money in belongs to the day the deposit arrives; the period worked is a label.
-- **In the app.** Entries are dated by the day they happened; a card purchase by the purchase day.
-- **Guarded by.** Known gap: Income by month still follows the period worked (see Known gaps).
+- **In the app.** Entries are dated by the day they happened; a card purchase by the purchase day. Pay from a payslip counts in the month its deposit arrived (the pay
+  date); the pay period is only a label, used to find pay periods that have no payslip. Income shows a one-time note of the months this moved.
+- **Guarded by.** "CUTOFF", `tests/refund.test.js`.
 
 ### 9. Non-recurring items
 - **Rule.** One-off or variable income (back pay, holiday and night pay, overtime, bonus, 13th month, an extra payday) is kept apart from recurring income
@@ -104,13 +107,11 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 | Existence (it happened) | the photo kept with an entry; the bank statement, month by month; the weekly count | `tests/proof.test.js`, `tests/photo-drafts.test.js` |
 | Completeness (nothing missing) | the weekly count; months proved against statements; missing pay periods | `tests/checkin.test.js`, `tests/proof.test.js` |
 | Accuracy (the amount is right) | every entry balances; payslip checks; the overdraw warning | "DOUBLE ENTRY", "CONTROL TOTALS" |
-| Cutoff (right period) | entries dated by the day they happened | Known gap: payslip months |
-| Classification (right kind) | income, expense, transfer, card payment | "TRANSFERS", "CARDS" |
+| Cutoff (right period) | entries dated by the day they happened; pay by its deposit month | "CUTOFF" |
+| Classification (right kind) | income, expense, transfer, card payment, refund | "TRANSFERS", "CARDS", "RECOGNITION" |
 | Presentation (shown the same everywhere) | one definition per figure | "CONSISTENCY", "SUSPENSE" |
 
 ## Known gaps (found by the audit, each fixed in its own change; remove a line when it is fixed)
 These are the places where the app does not yet meet a principle above. Each has its own fix task and its own audit test.
-- Recognition: a refund is saved as income.
-- Cutoff: payslip income is counted in the month the pay period ended.
 - Non-recurring: an uncategorised bonus or 13th month line stays in the base.
 - Presentation: Spent today includes drafts and This month does not; "Unlogged by week" counts held gaps; `homeSummary` is unused and disagrees.

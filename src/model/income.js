@@ -170,8 +170,11 @@ export function overtimeFreeDraft(state, payslipId, input, now = new Date()) {
 }
 
 // ---------- the views ----------
-// A payslip belongs to the month of the period it pays for, not the day it was received: "June 16-30" received on July 2 is June's.
-export const slipDate = (p) => p.period_to || p.pay_date;
+// A payslip's pay belongs to the month its DEPOSIT arrived (docs/ACCOUNTING.md, principle 8: cutoff), not the month the period ended: "June 16-30" received on July 2 is July's,
+// because that is when it reached the account. The period worked stays a label (`periodEnd`, used only to find pay periods that have no payslip). An object that has only a
+// `period_to` (a pay period being measured) is read by that day.
+export const slipDate = (p) => p.pay_date || p.period_to;
+export const periodEnd = (p) => p.period_to || p.pay_date;
 // A range for the views below: a year ("2026"), {from, to} dates, or null for everything.
 const inRange = (range, p) => range === null || range === undefined ? true : typeof range === "string" ? slipDate(p).startsWith(range + "-") : slipDate(p) >= range.from && slipDate(p) <= range.to;
 const SOURCE_OF = { "cat-salary": "base", "cat-overtime": "overtime", "cat-interest": "interest", "cat-refund": "refunds" };
@@ -181,17 +184,31 @@ export const SOURCES = [["base", "Base pay"], ["overtime", "Overtime"], ["intere
 export function incomeBySource(state, { from, to }) {
   const income = new Set(state.categories.filter((c) => c.kind === "income").map((c) => c.id));
   const txById = new Map(state.transactions.map((t) => [t.id, t]));
-  const periodOf = new Map((state.payslips ?? []).flatMap((p) => { const c = state.transactions.find((t) => t.reverses === p.transaction_id); return [[p.transaction_id, slipDate(p)], ...(c ? [[c.id, slipDate(p)]] : [])]; }));   // pay from a payslip counts on its period; so does the entry that cancels it
   const out = { base: 0, overtime: 0, interest: 0, refunds: 0, other: 0 };
   for (const e of state.entries) {
     if (e.category_id == null || !income.has(e.category_id)) continue;
     const t = txById.get(e.transaction_id);
-    const day = t ? periodOf.get(t.id) ?? t.date : null;
-    if (!t || t.status !== "verified" || day < from || day > to) continue;
+    if (!t || t.status !== "verified" || t.date < from || t.date > to) continue;
     out[SOURCE_OF[e.category_id] ?? "other"] -= e.amount;   // income is a credit, stored negative
   }
   return { ...out, total: Object.values(out).reduce((a, b) => a + b, 0) };
 }
+// How the cutoff rule moved pay between months (Oct 31): until then a payslip's pay was counted in the month its PERIOD ended, now in the month the DEPOSIT arrived. Per month,
+// what Income showed (`before`) and shows (`after`); only months that differ, oldest first. [{month, before, after, change}]. Nothing is stored or changed.
+export function payMonthShift(state) {
+  const income = new Set(state.categories.filter((c) => c.kind === "income").map((c) => c.id)), txById = new Map(state.transactions.map((t) => [t.id, t]));
+  const periodOf = new Map((state.payslips ?? []).flatMap((p) => { const c = state.transactions.find((t) => t.reverses === p.transaction_id); return [[p.transaction_id, periodEnd(p)], ...(c ? [[c.id, periodEnd(p)]] : [])]; }));
+  const before = new Map(), after = new Map();
+  for (const e of state.entries) {
+    if (e.category_id == null || !income.has(e.category_id)) continue;
+    const t = txById.get(e.transaction_id);
+    if (!t || t.status !== "verified") continue;
+    const old = monthOf(periodOf.get(t.id) ?? t.date), now = monthOf(t.date);
+    before.set(old, (before.get(old) ?? 0) - e.amount); after.set(now, (after.get(now) ?? 0) - e.amount);
+  }
+  return [...new Set([...before.keys(), ...after.keys()])].sort().map((month) => ({ month, before: before.get(month) ?? 0, after: after.get(month) ?? 0 })).filter((m) => m.before !== m.after).map((m) => ({ ...m, change: m.after - m.before }));
+}
+
 // Where a range's income came from, line by line: each kind of earning on the payslips (basic salary, rice subsidy, each allowance,
 // overtime...), income that is not pay (interest, refunds, other), the deductions, and what is left over. `unmatched` is whatever the
 // received total holds that the payslip lines do not explain (pay added without a payslip, or a payslip whose lines do not add up), so the
@@ -396,10 +413,10 @@ export function payslipNotes(state, p) {
 // A payslip belongs to the half of its period end. Returns [{from, to}] oldest first, limited to `range` (see inRange).
 export function missingPayPeriods(state, range, today) {
   const slips = liveSlips(state), half = (d) => monthOf(d) + (Number(d.slice(8)) <= 15 ? "-a" : "-b");
-  const have = new Set(slips.map((p) => half(slipDate(p))));
-  const twice = slips.some((p) => have.has(monthOf(slipDate(p)) + "-a") && have.has(monthOf(slipDate(p)) + "-b"));
+  const have = new Set(slips.map((p) => half(periodEnd(p))));
+  const twice = slips.some((p) => have.has(monthOf(periodEnd(p)) + "-a") && have.has(monthOf(periodEnd(p)) + "-b"));
   if (!slips.length || !twice) return [];
-  const first = slips.map(slipDate).sort()[0], limit = new Date(Date.parse(today + "T00:00:00Z") - 8 * 86400000).toISOString().slice(0, 10), out = [];
+  const first = slips.map(periodEnd).sort()[0], limit = new Date(Date.parse(today + "T00:00:00Z") - 8 * 86400000).toISOString().slice(0, 10), out = [];
   for (let y = Number(first.slice(0, 4)), m = Number(first.slice(5, 7)); ; m = m === 12 ? (y++, 1) : m + 1) {
     const mm = String(m).padStart(2, "0"), end = new Date(Date.UTC(y, m, 0)).getUTCDate();
     for (const [h, a, b] of [["a", 1, 15], ["b", 16, end]]) {

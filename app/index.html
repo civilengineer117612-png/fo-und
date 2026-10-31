@@ -97,6 +97,7 @@
   .slipkv { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 15px; } .slipkv span:last-child { color: var(--ink); font-variant-numeric: tabular-nums; }
   .slipbody { padding-bottom: 6px; border-top: 1px solid var(--line); }
   /* the lines inside a payslip card read like the Gross and Deductions rows above them: same size, muted label at the left, the figure in ink at the right */
+  .group > .slipkv:first-child { border-top: 0; }
   .slipbody { padding-top: 4px; } .slipbody .pl { border-top: 0; padding: 0; } .slipbody button.pl-main { font-size: 15px; color: var(--muted); padding: 7px 0; } .slipbody .pl-n { display: none; }
   .slipbody .pl-amt { font-size: 15px; font-weight: 400; color: var(--ink); } .slipbody .pl-sub { padding-left: 0; } .slipbody h4.dayhead { margin: 12px 0 0; font-size: 13px; }
   .slipbar { display: flex; flex-wrap: wrap; gap: 4px 18px; border-top: 1px solid var(--line); padding: 4px 0; margin-top: 4px; } .slipbar button.link { color: var(--muted); font-size: 14px; padding: 10px 0; min-height: 0; width: auto; }
