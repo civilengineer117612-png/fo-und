@@ -4319,6 +4319,25 @@ console.log("\n-- Cancelled count and Spent today --");
   check(/spent today/i.test(t) && t.includes("\u20B10.00") && !t.includes("11,000.00"), "a cancelled count that found 11,000.00 shows nothing as spent today");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
+// ===== Spent today and This month count verified entries only; a draft shows apart as waiting in Verify (P0-5 fix 6) =====
+console.log("\n-- Waiting in Verify --");
+{ const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-01-01" };
+  const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [bank], transactions: [], entries: [] } };
+  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
+  await page.click('#nav button:has-text("Log")'); await page.click('button[data-action="open-other"]');
+  await page.fill("#f-amount", "95"); await page.click('#sheet [data-action="pick-cat"]:has-text("Food")'); await page.click('#sheet [data-action="pick-acct"]:has-text("Test Bank")'); await page.click("#f-save");
+  await seen(page, "#toast", "Saved"); await page.waitForSelector("#glance");
+  const day = async () => (await text(page, ".daytotal")).trim(), month = async () => (await text(page, "#glance .mc-top b")).trim();
+  check(await day() === "₱0.00", "a draft dated today is NOT in Spent today: the figure is exactly ₱0.00 (" + await day() + ")");
+  check(await month() === "₱0.00", "and NOT in This month: exactly ₱0.00 (" + await month() + ")");
+  check((await text(page, ".note.waiting")).trim() === "+ ₱95.00 waiting in Verify", "Spent today shows it apart: + ₱95.00 waiting in Verify");
+  check((await text(page, "#glance .mc-wait")).trim() === "+ ₱95.00 waiting in Verify", "and This month shows it apart in the same words");
+  await page.click('#nav button:has-text("Verify")'); await page.click('button[data-action="verify-ok"]'); await page.waitForTimeout(400);
+  await page.click('#nav button:has-text("Log")'); await page.waitForSelector("#glance");
+  check(await day() === "₱95.00" && await month() === "₱95.00", "once verified it counts: exactly ₱95.00 in Spent today and in This month (" + await day() + " / " + await month() + ")");
+  check((await page.locator(".note.waiting").count()) === 0 && (await page.locator("#glance .mc-wait").count()) === 0, "and nothing is waiting any more");
+  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+
 // ===== A gap booked as "I spent some of it" is matched by the real charge too (P0-5 fix 3) =====
 console.log("\n-- A spent gap is explained by the real charge --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-09-01" };
