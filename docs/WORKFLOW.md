@@ -180,7 +180,9 @@ P1
 - P1-7 DONE (Oct 31): Unlogged is now Uncategorized on every screen; Not yet explained stays for the held gaps only.
 - (earlier) None open. P1-2 (reader leftovers), P1-3 (every printed payslip line kept, data version 11) and P1-4 (a verified entry cannot be saved over, the repeated-id line in About) and P1-5 (the budget base income uses stable pay; Add the breakdown for an old payslip; payslips as clean cards) are done. P0-5 (accounting charter and audit): the charter and tests/audit.test.js are in; the audit's fixes follow in order, each its own PR: F5+F6 audit trail, F2 integrity report, F3+F1 suspense, F4+F7 refund and payslip month, F9 non-recurring, F10 presentation.
 
-P2 (wait for "next"): WebKit e2e run; voice entry disclosure in Help and the first-run notice; library licence note; trim
+P2-1 (owner chose it next, Oct 31) WebKit e2e: IN PROGRESS. The job `e2e-webkit` (.github/workflows/webkit.yml) runs every e2e script on Playwright's WebKit; it becomes a required check, and a deploy gate, only after 10 green runs in a row (the owner then adds it: Settings, Rules, the main ruleset, Require status checks, add "e2e-webkit").
+
+P2 (wait for "next"): voice entry disclosure in Help and the first-run notice; library licence note; trim
 contradictions in CLAUDE.md; Android block decision; custom domain plan; Trips year grouping and period picker; ratchet screen;
 splitting `app/app.js`.
 

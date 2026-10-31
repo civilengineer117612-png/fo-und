@@ -4,12 +4,12 @@
 import { createRequire } from "node:module";
 import { protectionChecks } from "./protection.mjs";
 import { appLockChecks } from "./applock.mjs";
+import { ENGINE, TOOLS, launchBrowser, skipped } from "./engine.mjs";
 import { execSync } from "node:child_process";
 import { readFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 const require = createRequire(import.meta.url);
-const { chromium } = require(execSync("npm root -g").toString().trim() + "/playwright");
 
 const BASE = process.env.BASE ?? "http://localhost:8124/app/index.html";
 const SHOTS = process.env.SHOTS ?? "";
@@ -29,15 +29,17 @@ const OWNER_STYLE = { v: 6, rev: 1, saved_at: "2026-10-01T08:00:00.000+08:00", s
   presets: [{ id: "pre-breakfast", name: "Breakfast", amount: 2000, category_id: "cat-food" }, { id: "pre-lunch", name: "Lunch", amount: 9500, category_id: "cat-food" }, { id: "pre-dinner", name: "Dinner", amount: 9500, category_id: "cat-food" }] } };
 
 let failures = 0;
-const check = (cond, label) => { console.log((cond ? "  ok   " : "  FAIL ") + label); if (!cond) failures++; };
-const browser = await chromium.launch();
+const recentConsole = [];   // the last few console errors any page printed, shown under a failed check so a failure on another engine says why
+const check = (cond, label) => { console.log((cond ? "  ok   " : "  FAIL ") + label); if (!cond) { failures++; for (const m of recentConsole.slice(-3)) console.log("       page console: " + m.slice(0, 240)); } };
+const browser = await launchBrowser();
+console.log("Engine: " + ENGINE);
 
 // Every request for a bank logo goes through this, so the network is faked: by default nothing answers.
 let iconServe = (r) => r.abort();
 const iconAsked = [];   // every address the app asked an icon service or bank site for
 const dismissNotice = async (page) => { try { await page.waitForSelector('#sheet button:has-text("I understand")', { timeout: 2500 }); await page.click('#sheet button:has-text("I understand")'); } catch { /* an old ledger shows no notice */ }
   try { await page.waitForSelector('#sheet button:has-text("Skip for now")', { timeout: 700 }); await page.click('#sheet button:has-text("Skip for now")'); } catch { /* the welcome card only shows on a new install */ } };
-async function open({ storageMode = null, logOpen = true, setupFlat = true, ua = IPHONE, standalone = true, blockSw = false, url = BASE, noSpeech = false, fakeSpeech = false, seed = undefined, routes = [], keepNotice = false, styled = true, whatsNew = false, keepCatCard = false, keepIntro = false, keepWarn = false } = {}) {
+async function open({ storageMode = null, logOpen = true, setupFlat = true, ua = IPHONE, standalone = true, blockSw = !TOOLS.serviceWorkerNetwork, url = BASE, noSpeech = false, fakeSpeech = false, seed = undefined, routes = [], keepNotice = false, styled = true, whatsNew = false, keepCatCard = false, keepIntro = false, keepWarn = false } = {}) {
   if (seed === undefined) seed = styled ? OWNER_STYLE : null;
   if (seed && !whatsNew) seed = { ...seed, settings: { ...(seed.settings ?? {}), whatsnew_seen: seed.settings?.whatsnew_seen ?? CHANGES[0].id, start_rule_seen: seed.settings?.start_rule_seen ?? "2026-10-01T08:00:00.000+08:00" } };   // the What's new pop-up is tested on its own
   if (seed && !keepIntro) seed = { ...seed, settings: { ...(seed.settings ?? {}), intro_off: { ...Object.fromEntries(["plan", "money", "income", "cards", "budget", "goals", "scheduled", "checkin", "scan", "trips", "buffer", "setup"].map((id) => [id, true])), ...(seed.settings?.intro_off ?? {}) } } };   // the small "what is this screen" popup is tested on its own
@@ -82,6 +84,7 @@ async function open({ storageMode = null, logOpen = true, setupFlat = true, ua =
   };
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  page.on("pageerror", (e) => recentConsole.push("pageerror: " + e.message)); page.on("console", (m) => { if (m.type() === "error") recentConsole.push(m.text()); });
   page.on("console", (m) => { if (/Content Security Policy|Refused to (load|execute|connect|create)/i.test(m.text())) errors.push("CSP: " + m.text().slice(0, 200)); });   // the content security policy must never refuse something the app needs
   page.on("console", (m) => { if (m.type() === "error" && !/favicon|gstatic|duckduckgo|icon\.horse|apple-touch-icon|wikipedia|wikimedia/.test(m.location().url ?? "")) errors.push(m.text()); });   // blocked icon requests are staged on purpose
   if (!keepIntro) await page.addLocatorHandler(page.locator('#sheet button[data-action="intro-done"]'), async (b) => { await b.click(); });   // a new install has no switched-off popups: any other test just says Got it when one gets in the way
@@ -3555,7 +3558,7 @@ console.log("Welcome card, category editing, required marks");
 
 // ===== 7. offline =====
 console.log("Offline");
-({ ctx, page, errors } = await open());
+({ ctx, page, errors } = await open({ blockSw: false }));   // the one place the service worker itself is under test
 await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
 await page.reload(); await page.waitForSelector("#nav button");
 await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
@@ -4729,7 +4732,8 @@ console.log("\n-- Uncategorized and Not yet explained --");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 
 await protectionChecks({ browser, base: BASE, open, addAccount, menuGo, check });
-await appLockChecks({ browser, base: BASE, open, menuGo, check, seen, text, stored, OWNER_STYLE, ANDROID });
+if (TOOLS.virtualAuthenticator) await appLockChecks({ browser, base: BASE, open, menuGo, check, seen, text, stored, OWNER_STYLE, ANDROID });
+else skipped("App lock (the virtual Face ID checks)", "Chrome DevTools virtual authenticator (WebAuthn)");
 
 await browser.close();
 console.log(failures ? "\n" + failures + " check(s) FAILED" : "\nAll checks passed");

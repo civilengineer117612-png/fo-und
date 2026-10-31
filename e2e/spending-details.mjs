@@ -1,12 +1,12 @@
 // Invented ledger only. Serve the repo on port 8124 before running this check.
 import assert from "node:assert/strict";
+import { launchBrowser } from "./engine.mjs";
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
 import { emptyLedger, CHANGES } from "../src/model/index.js";
 import { makeState, commit, tx } from "../tests/fixtures.js";
 const require = createRequire(import.meta.url);
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE ?? execSync("npm root -g").toString().trim() + "/playwright");
-const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+const browser = await launchBrowser();
 const base = process.env.BASE ?? "http://127.0.0.1:8124/app/index.html";
 const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
   userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1" });
