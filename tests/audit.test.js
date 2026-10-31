@@ -176,6 +176,21 @@ test("REVERSING ENTRIES: the same entry cannot be cancelled again by a plan made
   assert.equal(M.planCorrection(once, { id, redo_id: "r2", today: "2026-10-20" }, NOW).ok, false);
 });
 
+test("AUDIT TRAIL: no entry stays cancelled twice, and an entry that WAS cancelled twice is put right by the repair with every balance and the trial balance unchanged", () => {
+  const standing = (st) => { const c = new Map(); for (const t of st.transactions) { if (t.reverses != null) c.set(t.reverses, (c.get(t.reverses) ?? 0) + 1); if (t.restores != null) c.set(t.restores, (c.get(t.restores) ?? 0) - 1); } return [...c.values()]; };
+  assert.ok(standing(S).every((k) => k <= 1), "the ledger built through every operation never cancels an entry twice");
+  const s0 = expense(ledger(), "2026-10-12", "food", 8000, "chk"), id = s0.transactions.find((t) => t.payee === "Shop").id;
+  const once = M.applyCorrection(s0, M.planCorrection(s0, { id, redo_id: nid("rd"), today: "2026-10-20" }, NOW)), first = once.transactions.find((t) => t.reverses === id);
+  const dup = { ...first, id: "rev:again", date: "2026-10-20" };   // what a stale screen could add before the app refused it
+  const twice = { ...once, transactions: [...once.transactions, dup], entries: [...once.entries, ...once.entries.filter((e) => e.transaction_id === first.id).map((e) => ({ ...e, transaction_id: dup.id }))] };
+  assert.ok(standing(twice).some((k) => k > 1), "set up: one entry is cancelled twice"); assert.ok(M.ledgerProblems(twice).some((p) => p.code === "REVERSED_TWICE"));
+  const plan = M.planGapRepair(twice, { now: NOW }); assert.ok(plan.ok && plan.extraCount === 1, JSON.stringify(plan.skipped));
+  const fixed = M.applyGapRepair(twice, plan);
+  assert.ok(standing(fixed).every((k) => k <= 1), "after the repair no entry stays cancelled twice"); assert.deepEqual(M.ledgerProblems(fixed), []);
+  for (const a of fixed.accounts) assert.equal(balanceOf(fixed, a.id), balanceOf(twice, a.id), a.id + " is the same"); assertTrial(fixed, "repairing an entry cancelled twice");
+  assert.equal(M.spendingByCategory(fixed, { month: MONTH }).total, M.spendingByCategory(once, { month: MONTH }).total, "spending is what a single cancellation gives");
+});
+
 test("AUDIT TRAIL: a verified entry cannot be saved over", () => {
   const s = expense(ledger(), "2026-10-12", "food", 8000, "chk"), t = s.transactions.find((x) => x.payee === "Shop");
   const again = M.checkTransactionSave(s, { transaction: { ...t }, entries: s.entries.filter((e) => e.transaction_id === t.id).map((e) => ({ ...e, amount: e.amount > 0 ? 9999 : -9999 })) });

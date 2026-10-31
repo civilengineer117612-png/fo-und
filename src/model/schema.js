@@ -44,6 +44,7 @@ export const SCHEMAS = {
     reference_no: optional(text),
     schedule_id: optional(id), schedule_key: optional(text),   // ADDED (version 8): the scheduled payment this is, and which one ("2026-10" or the payment number)
     reverses: optional(id),      // ADDED (version 9): on a correction, the verified entry it cancels. The old entry itself is never touched
+    restores: optional(id),      // ADDED (owner, Oct 31, no version change): on the entry that puts a SECOND cancellation of this entry right (the repair of an entry cancelled twice)
     corrects: optional(id),      // ADDED (version 9): on the fresh draft made with a correction, the entry it replaces
     shot_time: optional(text),   // ADDED (version 7): the time a payment screenshot showed, "HH:MM", so the same screenshot twice can be told
     tag_id: optional(id),        // ADDED: spec 8.1 says trip expenses carry one tag. OLD: no longer read or written (data version 4 copies it to trip_add)
