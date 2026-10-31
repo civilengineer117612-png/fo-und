@@ -242,3 +242,10 @@ test("AUDIT TRAIL: changing or removing a payslip, or removing an income entry, 
   assert.equal(balanceOf(after, "chk"), 1000000 + 700000, "only the changed payslip is left, once");
   assert.ok(after.transactions.filter((t) => t.reverses != null).every((t, _i, all) => all.filter((x) => x.reverses === t.reverses).length === 1), "each entry cancelled once");
 });
+
+test("TRIAL BALANCE REPORT: after every kind of operation the ledger check says OK; a damaged ledger is reported, never refused", () => {
+  assert.equal(M.ledgerCheckLine(S), "Ledger check: OK");
+  const bad = { ...S, entries: [...S.entries, { transaction_id: "ghost", account_id: "chk", amount: 700 }] };
+  assert.equal(M.ledgerCheckLine(bad), "Ledger check: 1 problem (tell the project chat)");
+  assert.deepEqual(M.validateState(bad), [], "it still opens");
+});

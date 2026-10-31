@@ -63,6 +63,7 @@ export { searchEntries } from "./search.js";
 export { entriesCsv, CSV_COLUMNS } from "./csvexport.js";
 export { netWorthSeries } from "./networth.js";
 export { GOAL_SYMBOLS, goalSymbolSvg } from "./goalicons.js";
+export { ledgerProblems, ledgerCheckLine } from "./ledgercheck.js";
 export { repairableGaps, planGapRepair, applyGapRepair, matchHeldGaps, planGapMove } from "./gaprepair.js";
 export { proposeMoves, planProposedMove } from "./gapmatch.js";
 export { heldIds, unexplainedGaps, findOpenGap, bigGap, GAP_DAYS } from "./held.js";

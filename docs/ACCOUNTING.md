@@ -25,8 +25,8 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 
 ### 2. Trial balance
 - **Rule.** The sum of all entries is zero to the centavo, every transaction is zero, no entry points at a missing transaction, and every transaction has at least two legs.
-- **In the app.** `selfCheck` (after an update) and the checks at every save. A report at load and restore is planned (see Known gaps).
-- **Guarded by.** "TRIAL BALANCE" after each kind of operation: log, transfer, card purchase, card payment, refund, payslip, Add the breakdown, count (plain,
+- **In the app.** `selfCheck` (after an update) and the checks at every save. Setup, About this app shows one quiet line from `ledgerProblems`, computed from the ledger as it is now (so it covers a load and a restore): "Ledger check: OK" or "Ledger check: N problems (tell the project chat)". It counts an entry that does not add to zero, amounts that belong to no entry, an entry with fewer than two sides, a missing account or category, a correction naming a missing entry, and an entry cancelled twice. It is a report only: a ledger with a problem still opens and still backs up.
+- **Guarded by.** `tests/ledgercheck.test.js`, `e2e/ledger-check.mjs`, "TRIAL BALANCE REPORT" and "TRIAL BALANCE" after each kind of operation: log, transfer, card purchase, card payment, refund, payslip, Add the breakdown, count (plain,
   held, as a move, card), correction, gap repair, restore.
 
 ### 3. Account balance
@@ -109,7 +109,6 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 
 ## Known gaps (found by the audit, each fixed in its own change; remove a line when it is fixed)
 These are the places where the app does not yet meet a principle above. Each has its own fix task and its own audit test.
-- Integrity: the trial balance is not checked when the ledger loads or is restored.
 - Suspense: "I spent some of it" books the gap as spending, and a later real charge counts again; the Budget view and trip totals still include held gaps.
 - Recognition: a refund is saved as income.
 - Cutoff: payslip income is counted in the month the pay period ended.
