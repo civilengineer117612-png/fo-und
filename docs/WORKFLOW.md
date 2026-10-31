@@ -177,7 +177,7 @@ P0 (loses data, blocks logging or blocks a backup)
 - P0-4 Weekly check-in gaps: #271 cancel-once is merged; the new check-in is #272 (count all first, held gaps, proposed moves); the repair of past months is next (owner approved: both directions, per-month before and after, proposed moves from old pairs).
 
 P1
-- P1-7 (queued, owner Oct 31): rename "Unlogged" to "Not yet explained" on every screen (Category, Checks, Weekly review, Help), data and stored category ids unchanged, plus an audit test that "Unlogged" appears in no visible text. Waits on one question: "Not yet explained" is already the name of the held count gaps (not spending), so the two would share a name.
+- P1-7 DONE (Oct 31): Unlogged is now Uncategorized on every screen; Not yet explained stays for the held gaps only.
 - (earlier) None open. P1-2 (reader leftovers), P1-3 (every printed payslip line kept, data version 11) and P1-4 (a verified entry cannot be saved over, the repeated-id line in About) and P1-5 (the budget base income uses stable pay; Add the breakdown for an old payslip; payslips as clean cards) are done. P0-5 (accounting charter and audit): the charter and tests/audit.test.js are in; the audit's fixes follow in order, each its own PR: F5+F6 audit trail, F2 integrity report, F3+F1 suspense, F4+F7 refund and payslip month, F9 non-recurring, F10 presentation.
 
 P2-1 (owner chose it next, Oct 31) WebKit e2e: IN PROGRESS. The job `e2e-webkit` (.github/workflows/webkit.yml) runs every e2e script on Playwright's WebKit; it becomes a required check, and a deploy gate, only after 10 green runs in a row (the owner then adds it: Settings, Rules, the main ruleset, Require status checks, add "e2e-webkit").
