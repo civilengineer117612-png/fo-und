@@ -9,6 +9,7 @@ import { naturalBalance, cardOutstanding, countedEntries } from "./balances.js";
 import { checkTransactionSave } from "./index.js";
 import { phTimestamp } from "./util.js";
 import { planTransfer } from "./transfers.js";
+import { heldIds } from "./held.js";
 
 const fail = (code, message) => ({ ok: false, violations: [{ code, severity: "error", message }] });
 
@@ -100,12 +101,13 @@ export function planCheckIn(state, input, now = new Date()) {
 }
 
 // Net unexplained spending on Unlogged between two dates, inclusive.
-// Positive = money went missing; this is the discipline gauge.
+// Positive = money went missing; this is the discipline gauge. It follows the SAME rule as every spending report (owner, Oct 31): verified entries only, and a count gap that is
+// not yet explained (and the entry that cancels it) is held apart, not spending. A gap booked as "I spent some of it" is spending, and cancelling it nets it to zero.
 export function unloggedTotal(state, unloggedCategoryId, from, to) {
-  const dates = new Map(state.transactions.map((t) => [t.id, t.date]));
+  const tx = new Map(state.transactions.map((t) => [t.id, t])), held = heldIds(state);
   return state.entries
     .filter((e) => e.category_id === unloggedCategoryId)
-    .filter((e) => { const d = dates.get(e.transaction_id); return d >= from && d <= to; })
+    .filter((e) => { const t = tx.get(e.transaction_id); return t && t.status === "verified" && !held.has(t.id) && t.date >= from && t.date <= to; })
     .reduce((s, e) => s + e.amount, 0);
 }
 

@@ -88,7 +88,7 @@ function clipFor(id) {
       if (e && st?.target > 0) goal = { name: e.name, balance: st.balance, target: st.target, ef: true, months: st.months, account: ea ? { name: ea.name, picture: iconOf(ea, 20) } : null };
     }
   }
-  return M.howtoClip(id, { date: longDate(today()), tiles, account: a ? { name: a.name, picture: iconOf(a, 20) } : null, total: M.dayTotal(S(), today()).total, budget, trips, goal, accounts, months, schedules });
+  return M.howtoClip(id, { date: longDate(today()), tiles, account: a ? { name: a.name, picture: iconOf(a, 20) } : null, total: M.dayTotal(S(), today()).verified, budget, trips, goal, accounts, months, schedules });
 }
 const REQ = ' <span class="req" aria-hidden="true">*</span>';   // marks what is needed before an entry can be saved (ink colour, never red)
 // ---------- The Pay plan form: one payday at a time, a thin bar for each line ----------
@@ -431,26 +431,29 @@ function renderScreen() {
 function dayCard() {
   const picked = ui.dayPick && ui.dayPick !== today() ? ui.dayPick : null;
   const d = M.dayTotal(S(), picked ?? today());
-  const words = (picked ? longDate(picked) : "Today") + " " + peso(d.total) + (d.drafts ? ", including " + d.drafts + " not yet verified" : "");
+  const words = (picked ? longDate(picked) : "Today") + " " + peso(d.verified) + (d.drafts ? ". " + peso(d.draft) + " more is waiting in Verify" : "");
   // One quiet link at a time: "Select date" on today; on another day the date itself (tap it to pick another) and a single "Today".
-  return `<p class="spentlabel" aria-hidden="true">${picked ? "Spent that day" : "Spent today"}</p><div class="daytotal" role="status" aria-label="${esc(words)}">${peso(d.total)}</div>
+  return `<p class="spentlabel" aria-hidden="true">${picked ? "Spent that day" : "Spent today"}</p><div class="daytotal" role="status" aria-label="${esc(words)}">${peso(d.verified)}</div>
+    ${waitingLine(d.draft, d.drafts)}
     ${picked ? `<p class="center daycap"><button class="daycapbtn datelink" data-action="open-cal" aria-label="${esc(longDate(picked))}, tap to choose another day">${esc(longDate(picked))}</button></p>
     <p class="note center small">New entries go on this day.</p>
     <p class="center"><button class="link" data-action="reset-day">Today</button></p>`
     : `<p class="changedate"><button class="link datelink" data-action="open-cal">Select date</button></p>`}`;
 }
 
+// Spent today and This month count VERIFIED entries only (owner, Oct 31); what still waits in Verify is shown apart, in the same words on both.
+const waitingLine = (amount, count) => (count ? `<p class="note center small waiting">+ ${peso(amount)} waiting in Verify</p>` : "");
 // This month at a glance on Log: verified spending against the month's budgets, one bar, the figure at its tip. Tap it for what you spent this month, by category (owner, Oct 20).
 function monthGlance() {
-  const month = M.monthOf(today()), spent = Math.max(0, M.spendingByCategory(S(), { month }).total);
+  const month = M.monthOf(today()), report = M.spendingByCategory(S(), { month }), spent = Math.max(0, report.total), waiting = report.pending;
   const budget = expenseCategories().filter((c) => c.id !== M.UNLOGGED_CATEGORY_ID).reduce((n, c) => n + (M.budgetFor(S().rules, c.id, month) ?? 0), 0);
   const t = budget > 0 ? M.tenths(spent, budget) : null, w = t === null ? 0 : Math.min(100, t / 10);
   const words = budget > 0 ? (spent > budget ? `Over the month's budget by ${peso(spent - budget)}` : `${peso(budget - spent)} left of ${peso(budget)}, ${M.showTenths(t)} used`) : "No budget set yet";
   // The bar is the message; the only words under it are for the one case that needs them (over, with its shape).
-  return `<button class="monthcard" id="glance" data-action="tab" data-tab="money" aria-label="This month: ${esc(peso(spent))} spent. ${esc(words)}. Tap to see where it went.">
+  return `<button class="monthcard" id="glance" data-action="tab" data-tab="money" aria-label="This month: ${esc(peso(spent))} spent. ${esc(words)}.${waiting ? " " + esc(peso(waiting)) + " more is waiting in Verify." : ""} Tap to see where it went.">
     <span class="mc-top"><span>This month</span><b>${peso(spent)}</b></span>
     ${budget > 0 ? `<span class="bar" aria-hidden="true"><span style="width:${w}%"></span></span>` : ""}
-    ${budget > 0 && spent > budget ? `<span class="mc-sub">${glyph("critical")} ${esc(words)}</span>` : ""}</button>`;
+    ${waiting > 0 ? `<span class="mc-sub mc-wait">+ ${peso(waiting)} waiting in Verify</span>` : ""}${budget > 0 && spent > budget ? `<span class="mc-sub">${glyph("critical")} ${esc(words)}</span>` : ""}</button>`;
 }
 
 // The day's entries stay out of sight until you tap the heading (less on the screen, nothing to scroll past). The choice is kept until the app is closed.
@@ -2211,12 +2214,15 @@ function viewTripDetail(id) {
 // ---------- checks: card reserve and the weekly Unlogged habit ----------
 function viewChecks() {
   const rs = M.reserveShortfalls(S().accounts, M.countedEntries(S()));
+  const cover = new Map(M.reserveCover(S().accounts, M.countedEntries(S())).map((c) => [c.reserve_id + "|" + c.card_id, c]));
   const reserve = rs.length ? rs.map((r) => {
     const card = S().accounts.find((a) => a.id === r.card_id), res = S().accounts.find((a) => a.id === r.reserve_id), o = M.cardOutstanding(card, M.countedEntries(S()));
-    const ok = r.shortfall === 0;
-    return `<div class="bcard"><div class="btop"><span class="bname who">${iconOf(card, 24)}<span>${esc(card.name)}</span></span></div>
-      <dl><dt>${esc(res.name)} holds</dt><dd>${peso(r.reserve)}</dd><dt>${esc(card.name)} owes</dt><dd>${peso(r.outstanding)}<small> (${peso(o.pending)} pending + ${peso(o.posted)} posted)</small></dd></dl>
-      <div class="status">${glyph(ok ? "good" : "serious")}${ok ? "Covered" : "Short by " + peso(r.shortfall)}</div></div>`;
+    const ok = r.shortfall === 0, share = cover.get(r.reserve_id + "|" + r.card_id)?.share ?? 0;
+    return `<div class="card rescard"><div class="rc-top"><span class="bname who">${iconOf(card, 24)}<span>${esc(card.name)}</span></span></div>
+      <p class="rc-state">${glyph(ok ? "good" : "serious")}${ok ? "Covered" : "Short by " + peso(r.shortfall)}</p>
+      ${coverBar(share, ok ? "The money set aside covers what the card is owed" : "The money set aside is short of what the card is owed")}
+      <div class="rc-row"><span>Held in ${esc(res.name)}</span><b>${peso(r.reserve)}</b></div>
+      <div class="rc-row"><span>Owed on the card</span><b>${peso(r.outstanding)}</b></div></div>`;
   }).join("") : `<p class="note">No card reserve is set up. You can add one in Setup.</p>`;
 
   const weeks = M.unloggedByWeek(S(), M.UNLOGGED_CATEGORY_ID, today(), 8);
@@ -2226,9 +2232,9 @@ function viewChecks() {
   if (!counted.length) habit = `<p class="note">No weekly count yet. <button class="link" data-action="tab" data-tab="checkin">Do the check-in</button></p>`;
   else if (ui.asList) habit = `<table class="tbl"><tr><th>Week</th><th class="n">Not accounted for</th></tr>${weeks.map((w) => `<tr><td>${esc(wlabel(w))}</td><td class="n">${w.amount === null ? "Not counted" : w.amount < 0 ? peso(-w.amount) + " found" : peso(w.amount)}</td></tr>`).join("")}</table>`;
   else {
-    const rows = counted.map((w) => ({ id: w.week_end, label: esc(wlabel(w)), amount: Math.max(0, w.amount) }));
-    const hit = counted.find((w) => w.week_end === ui.sel);
-    habit = barChart(rows, ui.sel) + `<p class="caption" aria-live="polite">${hit ? esc(wlabel(hit) + ": " + (hit.amount < 0 ? peso(-hit.amount) + " more than your records said." : hit.amount === 0 ? "everything was accounted for." : peso(hit.amount) + " could not be accounted for.")) : "Tap a bar. Weeks you did not count are left out, not shown as zero."}</p>`;
+    const top = Math.max(1, ...counted.map((w) => Math.max(0, w.amount)));
+    habit = barCard(counted.map((w) => ({ name: esc(wlabel(w)), fig: w.amount < 0 ? peso(-w.amount) + " found" : peso(w.amount), pct: w.amount > 0 ? (w.amount / top) * 100 : 0,
+      label: wlabel(w) + ": " + (w.amount < 0 ? peso(-w.amount) + " more than your records said" : w.amount === 0 ? "everything was accounted for" : peso(w.amount) + " could not be accounted for") })));
   }
   const sv = M.surveyReview(S(), S().surveyResponses, M.UNLOGGED_CATEGORY_ID);
   const ago = (w) => w.unlogged_net < 0 ? peso(-w.unlogged_net) + " found" : peso(w.unlogged_net);
@@ -2237,9 +2243,9 @@ function viewChecks() {
     : `<table class="tbl"><tr><th>Week to</th><th class="n">Not accounted for</th><th class="n">Missed</th><th class="n">Easier (1-5)</th><th class="n">Fixes</th></tr>${sv.weeks.map((w) => `<tr><td>${esc(longDate(w.week_end))}</td><td class="n">${esc(ago(w))}</td><td class="n">${w.q1_missed_count}${w.q1_missed_amount ? " · " + peso(w.q1_missed_amount) : ""}</td><td class="n">${w.q2_ease}</td><td class="n">${w.q4_corrections_count}</td></tr>`).join("")}</table>
       ${sv.trend ? `<p class="note">${sv.trend.change < 0 ? "\u25BC" : sv.trend.change > 0 ? "\u25B2" : "\u25AC"} Not accounted for went from ${esc(ago({ unlogged_net: sv.trend.first }))} in the first week to ${esc(ago({ unlogged_net: sv.trend.last }))} in the latest. ${sv.trend.change < 0 ? "Smaller is better logging." : sv.trend.change > 0 ? "It is growing." : "No change."}</p>` : ""}
       ${sv.weeks.some((w) => w.q3_annoyance) ? `<h2>What annoyed you</h2>${sv.weeks.filter((w) => w.q3_annoyance).map((w) => `<p class="note"><b>${esc(longDate(w.week_end))}:</b> ${esc(w.q3_annoyance)}</p>`).join("")}` : ""}`;
-  return `<h1>Checks</h1><p class="sub">Two things that keep the numbers honest.</p>
+  return `<h1>Checks</h1>
     <h2>Card reserve</h2>${reserve}
-    <h2>Unlogged by week</h2><p class="note">Money your counts could not explain. A smaller number means better logging.</p>${habit}
+    <h2>Unlogged by week</h2><p class="note">Money your counts could not explain.</p>${habit}
     ${counted.length ? `<p><button class="link" data-action="chart-mode" data-mode="${ui.asList ? "chart" : "list"}">${ui.asList ? "Show as chart" : "Show as list"}</button></p>` : ""}
     <h2>Weekly questions</h2>${survey}`;
 }

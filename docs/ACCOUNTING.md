@@ -92,8 +92,10 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 
 ### 10. Consistency and presentation
 - **Rule.** One definition per figure, used on every screen. Two screens that show the same thing for the same period show the same number.
-- **In the app.** Spending reads verified entries, leaves out held gaps and transfers, and groups categories the same way everywhere.
-- **Guarded by.** "CONSISTENCY".
+- **In the app.** Spending reads verified entries, leaves out held gaps and transfers, and groups categories the same way everywhere. Spent today and This
+  month both show the verified figure, with what still waits in Verify apart ("+ P waiting in Verify"). The Unlogged gauge (weekly review, survey) reads
+  verified entries only and leaves out a held gap and its cancelling entry. The home summary follows the same rule.
+- **Guarded by.** "CONSISTENCY" (twice), `tests/presentation.test.js`, `tests/daytotal.test.js`.
 
 ### 11. Control totals
 - **Rule.** What is added up must equal what was printed or counted.
@@ -117,6 +119,5 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 | Classification (right kind) | income, expense, transfer, card payment, refund | "TRANSFERS", "CARDS", "RECOGNITION" |
 | Presentation (shown the same everywhere) | one definition per figure | "CONSISTENCY", "SUSPENSE" |
 
-## Known gaps (found by the audit, each fixed in its own change; remove a line when it is fixed)
-These are the places where the app does not yet meet a principle above. Each has its own fix task and its own audit test.
-- Presentation: Spent today includes drafts and This month does not; "Unlogged by week" counts held gaps; `homeSummary` is unused and disagrees.
+## Known gaps
+None open. The audit's findings are fixed; the one stated exception is under principle 3. A new finding is added here, with its own fix task and audit test, and the line is removed when it is fixed.
