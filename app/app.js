@@ -993,7 +993,20 @@ function slipLineHtml(f, sh) {
     <p><button class="primary" data-action="slip-line-done" style="margin-top:12px">Done</button></p>
     <p><button data-action="slip-remove" data-id="${esc(it.k)}" style="width:100%">Remove this line</button></p>`;
 }
+// A payslip Save NEVER does nothing (owner, Nov 1, P0): any error says so in plain words, and what was typed stays in the window to save again. If the
+// error came after the ledger already took the payslip, the window is not reopened (saving again would repeat it) and the words say where to look.
+const SLIP_NOT_SAVED = (why) => "The payslip was not saved (" + why + "). What you typed is still here; tap Save again.";
+const SLIP_SAVED_BUT = (why) => "The payslip was saved, but something after it went wrong (" + why + "). Check it in Income.";
 async function savePayslip(asDraft = false) {
+  const sh = ui.sheet, f = ui.form, before = ledger;
+  try { await savePayslipNow(asDraft); }
+  catch (e) {
+    const why = String(e?.message ?? e ?? "unknown error");
+    if (ledger === before) { ui.sheet = sh; ui.form = f; renderSheet(); refreshSave(); showToast(SLIP_NOT_SAVED(why)); }
+    else showToast(SLIP_SAVED_BUT(why));
+  }
+}
+async function savePayslipNow(asDraft = false) {
   const f = ui.form, { p, problems, unchecked, t } = payslipMarks(f), sh = ui.sheet, editId = sh?.editId ?? null, id = editId ?? newId("ps");
   // A payslip whose figures do not add up is never saved as verified income. A NEW one, or a draft being edited, asks once and is kept as a draft in Verify;
   // a payslip already verified keeps the old rule (it is final: only the Weekly review can cancel it).
@@ -3498,6 +3511,9 @@ function renderSheet() {
   hydratePhotos();
 }
 
+// Safari's engine drops a tap when the inside of the pressed button is replaced between the press and the release (proved on WebKit, Nov 1: leaving the
+// last box re-ran this refresh, which rewrote the Save button's text, and the payslip Save did nothing). So a button's text is written ONLY when it changes.
+const setText = (el, text) => { if (el && el.textContent !== text) el.textContent = text; };
 function refreshSave() {
   const btn = $("f-save");
   if (!btn) return;
@@ -3526,7 +3542,7 @@ function refreshSave() {
       box.hidden = !less && gap === 0;
       box.innerHTML = (less ? `<button data-action="count-paid" style="width:100%">I paid the card: log ${peso(less)}</button>` : "") + (gap !== 0 ? `<p class="note small">Count your other accounts too. Then the Weekly review shows every gap side by side and asks what happened.</p>` : "");
     }
-    btn.textContent = "Save count";
+    setText(btn, "Save count");
   } else if (type === "gap-move") {
     btn.disabled = !f.other_id;
   } else if (type === "survey") {
@@ -3569,7 +3585,7 @@ function refreshSave() {
   } else if (type === "payslip") {
     const { p, ready, unchecked, lines, t, marks, problems } = payslipMarks(f);
     btn.disabled = !ready || Boolean(ui.sheet.addLinesId && (problems.flags.length || marks.gross || marks.net || marks.ded));   // added lines must reconcile to the payslip as saved
-    { const u = $("p-unchecked"); if (u) u.hidden = !unchecked; if (!ui.sheet.addLinesId && btn.dataset.action === "save-payslip") btn.textContent = unchecked ? "Save as a draft" : ui.sheet.editId ? "Save changes" : "Save payslip"; }
+    { const u = $("p-unchecked"); if (u) u.hidden = !unchecked; if (!ui.sheet.addLinesId && btn.dataset.action === "save-payslip") setText(btn, unchecked ? "Save as a draft" : ui.sheet.editId ? "Save changes" : "Save payslip"); }
     const out = $("p-flags");
     for (const [key, id] of [["gross", "p-gross"], ["net", "p-net"], ["ded", "p-ded"], ["deposit", "p-dep"]]) {
       const input = $(id), note = $("chk-" + key); if (!input && !note) continue;
