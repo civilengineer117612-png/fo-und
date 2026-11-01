@@ -1904,9 +1904,10 @@ try { blockName = "5j. a payslip photo, line by line";
 console.log("Payslip photo");
 ({ ctx, page, errors } = await open({ blockSw: true }));
 await addAccount(page, "Wallet", "asset", "1000");
-var slipPng = await page.evaluate(() => {   // an invented payslip, drawn in the page
+var slipPng = await page.evaluate(async () => {   // an invented payslip, drawn in the page with the app's own bundled font, so every engine draws the same letters
+  const face = new FontFace("Slip", "url(fonts/ibm-plex-sans-latin-600-normal.woff2)"); await face.load(); document.fonts.add(face);
   const c = document.createElement("canvas"); c.width = 1500; c.height = 1400;
-  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 1500, 1400); x.fillStyle = "#000"; x.font = "bold 56px sans-serif";
+  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 1500, 1400); x.fillStyle = "#000"; x.font = "600 56px Slip";
   ["Sample Employer Inc", "PAYSLIP", "Pay period: 01/10/2026 - 02/10/2026", "Pay date: Oct 2, 2026", "EARNINGS", "Basic Salary   9,000.00", "Rice Subsidy   1,000.00", "Overtime   1,500.00", "Gross Pay   11,500.00", "DEDUCTIONS", "Withholding Tax   700.00", "SSS   300.00", "PhilHealth   100.00", "Pag-IBIG   100.00", "Net Pay   10,300.00"].forEach((l, i) => x.fillText(l, 40, 70 + i * 80));
   return c.toDataURL("image/png").split(",")[1];
 });
@@ -2629,7 +2630,7 @@ console.log("Space, pictures and the photo reader");
   const tx = { id: "slip", date: "2026-10-03", payee: "Corner Cafe", memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS };
   const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, last_backup_at: "2026-09-01T09:00:00.000+08:00" }, state: { ...OWNER_STYLE.state, accounts: [acct], transactions: [tx], entries: [{ transaction_id: "slip", category_id: "cat-food", amount: 5000 }, { transaction_id: "slip", account_id: "w", amount: -5000 }],
     attachments: [{ id: "att1", transaction_id: "slip", type: "photo", file: "att1.jpg", file_timestamp: TS }, { id: "att2", transaction_id: "slip", type: "photo", file: "att2.jpg", file_timestamp: TS }] } };
-  ({ ctx, page, errors } = await open({ seed }));
+  ({ ctx, page, errors } = await open({ seed, blockSw: false }));   // the reader's download is kept by the service worker, so this block needs it (on WebKit too)
   await menuGo(page, "Setup");
   check(await seen(page, "#screen", "2 pictures are kept on this phone. Back up includes them."), "Setup's Backup says how many pictures are kept and that Back up includes them");
   check(await seen(page, "#about-reader", "is not on this phone yet") && !(await page.locator("#warm-btn").isHidden()), "the photo reader says it is not on the phone yet, with a button to download it");
