@@ -22,7 +22,7 @@ test("Pages cannot publish until the reusable checks job succeeds", () => {
 test("the release gate runs unit tests and every browser suite without swallowing failure", () => {
   const unit = job(checks, "test"), browser = job(checks, "e2e");
   assert.match(unit, /^      - run: npm test$/m);
-  assert.match(browser, /shell: bash\n        run: \|\n          node e2e\/pdf-scan\.mjs\n          node e2e\/spending-details\.mjs\n          node e2e\/payslip-items\.mjs\n          node e2e\/ledger-check\.mjs\n          node e2e\/run\.mjs 2>&1 \| tee e2e\.log/);
+  assert.match(browser, /shell: bash\n        run: \|\n          node e2e\/pdf-scan\.mjs\n          node e2e\/spending-details\.mjs\n          node e2e\/payslip-items\.mjs\n          node e2e\/ledger-check\.mjs\n          node e2e\/photo-payslip\.mjs\n          node e2e\/run\.mjs 2>&1 \| tee e2e\.log/);
   assert.doesNotMatch(unit + browser, /continue-on-error:|^    if:|node e2e\/.*\|\| true/m);
 });
 

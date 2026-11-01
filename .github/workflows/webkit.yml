@@ -37,7 +37,7 @@ jobs:
           status=0
           : > e2e-webkit.log
           node e2e/engine-probe.mjs 2>&1 | tee -a e2e-webkit.log   # facts about the engine itself, before any check
-          for script in pdf-scan spending-details payslip-items ledger-check run; do
+          for script in pdf-scan spending-details payslip-items ledger-check photo-payslip run; do
             echo "##### e2e/${script}.mjs" | tee -a e2e-webkit.log
             start=$(date +%s)
             node "e2e/${script}.mjs" 2>&1 | tee -a e2e-webkit.log

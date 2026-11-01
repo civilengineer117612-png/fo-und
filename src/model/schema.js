@@ -104,6 +104,7 @@ export const SCHEMAS = {
     printed_gross: centavos, printed_net: centavos, deposit: centavos, net_words: optional(text),
     printed_deductions: optional(centavos),   // ADDED: the total deductions printed on the paper, when it was entered
     version: optional(count),   // ADDED: which rules saved it (income.js PAYSLIP_VERSION); a payslip without one was saved before the date and reading fixes
+    totals_unchecked: optional(bool),   // ADDED (Nov 1, data version unchanged): read from a photo or PDF whose printed gross or net was not found; its gross and net are what the lines add to, so it is a draft and never proven
     pay_rate: optional(text), pay_basis: optional(text), period_type: optional(text),   // ADDED (data version 11): as printed on the payslip ("Semi-Monthly", "Bi-Week", a rate); text, never worked out
   },
   // The figures a payslip had before it was changed, with the day of the change. The payslip keeps its ids; this only remembers.

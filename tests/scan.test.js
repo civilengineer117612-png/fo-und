@@ -194,10 +194,11 @@ test("a payslip: the first figure is taken, an SSS loan is a loan not SSS, taxab
   assert.deepEqual(r.deductions.map((l) => [l.kind, l.amount]), [["sss", 1000], ["loan", 500]]);
   assert.ok(!r.deductions.some((l) => l.kind === "tax" || l.kind === "philhealth"));
 });
-test("a payslip with a label alone on a line takes the figure from the next line; missing gross, net and dates are said in words", () => {
+test("a payslip with a label alone on a line takes the figure from the next line; missing totals (not checked) and dates are said in words", () => {
   const r = readPayslip("Withholding Tax\n1,234.50\nPhilHealth 450.00", TODAY);
   assert.deepEqual(r.deductions.map((l) => [l.kind, l.amount]), [["tax", 123450], ["philhealth", 45000]]);
-  assert.ok(r.notes.some((n) => /printed gross/.test(n)) && r.notes.some((n) => /printed net/.test(n)) && r.notes.some((n) => /pay date/.test(n)));
+  assert.ok(r.notes.includes("Not checked: the printed totals were not found. Check every line against the page.") && r.notes.some((n) => /pay date/.test(n)));
+  assert.equal(readPayslip("Gross pay 1,000.00\nNet pay 900.00\nPay date: Jan 15, 2026", "2026-01-20").notes.some((n) => /^Not checked/.test(n)), false);
 });
 test("an old year on a payslip is not used as the pay date", () => {
   const r = readPayslip("Pay date: Jan 15, 2016\nNet Pay 100.00", TODAY);

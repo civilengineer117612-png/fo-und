@@ -709,8 +709,8 @@ function openPayslipFromPhoto(blob, text, queueId, source = "photo", layout = nu
   const employer = r.employer ? M.snapEmployer(r.employer, knownEmployers()) : d.employer;
   // One short line: everything was read from the photo and none of it is confirmed (a right employer does not make the figures right).
   // Only what needs action is added after it.
-  const f = { ...d, account_id: null, employer, text, notes: [source === "PDF" ? "Read from the PDF. Check each figure against the paper." : "Read from the photo. Check each figure against the paper.", ...r.notes.filter((n) => /could not|total deductions/i.test(n)), ...(r.earnings.length || r.deductions.length ? [] : ["I could not read any lines. Type them from the paper."]),
-    ...((r.unread?.earning || r.unread?.deduction) ? ["I could not read " + ((r.unread.earning ?? 0) + (r.unread.deduction ?? 0)) + " row" + ((r.unread.earning ?? 0) + (r.unread.deduction ?? 0) === 1 ? "" : "s") + ". Empty rows are waiting for you in the lines below."] : [])], unread_e: r.unread?.earning ?? 0, unread_d: r.unread?.deduction ?? 0, fromPdf: source === "PDF", layoutText: layout ? M.layoutReport(layout) : "" };
+  const f = { ...d, account_id: null, employer, text, notes: [source === "PDF" ? "Read from the PDF. Check each figure against the paper." : "Read from the photo. Check each figure against the paper.", ...r.notes.filter((n) => /could not|total deductions/i.test(n) && n !== M.NOT_CHECKED), ...(r.earnings.length || r.deductions.length ? [] : ["I could not read any lines. Type them from the paper."]),
+    ...((r.unread?.earning || r.unread?.deduction) ? ["I could not read " + ((r.unread.earning ?? 0) + (r.unread.deduction ?? 0)) + " row" + ((r.unread.earning ?? 0) + (r.unread.deduction ?? 0) === 1 ? "" : "s") + ". Empty rows are waiting for you in the lines below."] : [])], unread_e: r.unread?.earning ?? 0, unread_d: r.unread?.deduction ?? 0, fromPdf: source === "PDF", scanned: true, layoutText: layout ? M.layoutReport(layout) : "" };
   // A date the reader could not find is left EMPTY, not filled with today: a payslip must never land in the wrong month by default.
   f.period_from = r.period_from ?? ""; f.period_to = r.period_to ?? ""; f.pay_date = r.pay_date ?? "";
   if (!r.period_from && r.pay_date) f.notes = [...f.notes, "I could not find the pay period. Choose the dates."];
@@ -862,9 +862,13 @@ function payslipFromForm(f) {
   const merged = (list) => { const by = new Map(); for (const l of list) { const m = by.get(l.kind); by.set(l.kind, m ? { ...m, amount: m.amount + l.amount } : l); } return [...by.values()]; };
   return { errors, earnings: merged([...pick("e_", M.EARNINGS), ...extra("e", M.EARNINGS)]), deductions: merged([...pick("d_", M.DEDUCTIONS), ...extra("d", M.DEDUCTIONS)]), printed_gross: money(f.gross), printed_net: money(f.net), deposit: money(f.deposit), printed_deductions: money(f.ded) };
 }
+// Owner, Nov 1: read from a page whose printed gross or net was not found (and not typed since): NOT CHECKED, and Save makes a draft.
+const slipUnchecked = (f, p) => Boolean(f.scanned && !ui.sheet?.addLinesId && (!p.printed_gross || !p.printed_net));
 function savePayslipReady(f) {
-  const p = payslipFromForm(f);
-  return { p, ready: (f.employer ?? "").trim() && f.pay_date && f.period_from && f.period_to && f.account_id && !p.errors.length && p.earnings.length && p.printed_gross && p.printed_net && p.deposit };
+  const p = payslipFromForm(f), unchecked = slipUnchecked(f, p);
+  const t = M.payslipTotals([...p.earnings.map((l) => ({ ...l, side: "earning" })), ...p.deductions.map((l) => ({ ...l, side: "deduction" }))]);
+  const totals = unchecked ? t.gross > 0 && t.net > 0 : p.printed_gross && p.printed_net;
+  return { p, unchecked, ready: (f.employer ?? "").trim() && f.pay_date && f.period_from && f.period_to && f.account_id && !p.errors.length && p.earnings.length && totals && p.deposit };
 }
 // Open the payslip window on a saved payslip (from Income, or from Verify when it waits there as a draft).
 function openSlipEdit(p) {
@@ -876,12 +880,13 @@ function openSlipEdit(p) {
     f.pay_rate = p.pay_rate ?? ""; f.pay_basis = p.pay_basis ?? ""; f.period_type = p.period_type ?? "";
     for (const l of M.linesOf(S(), id)) if (l.earned_month) f.ot_month = l.earned_month;
   } else for (const l of M.linesOf(S(), id)) { f[(l.side === "earning" ? "e_" : "d_") + l.kind] = two(l.amount); if (l.earned_month) f.ot_month = l.earned_month; }
+  if (p.totals_unchecked) { f.gross = ""; f.net = ""; f.scanned = true; }   // they were the lines' own figures, never printed ones
   ui.pdet = { e: true, d: true, t: true }; ui.linesOpen = false; ui.form = f; ui.sheet = { type: "payslip", editId: id }; renderSheet();
 }
 // The checks on what the form holds now (owner, Oct 29): a mark with a one-line reason for each figure the arithmetic does not prove, and the problems
 // the Save question is about. A mark is an outline and words, never red.
 function payslipMarks(f) {
-  const { p, ready } = savePayslipReady(f), plain = (c) => (Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const { p, ready, unchecked } = savePayslipReady(f), plain = (c) => (Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const lines = [...p.earnings.map((l) => ({ ...l, side: "earning" })), ...p.deductions.map((l) => ({ ...l, side: "deduction" }))], t = M.payslipTotals(lines), marks = {};
   if (lines.length) {
     if (p.printed_gross && p.printed_gross !== t.gross) marks.gross = `earnings add up to ${plain(p.printed_gross - t.gross)} ${p.printed_gross > t.gross ? "less" : "more"} than the printed gross`;
@@ -890,9 +895,10 @@ function payslipMarks(f) {
     if (p.printed_net && p.printed_net !== t.net && !waiting) marks.net = `gross less deductions is ${plain(t.net - p.printed_net)} ${t.net > p.printed_net ? "more" : "less"} than the printed net pay`;
     if (p.printed_deductions && p.printed_deductions !== t.deductions) marks.ded = `the deduction lines add up to ${plain(p.printed_deductions - t.deductions)} ${p.printed_deductions > t.deductions ? "less" : "more"} than the printed total`;
   }
+  if (lines.length && t.net <= 0) marks.net = `the lines give a net of ${t.net < 0 ? "minus " : ""}${plain(t.net)}: check every line against the page`;   // whatever else was found (owner, Nov 1)
   if (p.deposit && p.printed_net && p.deposit !== p.printed_net) marks.deposit = `the account received ${plain(p.printed_net - p.deposit)} ${p.printed_net > p.deposit ? "less" : "more"} than the printed net pay`;
   const problems = p.printed_gross && p.printed_net && p.deposit && lines.length ? M.payslipProblems({ printed_gross: p.printed_gross, printed_net: p.printed_net, deposit: p.deposit, printed_deductions: p.printed_deductions ?? undefined, net_words: (f.words ?? "").trim() || undefined }, lines) : { flags: [], gap: 0 };
-  return { p, ready, lines, t, marks, problems };
+  return { p, ready, unchecked, lines, t, marks, problems };
 }
 // ---------- the payslip form as its printed lines (owner, Oct 30) ----------
 // Only the lines printed on that payslip, in print order: no fixed boxes, no 0.00 placeholders for what the employer did not print. A line printed as 0.00 stays, in lighter
@@ -936,7 +942,7 @@ function slipFormHtml(f, sh, pm) {
       <p id="p-savebox"><button class="primary" id="f-save" data-action="save-added-lines" style="margin-top:14px" disabled>Save the breakdown</button></p>
       ${sh.queueId ? "" : ""}`;
   }
-  return `<h3>${sh.editId ? "Change this payslip" : "Add a payslip"}</h3>${pic}
+  return `<h3>${sh.editId ? "Change this payslip" : "Add a payslip"}</h3>${pic}<p class="note flag" id="p-unchecked"${pm.unchecked ? "" : " hidden"}>${esc(M.NOT_CHECKED)}</p>
     <div id="p-lines">${slipSectionHtml(f, "earning", open("e"))}${slipSectionHtml(f, "deduction", open("d"))}${f.items.some((i) => i.section === "employer") ? slipSectionHtml(f, "employer", open("r")) : ""}</div>
     <label>Landed in${REQ}</label>${paidChips(f.account_id)}
     <label for="p-emp">Employer${REQ}</label><input id="p-emp" data-field="employer" value="${esc(f.employer ?? "")}" autocomplete="off">
@@ -959,7 +965,7 @@ function slipFormHtml(f, sh, pm) {
     ${REQNOTE}
     <div id="p-ask" class="slipask"${sh.askDraft && pm.problems.flags.length ? "" : " hidden"}><p><b id="p-askq">The figures differ${pm.problems.gap ? " by " + esc(peso(pm.problems.gap)) : ""}. Save as a draft to check later?</b></p><p class="note small">It waits in Verify and is not income until it is verified.</p>
       <p><button class="primary" data-action="save-payslip-draft">Save as a draft</button></p><p><button data-action="keep-editing-slip" style="width:100%">Keep editing</button></p></div>
-    <p id="p-savebox"${sh.askDraft && pm.problems.flags.length ? " hidden" : ""}><button class="primary" id="f-save" data-action="save-payslip" style="margin-top:14px" disabled>${sh.editId ? "Save changes" : "Save payslip"}</button></p>
+    <p id="p-savebox"${sh.askDraft && pm.problems.flags.length ? " hidden" : ""}><button class="primary" id="f-save" data-action="save-payslip" style="margin-top:14px" disabled>${pm.unchecked ? "Save as a draft" : sh.editId ? "Save changes" : "Save payslip"}</button></p>
     ${sh.queueId ? `<p><button data-action="discard-scan" data-id="${esc(sh.queueId)}" style="width:100%">Throw this photo away</button></p>` : ""}`;
 }
 // "+ Add a line": the quick labels, or any label typed.
@@ -988,15 +994,15 @@ function slipLineHtml(f, sh) {
     <p><button data-action="slip-remove" data-id="${esc(it.k)}" style="width:100%">Remove this line</button></p>`;
 }
 async function savePayslip(asDraft = false) {
-  const f = ui.form, { p, problems } = payslipMarks(f), sh = ui.sheet, editId = sh?.editId ?? null, id = editId ?? newId("ps");
+  const f = ui.form, { p, problems, unchecked, t } = payslipMarks(f), sh = ui.sheet, editId = sh?.editId ?? null, id = editId ?? newId("ps");
   // A payslip whose figures do not add up is never saved as verified income. A NEW one, or a draft being edited, asks once and is kept as a draft in Verify;
   // a payslip already verified keeps the old rule (it is final: only the Weekly review can cancel it).
   const was = editId ? S().transactions.find((t) => t.id === S().payslips.find((x) => x.id === editId)?.transaction_id) : null;
-  const failing = problems.flags.length > 0 && was?.status !== "verified";
-  if (failing && !asDraft) { sh.askDraft = true; renderSheet(); refreshSave(); return; }
+  const failing = unchecked || (problems.flags.length > 0 && was?.status !== "verified");
+  if (failing && !asDraft && !unchecked) { sh.askDraft = true; renderSheet(); refreshSave(); return; }
   const plan = editId ? (input, now) => M.updatePayslip(S(), editId, input, now) : (input, now) => M.planPayslip(S(), input, now);
   const r = plan({ id, transaction_id: newId("tx"), employer: f.employer, period_from: f.period_from, period_to: f.period_to, pay_date: f.pay_date, account_id: f.account_id,
-    printed_gross: p.printed_gross, printed_net: p.printed_net, deposit: p.deposit, printed_deductions: p.printed_deductions ?? undefined, net_words: (f.words ?? "").trim() || undefined, ...(f.items ? { items: p.items, overtime_month: f.ot_month, pay_rate: f.pay_rate, pay_basis: f.pay_basis, period_type: f.period_type } : { earnings: p.earnings, deductions: p.deductions }), ...(failing ? { status: "draft" } : {}) }, new Date());
+    printed_gross: unchecked ? p.printed_gross ?? t.gross : p.printed_gross, printed_net: unchecked ? p.printed_net ?? t.net : p.printed_net, deposit: p.deposit, printed_deductions: p.printed_deductions ?? undefined, net_words: (f.words ?? "").trim() || undefined, ...(f.items ? { items: p.items, overtime_month: f.ot_month, pay_rate: f.pay_rate, pay_basis: f.pay_basis, period_type: f.period_type } : { earnings: p.earnings, deductions: p.deductions }), ...(failing ? { status: "draft" } : {}), ...(unchecked ? { totals_unchecked: true } : {}) }, new Date());
   if (!r.ok) { showToast("Could not save: " + r.violations[0].message); return; }
   let next = r.state, note = editId && r.draftsRemoved ? " The overtime draft was removed; make it again if you still want it." : "";
   const photoId = sh?.scanBlob ? (sh.queueId ?? newId("photo")) : null;   // a payslip read from a photo keeps the photo with the pay
@@ -3091,7 +3097,7 @@ function renderSheet() {
       ${recs.length ? `<p class="note small">${recs.map((c) => `Changed ${esc(fullDate(c.changed_on))}: ${esc(name(c.from))} to ${esc(name(c.to))}.`).join("<br>")}</p>` : ""}
       <p><button class="primary" data-action="close-sheet" style="margin-top:12px">Done</button></p>`;
   } else if (sh.type === "scanpick") {
-    body = `<h3>Scan</h3><h4 class="dayhead">One receipt</h4><p class="note">A receipt, payment screen or payslip, as a photo or PDF. If the app is sure, it saves one draft; otherwise it asks.</p>${photoButtons("quick")}
+    body = `<h3>Scan</h3><h4 class="dayhead">One receipt</h4><p class="note">A receipt, payment screen or payslip, as a photo or PDF. If the app is sure, it saves one draft; otherwise it asks.</p><p class="note small" id="pdf-tip">${esc(M.PDF_TIP)}</p>${photoButtons("quick")}
       <h4 class="dayhead">Multiple transactions at once</h4><p class="note">A bank statement (PDF), a screenshot of your notes, or a CSV or Excel file. Every line waits in Verify.</p>
       <label class="filebtn alt" id="imp-pick">Choose a statement or list<input type="file" accept="image/*,.pdf,application/pdf,.csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-import="1" hidden></label>`;
   } else if (sh.type === "import" || sh.type === "pdfscan") {
@@ -3136,7 +3142,7 @@ function renderSheet() {
     body = `<h3>Add income</h3>
       <p class="note">A payslip:</p>
       <p><button class="primary" data-action="open-payslip">Type a payslip</button></p>
-      <p class="note">Or read it from a photo or PDF (you check every figure before it is saved):</p>${photoButtons("payslip")}
+      <p class="note">Or read it from a photo or PDF (you check every figure before it is saved):</p><p class="note small">${esc(M.PDF_TIP)}</p>${photoButtons("payslip")}
       <p class="note">Something else:</p>
       <p><button data-action="open-income" style="width:100%">Other income</button></p>`;
   } else if (sh.type === "voice") {
@@ -3404,7 +3410,10 @@ function renderSheet() {
     }
   } else if (sh.type === "slip-verify") {
     const slip = (S().payslips ?? []).find((p) => p.transaction_id === sh.id);
-    body = `<h3>The payslip itself differs${sh.gap ? " by " + esc(peso(sh.gap)) : ""}. Verify anyway?</h3>
+    body = slip?.totals_unchecked ? `<h3>The printed totals were not checked. Verify anyway?</h3>
+      <p class="note">Check every line against the page first. ${esc(peso(slip.deposit))} reached the account, so that is what counts as money in. The payslip keeps the note "Totals not checked against the page".</p>
+      <p><button class="primary" data-action="verify-paper-gap">Verify anyway</button></p>
+      <p><button data-action="close-sheet" style="width:100%">Not now</button></p>` : `<h3>The payslip itself differs${sh.gap ? " by " + esc(peso(sh.gap)) : ""}. Verify anyway?</h3>
       <p class="note">${slip ? esc(peso(slip.deposit)) + " reached the account, so that is what counts as money in." : "What reached the account counts as money in."} The lines stay as they are, and the payslip keeps the note "Paper differs by${sh.gap ? " " + esc(peso(sh.gap)) : ""}".</p>
       <p><button class="primary" data-action="verify-paper-gap">Verify anyway</button></p>
       <p><button data-action="close-sheet" style="width:100%">Not now</button></p>`;
@@ -3558,8 +3567,9 @@ function refreshSave() {
   } else if (type === "otfree") {
     btn.disabled = !f.account_id;
   } else if (type === "payslip") {
-    const { p, ready, lines, t, marks, problems } = payslipMarks(f);
+    const { p, ready, unchecked, lines, t, marks, problems } = payslipMarks(f);
     btn.disabled = !ready || Boolean(ui.sheet.addLinesId && (problems.flags.length || marks.gross || marks.net || marks.ded));   // added lines must reconcile to the payslip as saved
+    { const u = $("p-unchecked"); if (u) u.hidden = !unchecked; if (!ui.sheet.addLinesId && btn.dataset.action === "save-payslip") btn.textContent = unchecked ? "Save as a draft" : ui.sheet.editId ? "Save changes" : "Save payslip"; }
     const out = $("p-flags");
     for (const [key, id] of [["gross", "p-gross"], ["net", "p-net"], ["ded", "p-ded"], ["deposit", "p-dep"]]) {
       const input = $(id), note = $("chk-" + key); if (!input && !note) continue;
@@ -4780,9 +4790,10 @@ async function onClick(el) {
       break;
     }
     case "verify-paper-gap": {
+      const slipUnchk = (S().payslips ?? []).find((x) => x.transaction_id === ui.sheet.id)?.totals_unchecked;
       const r = M.verifyDraft(S(), ui.sheet.id, new Date(), { acceptPaperGap: true });
       ui.sheet = null; renderSheet();
-      if (r.ok && await commit(r.state)) showToast("Verified. The payslip keeps its note: paper differs.");
+      if (r.ok && await commit(r.state)) showToast(slipUnchk ? "Verified. The payslip keeps its note: totals not checked." : "Verified. The payslip keeps its note: paper differs.");
       else if (!r.ok) showToast("Could not verify: " + r.violations[0].message);
       break;
     }

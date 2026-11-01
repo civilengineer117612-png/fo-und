@@ -182,6 +182,8 @@ P1
 
 P2-1 (owner chose it next, Oct 31) WebKit e2e: IN PROGRESS. The job `e2e-webkit` (.github/workflows/webkit.yml) runs every e2e script on Playwright's WebKit; it becomes a required check, and a deploy gate, only after 10 green runs in a row (the owner then adds it: Settings, Rules, the main ruleset, Require status checks, add "e2e-webkit").
 
+Next (owner, Nov 1, in order): photo-reader fix (BUILDING: payslip photos read as tables, Not checked and drafts, checks only against the page); 5k, 5w and the replace block on WebKit; stub ALL network in tests with a guard that fails on any real request; the real-clock sweep (every test on a fixed invented date, a guard that fails on the real clock; before Dec 31).
+
 P2 (wait for "next"): voice entry disclosure in Help and the first-run notice; library licence note; trim
 contradictions in CLAUDE.md; Android block decision; custom domain plan; Trips year grouping and period picker; ratchet screen;
 splitting `app/app.js`.

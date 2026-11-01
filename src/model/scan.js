@@ -105,7 +105,7 @@ function datesIn(text) {
   for (const m of t.matchAll(/\b(20\d\d)[-/.](\d{1,2})[-/.](\d{1,2})\b/g)) push(m.index, +m[1], +m[2], +m[3], m[0]);
   const mon = "(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?";
   for (const m of t.matchAll(new RegExp(`(?:\\b|(?<=to))${mon}\\s*(\\d{1,2})(?:st|nd|rd|th)?[,.]?\\s*(\\d{4})(?!\\d)`, "gi"))) push(m.index, +m[3], MONTHS.indexOf(m[1].toLowerCase()) + 1, +m[2], m[0]);
-  for (const m of t.matchAll(new RegExp(`(?<!\\d)(\\d{1,2})[\\s.]*${mon},?\\s*(\\d{4})(?!\\d)`, "gi"))) push(m.index, +m[3], MONTHS.indexOf(m[2].toLowerCase()) + 1, +m[1], m[0]);
+  for (const m of t.matchAll(new RegExp(`(?<!\\d)(\\d{1,2})[\\s.-]*${mon}[,-]?\\s*(\\d{4})(?!\\d)`, "gi"))) push(m.index, +m[3], MONTHS.indexOf(m[2].toLowerCase()) + 1, +m[1], m[0]);   // "16 Jan 2026", "16-Jan-2026"
   for (const m of t.matchAll(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{4}|\d{2})\b/g)) {
     const a = +m[1], b = +m[2], y = m[3].length === 2 ? 2000 + +m[3] : +m[3];
     if (a > 12 && b <= 12) push(m.index, y, b, a, m[0]);   // 25/10/2026 can only be day first
@@ -273,12 +273,16 @@ export function categoryFromHistory(state, payee) {
 // "year to date" heading.
 const EARNING_LABELS = [["basic", /basic|monthly\s*(salary|rate)|^regular\s+(?:[\d,]+\.\d{2})\s*$/], ["rice", /rice/], ["skills", /skill/], ["clothing", /cloth|uniform/], ["transport", /transport/],
   ["overtime", /over\s*-?time|\bot\b/], ["thirteenth", /13\s*th|thirteenth/], ["bonus", /bonus/]];
-const DEDUCTION_LABELS = [["loan", /\bloans?\b|advance/], ["tax", /with\w*ding|w\/\s*tax|\bwtax\b|\b[t1]ax\b(?!able)/], ["sss", /\b(?:sss|5ss|s5s|555)\b/], ["philhealth", /phil\s*-?health|\bphic\b|\bph[a-z]{1,5}ea/],
+const DEDUCTION_LABELS = [["loan", /\bloans?\b|advance/], ["tax", /with\w*ding|w\/\s*tax|\bwtax\b|\b[t1]ax\b(?!able)|\btax\s*deduct/], ["sss", /\b(?:sss|5ss|s5s|555)\b/], ["philhealth", /phil\s*-?health|\bphic\b|\bph[a-z]{1,5}ea/],
   ["pagibig", /p[a-z]{1,2}\s*-?\s*[il1]?\s*b[il1]g|pagibig|hdmf/], ["absences", /a[bh]sen|1\/2\s*day|half\s*-?\s*day/], ["lates", /\blates?\b|undertime|tardi/]];
 const SKIP_LINE = /total\s*(earnings|deductions|pay)|taxable|net\s*taxable|ytd|year\s*-?\s*to\s*-?\s*date|balance|leave/;
 
+// Owner, Nov 1: a column title is never a line, even when the reader glued a figure to it ("Hours 692.31"), and the rows of a table that is not
+// earnings or deductions (Summary, Accruals, PTO, Absences, Net Pay Distribution, Other Information, Messages) are never lines.
+const TITLE_ONLY = /^(?:(?:description|hours|amount|current|balance|value|number|this\s+pay|start\s+date|end\s+date)\s*)+$/i;
+const OTHER_TABLE = /^\s*(?:summary|accruals?|absences?|leave\s+balances?|net\s+pay\s+distribution|other\s+information|messages?(?:\(s\))?)\s*$/i;
 const INFO_LABELS = [["pay_rate", /\bpay\s*rate\b|\brate\s*of\s*pay\b/i], ["pay_basis", /\b(?:pay|rate)\s*basis\b/i], ["period_type", /\b(?:pay\s*)?period\s*type\b|\bpay\s*frequency\b/i]];
-const SECTION_HEADINGS = [["employer", /^\s*employer'?s?\s+(?:share|contributions?)\b/i], ["earning", /^\s*(?:earnings?|income|gross\s+earnings|hours\s+and\s+earnings)\b/i], ["deduction", /^\s*(?:deductions?|less\b|pre-?tax|after-?tax)/i]];
+const SECTION_HEADINGS = [["employer", /^\s*employer'?s?\s+(?:share|contributions?)\b/i], ["earning", /^\s*(?:earnings?|income|gross\s+earnings|hours\s+and\s+earnings)\b/i], ["deduction", /^\s*(?:deductions?|less\b|pre-?tax|after-?tax|tax\s*deductions?\s*$)/i]];
 // "Basic Salary   15,000.00   30,000.00" -> "Basic Salary": the printed words, with the figures and the currency sign taken off.
 const labelOf = (line) => line.replace(/(?:₱|php|\bp\b|#|£)?\s*(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}\b/gi, " ").replace(/\s+/g, " ").replace(/^[\s:.\-–]+|[\s:.\-–]+$/g, "").trim();
 
@@ -292,12 +296,15 @@ export function readPayslip(text, today, { allowHistorical = false } = {}) {
   const seen = new Set();
   body.forEach((line, i) => {
     const low = line.toLowerCase();
+    if (OTHER_TABLE.test(line)) { section = "other"; return; }   // the rows below it belong to that table until the next earnings or deductions heading
     const first = () => { const a = amountsIn(line); if (a.length) return a[0]; const next = body[i + 1]; return next && !/[a-z]{3}/i.test(next.replace(/php|peso/gi, "")) ? (amountsIn(next)[0] ?? null) : null; };
     if (/\bgross\b/.test(low) && !/taxable/.test(low)) { printed_gross ??= first(); return; }
     if (/net\s*(pay|salary|income|amount)|take[- ]?home/.test(low)) { printed_net ??= first(); return; }
     if (/total\s*salary/.test(low)) { total_salary ??= first(); return; }
     if (/total\s*deductions?/.test(low)) { printed_deductions ??= first(); return; }
     if (SKIP_LINE.test(low)) return;
+    if (TITLE_ONLY.test(labelOf(line))) return;
+    if (section === "other" && !SECTION_HEADINGS.some(([, re]) => re.test(line))) return;
     // EVERY printed line is kept as printed (data version 11): its label, its section, its first figure (0.00 too). The section comes from the heading above it
     // (Earnings, Deductions, Employer share); a line the old kind words recognise is placed by them. The owner adds what could not be placed.
     const infoHit = INFO_LABELS.find(([, re]) => re.test(line));
@@ -365,33 +372,45 @@ export function readPayslip(text, today, { allowHistorical = false } = {}) {
   const named = top.map(clean).find((l) => letters(l) >= 5 && letters(l) >= l.length * 0.6 && l.length <= 45);
   const employer = (labelled ? clean(labelled) : null) || company || named || null;
   const table = lines.includes("Payslip table") ? readPayrollTable(lines) : null;
-  return { employer, period_from, period_to, pay_date, printed_gross, printed_net, printed_deductions, earnings, deductions, items, info, notes, ...(table ?? {}), ...(table ? { notes: [...notes, ...table.notes] } : {}) };
+  const read = { employer, period_from, period_to, pay_date, printed_gross, printed_net, printed_deductions, earnings, deductions, items, info, ...(table ?? {}) };
+  // A table is read by its columns: the line-by-line notes (lines not placed, two figures on a line) are about a reading that was not used.
+  const kept = notes.filter((n) => !/printed (?:gross|net) pay/.test(n) && (!table || /pay date/.test(n)));
+  if (read.printed_gross == null || read.printed_net == null) kept.push(NOT_CHECKED);
+  return { ...read, notes: [...kept, ...(table?.notes ?? [])] };
 }
+// The owner's words (Nov 1): a payslip whose printed gross or net could not be found is not checked, and saving it makes a draft.
+export const NOT_CHECKED = "Not checked: the printed totals were not found. Check every line against the page.";
 
 // PDF text has positions but no reading order. Keep the two sides of a payslip
 // apart, and pair a summary/date table's headings with the values below them.
 // This reads column titles, never an employer name or a particular set of figures.
-export function pdfScanText(items) {
+const COLUMN_TITLES = /^(?:gross|pre-tax|taxes|deductions|net pay|payment date|pay begin date|pay end date|hours|amount)$/i;
+const rightOf = (i) => i.x + i.w;
+// The column titles printed on one row ("Gross  Pre-Tax  Taxes", "Hours  Amount"), each with where it sits; a title printed as up to four pieces is one title.
+function headersIn(row) {
+  const headers = [];
+  for (let j = 0; j < row.items.length; j++) {
+    for (let k = Math.min(j + 3, row.items.length - 1); k >= j; k--) {
+      const str = row.items.slice(j, k + 1).map((i) => i.str).join(" ").trim();
+      if (COLUMN_TITLES.test(str)) { const a = row.items[j], b = row.items[k]; headers.push({ ...a, str, w: rightOf(b) - a.x }); j = k; break; }
+    }
+  }
+  return headers;
+}
+function pageRows(items) {
   const rows = [];
   for (const item of [...items].filter((i) => String(i.str ?? "").trim()).sort((a, b) => b.y - a.y || a.x - b.x)) {
     const row = rows.find((r) => Math.abs(r.y - item.y) <= 2);
     if (row) row.items.push(item); else rows.push({ y: item.y, items: [item] });
   }
   for (const row of rows) row.items.sort((a, b) => a.x - b.x);
+  return rows;
+}
+export function pdfScanText(items) {
+  const rows = pageRows(items);
   const out = [];
   let numberColumns = [];
-  const right = (i) => i.x + i.w;
-  const headings = /^(?:gross|pre-tax|taxes|deductions|net pay|payment date|pay begin date|pay end date|hours|amount)$/i;
-  const headersIn = (row) => {
-    const headers = [];
-    for (let j = 0; j < row.items.length; j++) {
-      for (let k = Math.min(j + 3, row.items.length - 1); k >= j; k--) {
-        const str = row.items.slice(j, k + 1).map((i) => i.str).join(" ").trim();
-        if (headings.test(str)) { const a = row.items[j], b = row.items[k]; headers.push({ ...a, str, w: right(b) - a.x }); j = k; break; }
-      }
-    }
-    return headers;
-  };
+  const right = rightOf;
   const payroll = payrollTableText(rows, headersIn);
   if (payroll !== null) return payroll;
   for (let n = 0; n < rows.length; n++) {
@@ -441,7 +460,7 @@ function payrollTableText(rows, headersIn) {
   const out = ["Payslip table"];
   // An incomplete recognized table must fail closed, not fall back to label guesses.
   if (!pre) return out.join("\n");
-  const split = pre.x;
+  const split = pre.x - 6;   // a little left of the right column's title: on a photo its pieces start a fraction apart
   const emit = (key, value) => out.push(key + "\t" + value);
   const seenInfo = new Set();
   for (let n = 0; n < start; n++) {
@@ -511,6 +530,7 @@ function payrollTableText(rows, headersIn) {
       const h = headersIn(row).find(i => /^amount$/i.test(i.str));
       if (h) { amount = h; continue; }
       if (!amount) continue; // wrapped column headings, before the Amount heading
+      if (!row.items.some((i) => /^\d[\d,]*\.\d{2}$/.test(i.str.trim()))) continue;   // a wrapped column title under the headings ("Deposit/Cheque" over "Number")
       const value = [...row.items].sort((a,b)=>Math.abs(right(a)-right(amount))-Math.abs(right(b)-right(amount)))[0];
       if (Math.abs(right(value)-right(amount)) > 20) { emit("Unreadable", "distribution row"); continue; }
       emit("Distribution", value.str.trim());
@@ -574,9 +594,10 @@ function readPayrollTable(lines) {
   if (net !== null && distributions && deposit !== net && !flags.some(f => f.field === "deposit")) flag("deposit", `the account distribution is ${plain(net - deposit)} ${net > deposit ? "less" : "more"} than the printed net pay`);
   if (!distributions && !flags.some(f => f.field === "deposit")) flag("deposit", "the net pay distribution was not found");
   const entries = m => [...m].filter(([,amount]) => amount > 0).map(([kind,amount]) => ({kind,amount}));
-  // The best reading: the printed figure when there is one, else what the lines add to.
-  const earned = amounts.earning, printedNet = net ?? (gross ?? earned) - totalDed;
-  return { earnings: entries(earnings), deductions: entries(deductions), printed_gross: gross ?? (earned || null), printed_net: printedNet > 0 ? printedNet : null, printed_deductions: totalDed || (summary.get("pre-tax") ?? 0) + (summary.get("taxes") ?? 0) + (summary.get("deductions") ?? 0) || null, deposit: distributions ? deposit : (printedNet > 0 ? printedNet : null), items, info, notes: [], flags, unread };
+  // ONLY what the page prints (owner, Nov 1): a check compares the lines with the printed gross, net and deposit, never with a total made from the
+  // lines themselves (that would compare a value with itself and always pass). A figure the page does not show stays empty.
+  const printedDed = ["pre-tax", "taxes", "deductions"].some((k) => summary.has(k)) ? (summary.get("pre-tax") ?? 0) + (summary.get("taxes") ?? 0) + (summary.get("deductions") ?? 0) : null;
+  return { earnings: entries(earnings), deductions: entries(deductions), printed_gross: gross, printed_net: net, printed_deductions: printedDed || null, deposit: distributions ? deposit : null, items, info, notes: [], flags, unread };
 }
 
 
@@ -641,6 +662,32 @@ const tidyBox = (text) => {
   if (!(/^[\d.,oOBSIl₱#£P\s-]+$/.test(t) && /\d/.test(t))) return t;
   return cleanDigits(t).replace(/^(\D*\d{1,3})-(\d{3})-(\d{2})$/, "$1,$2.$3").replace(/(\d)\s(?=\d{3}[.,]\d{2}$)/g, "$1,");
 };
+// A PHOTO or a screenshot of a payroll table (owner's report, Nov 1: read line by line, the Hours column was taken as the amount, the Summary's figures
+// became deduction lines, the dates under their titles were lost). Its boxes are put back on the page's own grid (the tilt taken out, the rows
+// found, the size brought to a PDF's) and read by the SAME column reader as a PDF's text, so a figure belongs to the column title above it.
+// Used only when the page shows such a table: a payroll table (Hours and Earnings beside Pre-Tax Deductions), or column titles over figures
+// (Hours and Amount, a Summary's Gross and Net Pay, or the three pay dates). Otherwise null, and the boxes are read as before.
+function tableTextFromBoxes(boxes) {
+  const hOf = (b) => b.y1 - b.y0;
+  const tilt = median(boxes.filter((b) => (b.x1 - b.x0) > 3 * hOf(b)).map((b) => b.th ?? 0));
+  const c = Math.cos(tilt), s = Math.sin(tilt), slope = Math.abs(Math.tan(tilt));
+  // a tilted box's frame is taller than its letters by its width times the slope; the letters' own height is what sizes the rows
+  // The reader's habits with figures (seen on a real run): a thousands comma read as a dot ("1.000.00"), a decimal point read as a comma ("4,00"),
+  // or both read as spaces ("9 750 00"). A figure is put back in the PDF's own writing ("1,000.00", "4.00") so the column reader takes it.
+  const figure = (t) => { const m = /^(\d{1,3})((?:[., ]\d{3})*)[., ](\d{2})$/.exec(t); return m ? m[1] + m[2].replace(/[., ]/g, ",") + "." + m[3] : t; };
+  const pts = boxes.map((b) => { const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, w = (b.x1 - b.x0), hh = Math.max(0.3 * hOf(b), hOf(b) - w * slope); return { t: figure(b.t), x: cx * c + cy * s, y: cy * c - cx * s, w, hh }; });
+  const H = median(pts.map((p) => p.hh)) || 10, rows = [];
+  for (const p of [...pts].sort((a, b) => a.y - b.y)) { const row = rows[rows.length - 1]; if (row && p.y - row.y < 0.5 * H) { row.ps.push(p); row.y = row.ps.reduce((n, q) => n + q.y, 0) / row.ps.length; } else rows.push({ y: p.y, ps: [p] }); }
+  const k = 8.333333333 / H;   // the size of a PDF's letters, so the same distances mean the same thing
+  const items = rows.flatMap((r) => r.ps.map((p) => ({ str: p.t, x: (p.x - p.w / 2) * k, w: p.w * k, y: -r.y * k, h: 8.333333333 })));
+  const grid = pageRows(items), titles = grid.map((r) => headersIn(r).map((h) => h.str.toLowerCase()));
+  const payroll = grid.some((r) => /Hours and Earnings/i.test(r.items.map((i) => i.str).join(" "))) && grid.some((r) => /Pre[- ]?Tax Deductions/i.test(r.items.map((i) => i.str).join(" ")));
+  const titled = titles.some((t) => (t.includes("hours") && t.includes("amount")) || (t.includes("gross") && t.includes("net pay")) || ["payment date", "pay begin date", "pay end date"].every((d) => t.includes(d)));
+  if (!payroll && !titled) return null;
+  const text = pdfScanText(items);
+  return text.trim() && (!payroll || /^Line /m.test(text)) ? text : null;
+}
+
 export function linesFromBoxes(input) {
   let w = [];
   for (const x of input ?? []) {
@@ -653,6 +700,8 @@ export function linesFromBoxes(input) {
     } else w.push({ ...x, t, th: x.th ?? 0 });
   }
   if (!w.length) return "";
+  const table = tableTextFromBoxes(w);   // a page printed as a table (column titles over its figures) is read by its columns, as a PDF is
+  if (table) return table;
   for (const b of w) { b.cx = (b.x0 + b.x1) / 2; b.cy = (b.y0 + b.y1) / 2; b.h = b.y1 - b.y0; b.amount = BOX_AMOUNT.test(b.t); }
   const h = median(w.map((b) => b.h)) || 10;
   const wide = w.filter((b) => (b.x1 - b.x0) > 3 * h);

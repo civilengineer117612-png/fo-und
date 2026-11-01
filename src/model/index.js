@@ -6,7 +6,7 @@ import { countedEntries } from "./balances.js";
 
 export { SCHEMAS, validateShape } from "./schema.js";
 export { COLLECTION_NAMES, MIGRATIONS, selfCheck, fingerprint, upgradeLedger, rotateCopies, restorableCopy } from "./migrate.js";
-export { QUICK_NOTES, FIRST_RUN_NOTICE, TOPICS as HELP_TOPICS, checklist } from "./help.js";
+export { QUICK_NOTES, FIRST_RUN_NOTICE, PDF_TIP, TOPICS as HELP_TOPICS, checklist } from "./help.js";
 export { SCREEN_NAMES, MENU_GROUPS, TERMS, menuHidden, HUBS, hubOf, menuRows, STRIP_NAMES } from "./names.js";
 export { drawing, DRAWING_IDS, NOTE_ICONS } from "./helpart.js";
 export { suggestPlan, median, paydayDays, usableMonths, NO_PAYSLIP_MESSAGE } from "./suggest.js";
@@ -94,8 +94,8 @@ export { BANKS, CASH, pickerBanks, bankById, bankForName, planAccount, isPocket,
 export { MOVE_KINDS, CHOOSE_MESSAGE, FEE_PREFIX, BANK_FEES_ROLE, isFeeId, feeIdOf, normalizeLast4, accountByLast4, setAccountLast4, last4In, recipientKey, readMove, classifyMove, rememberRecipient, ensureBankFees, planTransfer, editTransfer, draftToMove, feeOf, foreignOf, lastRate } from "./transfers.js";
 export { findDuplicate } from "./invariants.js";
 export { INTEREST_ROLE, SCHEDULE_WINDOW_DAYS, CATCH_UP_DAYS, draftIdFor, isScheduleDraftId, monthsAfter, historyOf, paymentsOf, paymentState, makeDueDrafts, draftFor, reserveForPlan, reserveIdFor, payKey, suggestInputs, skippedOf, nextOpenPayment, ensureInterestCategory, addSchedule, setNewAmount, skipPayment, pastPayments, madeAfterAnswers, markAlreadyPaid, endSchedule, markPaidOff, markNextDue, payNext, skipOnDelete, viewOf, dueSoon, daysText, planLine, committedIn, matchDueDraft, linkToDue, planInText, linkedEntry, detailsAt, findLogged, linkPayment, setDueDay, setDetail, removeSchedule, statusOf } from "./schedules.js";
-export { KINDS, kindById, wordsToCentavos, readScan, readPayslip, linesFromWords, linesFromBoxes, snapEmployer, categoryFromHistory } from "./scan.js";
-export { incomeByCategory, wordingKept, ORIGINAL_NOT_KEPT, EARNINGS, DEDUCTIONS, GOVERNMENT, LOST, SOURCES, OVERTIME_SHARE, linesOf, payslipTotals, payslipChecks, payslipProblems, payslipDraftBlock, liveSlips, planPayslip, overtimeDraft, overtimeFreeDraft, incomeBySource, incomeMonths, slipDate, deletePayslip, updatePayslip, incomeWithoutPayslip, removeIncomeEntry, incomeByMonth, netPerPayday, raiseHistory, deductionsByMonth, employerHistory, PAYSLIP_VERSION, revisionsOf, payslipNotes, missingPayPeriods, samePeriodPayslips, markPayslipChecked, revisionChanges, incomeBreakdown, addPrintedLines, payMonthShift, periodEnd, slipCancelled } from "./income.js";
+export { KINDS, kindById, wordsToCentavos, readScan, readPayslip, NOT_CHECKED, linesFromWords, linesFromBoxes, snapEmployer, categoryFromHistory } from "./scan.js";
+export { incomeByCategory, wordingKept, ORIGINAL_NOT_KEPT, EARNINGS, DEDUCTIONS, GOVERNMENT, LOST, SOURCES, OVERTIME_SHARE, linesOf, payslipTotals, payslipChecks, payslipProblems, TOTALS_UNCHECKED, payslipDraftBlock, liveSlips, planPayslip, overtimeDraft, overtimeFreeDraft, incomeBySource, incomeMonths, slipDate, deletePayslip, updatePayslip, incomeWithoutPayslip, removeIncomeEntry, incomeByMonth, netPerPayday, raiseHistory, deductionsByMonth, employerHistory, PAYSLIP_VERSION, revisionsOf, payslipNotes, missingPayPeriods, samePeriodPayslips, markPayslipChecked, revisionChanges, incomeBreakdown, addPrintedLines, payMonthShift, periodEnd, slipCancelled } from "./income.js";
 export { VARIABLE_CATEGORIES, variableParts, stableOf, recurringLabels, labelKey, periodKind, inferKind, payFrequency, extraPaydays, payBase, PAYDAYS_A_MONTH } from "./stablepay.js";
 export { homeSummary } from "./summary.js";
 export { parseSpoken } from "./speech.js";

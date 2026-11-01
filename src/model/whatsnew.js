@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-01-photo-tables", date: "2026-11-01", text: "Payslip photos printed as tables are read by their columns, and a payslip whose printed totals cannot be found says Not checked and is saved as a draft." },
   { id: "2026-11-01-picture-not-kept", date: "2026-11-01", text: "If a picture cannot be kept on this phone, the entry is still saved and a message says so; the entry then shows Picture not on this phone." },
   { id: "2026-10-31-uncategorized", date: "2026-10-31", text: "Spending with no category is now called Uncategorized everywhere; \"Not yet explained\" stays for count gaps that are not spending." },
   { id: "2026-10-31-one-backup", date: "2026-10-31", text: "A backup is now one file with your ledger and pictures together; only a very big one is cut into parts, and Restore takes the file or all its parts." },
