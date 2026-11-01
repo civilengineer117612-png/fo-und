@@ -10,10 +10,11 @@ const browser = await launchBrowser();
 const base = process.env.BASE ?? "http://127.0.0.1:8124/app/index.html";
 const errors = [];
 const TS = "2026-10-22T03:00:00Z";
-async function open(seedLedger) {
+async function open(seedLedger, routes = []) {   // routes: [pattern, (body) => body] changes a file the page loads (to force a failure)
   const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
     userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1" });
   await ctx.route("**/*", (route) => new URL(route.request().url()).origin === new URL(base).origin ? route.continue() : route.abort());
+  for (const [pattern, change] of routes) await ctx.route(pattern, async (route) => { const r = await route.fetch(); route.fulfill({ response: r, body: change(await r.text()) }); });
   await ctx.addInitScript(() => { Object.defineProperty(navigator, "standalone", { get: () => true }); sessionStorage.setItem("logOpen", "1"); });
   const page = await ctx.newPage();
   page.on("pageerror", (error) => errors.push(error.message));
@@ -258,6 +259,38 @@ try {
     assert.ok((await block.innerText()).includes("Meal Subsidy"), "tapping a category shows its printed lines");
     assert.deepEqual(errors, []); await ctx.close();
     console.log("ok: a category chosen once is remembered for that employer and label only; changing a past line's category touches only that line and leaves a record; Income groups lines by category"); }
+
+
+  // ---------- 5. a payslip Save never does nothing (owner, Nov 1, P0) ----------
+  // Type a payslip and tap Save straight after the last figure, as on the phone with the keyboard still open. On Safari's engine the Save tap was lost
+  // (the window stayed, nothing was saved, nothing was said). Then the same with the save forced to fail: a plain message, and what was typed stays.
+  const typeSlip = async (page) => {
+    await goIncome(page); await page.locator('button:has-text("Add income")').click(); await page.locator('#sheet button:has-text("Type a payslip")').click();
+    await page.locator("#p-emp").fill("Sample Employer Inc");
+    await openSection(page, "e"); await addLine(page, "earning", "Basic Salary", "10000");
+    await page.locator("#p-from").fill("2026-10-01"); await page.locator("#p-to").fill("2026-10-15"); await page.locator("#p-date").fill("2026-10-20");
+    await page.locator('#sheet details[data-keep="t"] > summary').click();
+    for (const [id, v] of [["#p-gross", "10000"], ["#p-net", "10000"], ["#p-dep", "10000"]]) await page.locator(id).fill(v);   // the deposit is the last figure typed: its box still has the keyboard
+  };
+  { const { ctx, page } = await open(seeded());
+    await typeSlip(page);
+    await page.locator("#f-save").click();   // straight from the deposit box
+    await page.locator("#toast", { hasText: "Payslip saved" }).waitFor({ timeout: 5000 });
+    assert.equal((await ledgerOf(page)).state.payslips.length, 1, "Save straight after the last figure saves the payslip");
+    assert.deepEqual(errors, []); await ctx.close();
+    console.log("ok: Save tapped straight after typing the last figure saves the payslip"); }
+  { const { ctx, page } = await open(seeded(), [[/\/src\/model\/income\.js/, (b) => b.replace(/export function planPayslip\(.*?\) \{/, (m) => m + ' throw new Error("test: the save failed");')]]);
+    await typeSlip(page);
+    await page.locator("#f-save").click();
+    await page.locator("#toast", { hasText: "The payslip was not saved" }).waitFor({ timeout: 5000 });
+    assert.equal(await page.locator("#toast").innerText(), "The payslip was not saved (test: the save failed). What you typed is still here; tap Save again.");
+    assert.equal(await page.locator("#p-emp").inputValue(), "Sample Employer Inc", "the window is still open with what was typed");
+    assert.equal(await page.locator("#p-dep").inputValue(), "10000");
+    assert.equal(await page.locator('#sheet details.tot[data-keep="e"] .pl').count(), 1, "and its line");
+    assert.equal(await page.locator("#f-save").isDisabled(), false, "Save can be tapped again");
+    assert.equal((await ledgerOf(page)).state.payslips.length, 0, "nothing was saved");
+    await ctx.close();
+    console.log("ok: a payslip Save that fails says so in plain words and keeps what was typed"); }
 
   assert.deepEqual(errors, []);
 } finally { await browser.close(); }
