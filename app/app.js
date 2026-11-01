@@ -260,7 +260,7 @@ async function commit(state, settings = ledger.settings, { quiet = false } = {})
 }
 
 // ---------- rendering ----------
-function renderAll() { if (ui.locked) return; renderBanner(); renderScreen(); renderNav(); renderSheet(); renderMenu(); }
+function renderAll() { if (ui.locked) return; if (holdingTap()) { afterTap(renderAll); return; } renderBanner(); renderScreen(); renderNav(); renderSheet(); renderMenu(); }
 
 // Everything that is not Log or Verify lives in the menu at the upper left, so new screens (and later photo
 // and audio capture beside Log and Verify) can be added without crowding the bottom bar.
@@ -394,6 +394,7 @@ function groupRows(root) {
 let lastTabSig = null, lastViewSig = null, swapTimer = null;
 function renderScreen() {
   if (ui.locked) return;
+  if (holdingTap()) { afterTap(renderScreen); return; }   // never redraw under a finger (tap-safety): it waits until this tap has landed
   applyAppearance();
   if (ui.tab === "cards" && lastTabSig !== "cards") { ui.cardsShown = false; ui.pocketsOpen = {}; }   // Cards opens with every amount hidden and every pocket folded; nothing is remembered
   if (ui.tab !== "log") ui.arrange = false;
@@ -2665,6 +2666,7 @@ async function finishSchedule(r, form, paidKeys) {
 }
 function renderSheet() {
   if (ui.locked) return;
+  if (holdingTap()) { afterTap(renderSheet); return; }
   const sh = ui.sheet;
   if (!sh) { $("sheet").innerHTML = ""; lastSheetKey = null; lockPage(false); return; }
   const key = [sh.type, sh.id ?? "", sh.queueId ?? ""].join(":"), opening = lastSheetKey !== key, keepAt = lastSheetKey === key ? document.querySelector("#sheet .sheet")?.scrollTop ?? 0 : 0;
@@ -3514,6 +3516,22 @@ function renderSheet() {
 // Safari's engine drops a tap when the inside of the pressed button is replaced between the press and the release (proved on WebKit, Nov 1: leaving the
 // last box re-ran this refresh, which rewrote the Save button's text, and the payslip Save did nothing). So a button's text is written ONLY when it changes.
 const setText = (el, text) => { if (el && el.textContent !== text) el.textContent = text; };
+// The same for a part rebuilt from markup (owner, Nov 1, tap-safety sweep): written only when its markup changes, so a button inside it is not
+// replaced under the finger by a refresh that changed nothing.
+const lastHtml = new WeakMap();
+const setHtml = (el, html) => { if (el && lastHtml.get(el) !== html) { el.innerHTML = html; lastHtml.set(el, html); } };
+// A redraw that really changes the page while a finger is down waits until that tap has landed: the press and the release must meet the same
+// button. Used where a redraw can arrive in the middle of a tap: a save finishing (the phone's store answers later), the iPhone reporting a list's
+// new choice only when the picker closes (on the tap on the next button), and the search list. Never longer than 1.5 seconds (a held finger).
+let fingerDown = false, afterTapJobs = [];
+const runAfterTap = () => { const jobs = [...new Set(afterTapJobs)]; afterTapJobs = []; for (const job of jobs) job(); };
+document.addEventListener("pointerdown", () => { fingerDown = true; }, true);
+const fingerUp = () => { if (!fingerDown) return; fingerDown = false; setTimeout(runAfterTap, 0); };   // a timer: after the click that follows this release
+document.addEventListener("pointerup", fingerUp, true); document.addEventListener("pointercancel", fingerUp, true);
+// A finger is down on something that is waiting for its click. A hold gesture (arrange tiles or rows, a how-to clip) sets suppressClick before it redraws:
+// it redraws ON PURPOSE while the finger is down, and its click is cancelled anyway, so it is not held back.
+const holdingTap = () => fingerDown && !suppressClick;
+const afterTap = (job) => { if (!fingerDown) { job(); return; } afterTapJobs.push(job); setTimeout(() => { if (afterTapJobs.includes(job)) { fingerDown = false; runAfterTap(); } }, 1500); };
 function refreshSave() {
   const btn = $("f-save");
   if (!btn) return;
@@ -3540,7 +3558,7 @@ function refreshSave() {
       // a card that owes LESS than the ledger says was usually paid and the payment is not logged yet: one button logs it (owner, Oct 20), so it is not counted as money found
       const less = card && gap < 0 ? -gap : 0;
       box.hidden = !less && gap === 0;
-      box.innerHTML = (less ? `<button data-action="count-paid" style="width:100%">I paid the card: log ${peso(less)}</button>` : "") + (gap !== 0 ? `<p class="note small">Count your other accounts too. Then the Weekly review shows every gap side by side and asks what happened.</p>` : "");
+      setHtml(box, (less ? `<button data-action="count-paid" style="width:100%">I paid the card: log ${peso(less)}</button>` : "") + (gap !== 0 ? `<p class="note small">Count your other accounts too. Then the Weekly review shows every gap side by side and asks what happened.</p>` : ""));
     }
     setText(btn, "Save count");
   } else if (type === "gap-move") {
@@ -3595,8 +3613,8 @@ function refreshSave() {
       if (ask) ask.hidden = !open; if (box) box.hidden = open; if (q) q.textContent = "The figures differ" + (problems.gap ? " by " + peso(problems.gap) : "") + ". Save as a draft to check later?"; }
     for (const [key, id, from] of [["e", "chk-e", marks.gross], ["d", "chk-d", marks.ded]]) { const note = $(id); if (note) { note.hidden = !from; note.textContent = from ? "\u25B2 Check this: " + from : ""; } }
     if (out) {
-      const te = $("p-tot-e"), td = $("p-tot-d"), tr = $("p-tot-r"); if (te) te.textContent = peso(t.gross); if (td) td.textContent = peso(t.deductions);
-      if (tr && f.items) tr.textContent = peso(f.items.filter((i) => i.section === "employer").reduce((n, i) => { const a = M.parsePesos(i.amt ?? ""); return n + (a.ok ? a.centavos : 0); }, 0));
+      const te = $("p-tot-e"), td = $("p-tot-d"), tr = $("p-tot-r"); setText(te, peso(t.gross)); setText(td, peso(t.deductions));
+      if (tr && f.items) setText(tr, peso(f.items.filter((i) => i.section === "employer").reduce((n, i) => { const a = M.parsePesos(i.amt ?? ""); return n + (a.ok ? a.centavos : 0); }, 0)));
       const flags = problems.flags.filter((x) => x.code === "WORDS" || (x.code === "GROSS" && /leaves out the overtime/.test(x.message)));   // the two checks that name something no field mark can
       const matches = lines.length && p.printed_gross && p.printed_net && p.deposit && !problems.flags.length && !p.errors.length;
       const box = $("p-lines"), tap = $("p-match");
@@ -5475,7 +5493,7 @@ document.addEventListener("input", (e) => {
   if (e.target.type === "file") return;   // handled on change
   if (field === "sub" && !ui.sheet) { ui.accountForm.sub = e.target.value; const p = $("a-preview"); if (p) p.textContent = "Saved as: " + accountPreview(ui.accountForm); return; }
   if (field === "zoom") { zoomTo(Number(e.target.value)); return; }
-  if (ui.sheet?.type === "entries" && field === "q") { ui.form.q = e.target.value; const l = $("entries-list"); if (l) l.innerHTML = entriesListHtml(); return; }
+  if (ui.sheet?.type === "entries" && field === "q") { ui.form.q = e.target.value; afterTap(() => { const l = $("entries-list"); if (l) setHtml(l, entriesListHtml()); }); return; }
   if (ui.sheet && field.startsWith("i:") && ui.form.items) {   // a field of one printed payslip line: i:<line>:<label|amt|hours>
     const [, k, prop] = field.split(":"), it = slipItem(ui.form, k);
     if (it) { it[prop] = e.target.value; if (prop === "label") { const fl = M.itemFlags(it.label); if (fl.back_pay) it.back_pay = true; else delete it.back_pay; if (fl.tax) it.tax = fl.tax; else delete it.tax; } refreshSave(); }
