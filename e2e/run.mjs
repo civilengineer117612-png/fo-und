@@ -480,10 +480,12 @@ check(/^[2-9a-z]{5}(-[2-9a-z]{5}){3}$/.test(made) && (await page.inputValue("#b-
 check(await page.locator('button[data-action="copy-passphrase"]').isVisible(), "and offers to copy it");
 await page.fill("#b-pass", PASS); await page.fill("#b-pass2", PASS);
 await shot(page, "10-backup-sheet");
+await page.evaluate(() => { window.__asked = []; const click = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) window.__asked.push(this.download); return click.call(this); }; });   // the name the app gives the file
 var [download] = await Promise.all([page.waitForEvent("download"), page.click("#f-save")]);
 var file = join(mkdtempSync(join(tmpdir(), "bk-")), download.suggestedFilename());
 await download.saveAs(file);
-check(/^fo-und backup 2026-10-03 \d\d-\d\d\.json$/.test(download.suggestedFilename()), "the file is named fo-und backup, the date and the time: " + download.suggestedFilename());
+{ const asked = await page.evaluate(() => window.__asked), browserName = download.suggestedFilename();   // Playwright's WebKit build saves "a b.json" as "a_b.json"; Chromium keeps the name
+  check(asked.length === 1 && /^fo-und backup 2026-10-03 \d\d-\d\d\.json$/.test(asked[0]) && (ENGINE === "webkit" || browserName === asked[0]), "the file is named fo-und backup, the date and the time: " + asked[0] + (browserName !== asked[0] ? " (saved by this test browser as " + browserName + ")" : "")); }
 var raw = readFileSync(file, "latin1"), { readBackupHeader } = await import("../src/model/index.js"), box1 = (await readBackupHeader(new Blob([readFileSync(file)]))).header;
 check(box1.kind === "backup" && box1.v === 2 && box1.iterations === 600000 && box1.parts === 1 && box1.part === 1, "it is ONE encrypted backup file, with the same 600,000 rounds of key stretching");
 check(!["Test Cash", "Test Card", "Lunch", "9500"].some((x) => raw.includes(x)), "the file contains none of your data in the clear");
@@ -1266,6 +1268,7 @@ check((await text(page, "#scan-why")) === "Choose the account it was paid from t
 await page.fill("#f-date", "2026-10-03");   // dated today, so the entry shows in the Log list
 await page.click('#sheet .chip:has-text("Wallet")');
 check((await text(page, "#scan-why")) === "" && await page.locator("#f-save").isEnabled(), "once the account is chosen the line is gone and saving is on");
+if (!TOOLS.pictureStore) { skippedPictures("5f from saving the photo on: the saved photo, See the photo, Verify's photo and the photo queue"); await ctx.close(); } else {
 await page.click("#f-save");
 check(await seen(page, "#screen", "as a draft with its photo"), "saving keeps it as a draft, with its photo");
 await page.click('#nav button:has-text("Log")');
@@ -1588,8 +1591,10 @@ await page.click('#sheet button:has-text("Throw this photo away")');
 check(await seen(page, "#toast", "thrown away") && (JSON.parse((await stored(page)).local).settings.scan_queue ?? []).length === 0, "throwing it away empties the queue");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await ctx.close();
-} catch (e) { await blockFailed(e); }
+} } catch (e) { await blockFailed(e); }
 
+// ===== 5f2. a picture the phone cannot keep never stops the entry =====
+try { blockName = "5f2. a picture the phone cannot keep never stops the entry";
 console.log("A picture that cannot be kept");
 ({ ctx, page, errors } = await open({ blockSw: true }));
 await addAccount(page, "MariBank", "asset", "0");
@@ -1635,6 +1640,7 @@ await addAccount(page, "MariBank \u00b7 Credit card", "liability", "0");
 }
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5g. income: a payslip with overtime =====
 try { blockName = "5g. income: a payslip with overtime";
@@ -2133,9 +2139,9 @@ console.log("Help and upgrade safety");
   check(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && [...document.querySelectorAll("svg.hd")].every((v) => v.getBoundingClientRect().width <= 288.5)), "nothing scrolls sideways at 320 px wide and every drawing fits");
   check(await page.evaluate(() => [...document.querySelectorAll("svg.hd text")].every((t) => { const r = t.getBoundingClientRect(), v = t.ownerSVGElement.getBoundingClientRect(); return r.left >= v.left - 0.5 && r.right <= v.right + 0.5 && parseFloat(getComputedStyle(t).fontSize) * (v.width / 288) >= 11; })), "every drawing word fits inside its drawing and is at least 11 px as shown");
   check(await page.evaluate(() => [...document.querySelectorAll("svg.hd *")].every((e) => { const c = getComputedStyle(e); return ![c.fill, c.stroke].some((x) => x === "rgb(208, 59, 59)"); })), "no drawing uses the red");
-  await page.screenshot({ path: process.env.SHOTS ? process.env.SHOTS + "/help-light.png" : "/tmp/help-light.png", fullPage: true });
+  await page.screenshot({ path: process.env.SHOTS ? process.env.SHOTS + "/help-light.png" : "/tmp/help-light.png", fullPage: TOOLS.longScreenshot });
   await page.addStyleTag({ content: ":root{--ink:#eee;--mid:#aaa;--soft:#777;--line:#444;--wash:#242424;--paper:#111;--chart:#6aa9f0}" });
-  await page.screenshot({ path: process.env.SHOTS ? process.env.SHOTS + "/help-dark.png" : "/tmp/help-dark.png", fullPage: true });
+  await page.screenshot({ path: process.env.SHOTS ? process.env.SHOTS + "/help-dark.png" : "/tmp/help-dark.png", fullPage: TOOLS.longScreenshot });
   await page.click("#menuBtn"); await page.click('#menu button[data-tab="help"]');
   await page.click('button[data-action="open-notice"]');
   check(await page.locator("#sheet svg.hd[data-drawing=data]").isVisible(), "the first-run notice shows the where-your-data-lives drawing");

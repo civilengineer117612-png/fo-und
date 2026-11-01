@@ -30,6 +30,7 @@ export async function launchBrowser() {
 export const TOOLS = {
   virtualAuthenticator: ENGINE === "chromium",   // the Chrome DevTools "WebAuthn" virtual Face ID (applock.mjs)
   clipboardPermission: ENGINE === "chromium",    // ctx.grantPermissions(["clipboard-read", "clipboard-write"]): Playwright's WebKit has no such permission
+  longScreenshot: ENGINE === "chromium",          // a full-page screenshot taller than 32767 px (the Help page): WebKit refuses it; the picture is for review only, never checked
   pictureStore: ENGINE === "chromium",            // IndexedDB keeping a picture (a Blob): Playwright's WebKit build refuses it (engine-probe.mjs: "write error")
   serviceWorkerNetwork: ENGINE === "chromium",   // staging the network (ctx.route) for requests a service worker makes: Playwright's WebKit cannot, so those requests reach the real internet
 };

@@ -73,5 +73,7 @@ test("checks that keep a picture are skipped on WebKit with the owner's reason, 
   assert.match(engine, /pictureStore: ENGINE === "chromium"/);
   assert.ok(engine.includes('"WebKit test build cannot store pictures in IndexedDB; the owner\'s iPhone does (pictures are saved and backed up there)."'), "the owner's words, exactly");
   const blocks = [...run.matchAll(/^try \{ blockName = "(.+)"; if \(!TOOLS\.pictureStore\) skippedPictures\(blockName\); else \{$/gm)].map((m) => m[1]);
+  assert.equal([...run.matchAll(/skippedPictures\(/g)].length, 4, "the three blocks, and 5f from saving its photo on");
+  assert.match(run, /if \(!TOOLS\.pictureStore\) \{ skippedPictures\("5f from saving the photo on: /);
   assert.deepEqual(blocks, ["5x. old pictures are shrunk, recent ones are not", '5x2. \\"Shrink them now\\"', "5y. the Pictures file: back up, lose the pictures, put them back"]);
 });

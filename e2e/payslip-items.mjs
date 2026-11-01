@@ -206,7 +206,7 @@ try {
     };
     // payslip 1: an unfamiliar label
     await save("Sample Employer Inc", [["Basic Salary", "10000"], ["Meal Subsidy", "700"]]);
-    assert.equal(await rows(page, "e").locator(".pl-cat").first().innerText(), "Basic pay (suggested) ›", "Basic Salary is only suggested as basic pay");
+    assert.equal((await rows(page, "e").locator(".pl-cat").first().textContent()).replace(/\s+/g, " ").trim(), "Basic pay (suggested) ›", "Basic Salary is only suggested as basic pay");   // textContent: screen-reader text (sronly) is left out of WebKit's innerText
     assert.equal(await rows(page, "e").filter({ hasText: "Meal Subsidy" }).locator(".pl-cat.need").count(), 1, "an unfamiliar label asks for a category");
     await page.locator('#sheet details[data-keep="t"] > summary').click();
     for (const [id, v] of [["#p-gross", "10700"], ["#p-net", "10700"], ["#p-dep", "10700"]]) await page.locator(id).fill(v);
@@ -219,7 +219,7 @@ try {
     await page.waitForFunction(() => JSON.parse(localStorage.getItem("financialTracker.ledger")).state.payslips.length === 1);
     // payslip 2, same employer: the same label has its category already; another employer's does not
     await save("Sample Employer Inc", [["Meal Subsidy", "800"]]);
-    assert.equal(await rows(page, "e").locator(".pl-cat").first().innerText(), "Allowances ›", "the same employer and label: the choice is remembered");
+    assert.equal((await rows(page, "e").locator(".pl-cat").first().textContent()).replace(/\s+/g, " ").trim(), "Allowances ›", "the same employer and label: the choice is remembered");
     await page.evaluate(() => document.querySelector('#sheet [data-action="close-sheet"]')?.click());
     await save("Another Company", [["Meal Subsidy", "800"]]);
     assert.equal(await rows(page, "e").locator(".pl-cat.need").count(), 1, "another employer with the same label gets nothing");
