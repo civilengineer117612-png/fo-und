@@ -101,7 +101,11 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 - **Rule.** What is added up must equal what was printed or counted.
 - **In the app.** A payslip's earnings must equal its gross, its deductions its printed total, gross minus deductions its net, and the deposit its net;
   a difference is marked "Check this", never hidden. Added lines for an old payslip must reconcile to what it holds.
-- **Guarded by.** "CONTROL TOTALS", `tests/income.test.js`, `tests/stablepay.test.js`.
+  A control total is ONLY a figure read from the printed page (gross, net, deposit), never a total made from the lines themselves (that would
+  compare a value with itself and always pass). When the printed gross or net is not found the payslip says "Not checked" and is saved as a draft
+  (`totals_unchecked`), which no check ever counts as proven. A net of zero or below is always marked "Check this".
+- **Guarded by.** "CONTROL TOTALS", `tests/income.test.js`, `tests/stablepay.test.js`, `tests/photo-payslip.test.js` (audit: changing a line never
+  moves the figure it is checked against), `tests/totals-unchecked.test.js`, `e2e/photo-payslip.mjs`.
 
 ### 12. Materiality is not used
 - **Rule.** No difference is too small to explain. Every centavo is explained or held in suspense; nothing is rounded away.

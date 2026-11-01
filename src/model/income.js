@@ -70,8 +70,11 @@ export function payslipChecks(payslip, lines) {
 
 // Everything that does not add up on a payslip, as flags, plus the gap in centavos for the one plain question "The figures differ by X".
 // The four checks above, and the printed deductions total against the lines. Empty means every figure is proven by the arithmetic.
+export const TOTALS_UNCHECKED = "The printed totals were not checked against the page.";
 export function payslipProblems(payslip, lines) {
   const flags = payslipChecks(payslip, lines), t = payslipTotals(lines);
+  // Its gross and net came from the lines themselves, so the arithmetic below proves nothing: it is never "adds up" until the owner says so at Verify.
+  if (payslip.totals_unchecked) flags.unshift({ code: "UNCHECKED", message: TOTALS_UNCHECKED });
   if (payslip.printed_deductions > 0 && payslip.printed_deductions !== t.deductions) flags.push({ code: "DEDUCTIONS", message: `The printed deductions are ${peso(payslip.printed_deductions)} but the deduction lines add to ${peso(t.deductions)}.` });
   const gaps = [payslip.printed_gross - t.gross, payslip.printed_net - t.net, payslip.deposit - payslip.printed_net, payslip.printed_deductions > 0 ? payslip.printed_deductions - t.deductions : 0];
   return { flags, gap: Math.abs(gaps.find((g) => g !== 0) ?? 0) };
@@ -81,6 +84,7 @@ export function payslipDraftBlock(state, transactionId) {
   const p = (state.payslips ?? []).find((x) => x.transaction_id === transactionId);
   if (!p) return null;
   const { flags, gap } = payslipProblems(p, linesOf(state, p.id));
+  if (p.totals_unchecked) return { gap: 0, unchecked: true, message: TOTALS_UNCHECKED };
   return flags.length ? { gap, message: "The payslip itself differs" + (gap ? " by " + peso(gap) : "") + "." } : null;
 }
 
@@ -118,7 +122,7 @@ export function planPayslip(state, input, now = new Date()) {
   ];
   const payslip = { id: input.id, employer, period_from: input.period_from, period_to: input.period_to, pay_date: input.pay_date, account_id: account.id,
     transaction_id: input.transaction_id, printed_gross: input.printed_gross, printed_net: input.printed_net, deposit: input.deposit,
-    ...(input.net_words ? { net_words: input.net_words } : {}), ...(input.printed_deductions > 0 ? { printed_deductions: input.printed_deductions } : {}), version: PAYSLIP_VERSION,
+    ...(input.net_words ? { net_words: input.net_words } : {}), ...(input.totals_unchecked ? { totals_unchecked: true } : {}), ...(input.printed_deductions > 0 ? { printed_deductions: input.printed_deductions } : {}), version: PAYSLIP_VERSION,
     ...(input.pay_rate ? { pay_rate: String(input.pay_rate).trim() } : {}), ...(input.pay_basis ? { pay_basis: String(input.pay_basis).trim() } : {}), ...(input.period_type ? { period_type: String(input.period_type).trim() } : {}) };
   for (const row of lines) { const v = validateShape("PayslipLine", row); if (v.length) return fail("BAD_LINE", v[0].message); }
   const bad = validateShape("Payslip", payslip);
@@ -127,7 +131,7 @@ export function planPayslip(state, input, now = new Date()) {
   const stamp = phTimestamp(now), t = payslipTotals(lines);
   const overtime = Math.min(t.overtime, input.deposit);
   // Verified only when asked: a payslip whose checks fail is kept as a DRAFT (input.status "draft"), which waits in Verify and counts as no income yet.
-  const draft = input.status === "draft";
+  const draft = input.status === "draft" || input.totals_unchecked === true;   // totals not found on the page: never verified income when saved
   const transaction = { id: input.transaction_id, date: input.pay_date, payee: employer, memo: "Payslip " + input.period_from + " to " + input.period_to, status: draft ? "draft" : "verified", source: "manual", created_at: stamp, ...(draft ? {} : { verified_at: stamp }) };
   const entries = [
     { transaction_id: transaction.id, account_id: account.id, amount: input.deposit },
@@ -403,7 +407,8 @@ export function payslipNotes(state, p) {
   const out = [], gap = Math.round((Date.parse(p.pay_date + "T00:00:00Z") - Date.parse(p.period_to + "T00:00:00Z")) / 86400000);
   if (gap > 7) out.push("Pay date is " + gap + " days after period end.");
   const paper = payslipProblems(p, linesOf(state, p.id));   // a payslip whose paper does not add up keeps this note for good, even after "Verify anyway"
-  if (paper.flags.some((f) => f.code !== "DEDUCTIONS")) out.push("Paper differs by " + (paper.gap ? peso(paper.gap) : "the amount in words") + ".");   // a deductions-only difference has its own line below
+  if (p.totals_unchecked) out.push("Totals not checked against the page.");
+  if (paper.flags.some((f) => f.code !== "DEDUCTIONS" && f.code !== "UNCHECKED")) out.push("Paper differs by " + (paper.gap ? peso(paper.gap) : "the amount in words") + ".");   // a deductions-only difference has its own line below
   if (p.printed_deductions > 0) {
     const diff = p.printed_deductions - payslipTotals(linesOf(state, p.id)).deductions;
     out.push(diff === 0 ? "Lines match paper." : "Lines differ from paper by " + peso(Math.abs(diff)) + ".");
