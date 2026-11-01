@@ -176,6 +176,7 @@ async function addAccount(page, name, kind, opening, covers) {
 let blockName = "";
 const blockFailed = async (e) => { failures++; console.log("  FAIL block \"" + blockName + "\" stopped: " + String(e?.message ?? e).split("\n")[0].slice(0, 240)); try { await ctx?.close(); } catch { /* already closed */ } };
 
+var ctx, page, errors;
 // ===== 5g. income: a payslip with overtime =====
 try { blockName = "5g. income: a payslip with overtime";
 console.log("Income");
