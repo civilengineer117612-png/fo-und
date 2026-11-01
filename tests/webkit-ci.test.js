@@ -56,3 +56,22 @@ test("on WebKit the network fake cannot reach a service worker, so only the Offl
   assert.ok(offline, "the Offline section opens with the service worker allowed");
   assert.equal([...run.matchAll(/navigator\.serviceWorker/g)].length, 2, "no other section tests the service worker");
 });
+
+test("run.mjs: every block runs and reports; one step that throws stops only its own block", () => {
+  const run = read("e2e/run.mjs"), lines = run.split("\n");
+  const marks = lines.map((l, i) => [l, i]).filter(([l]) => l.startsWith("// ===== "));
+  assert.ok(marks.length > 50, "the blocks are still marked");
+  for (const [l, i] of marks) assert.match(lines[i + 1], /^try \{ blockName = ".+";( if \(!TOOLS\.pictureStore\) skippedPictures\(blockName\); else \{)?$/, "the block after " + l + " runs in its own try");
+  assert.equal([...run.matchAll(/^.*catch \(e\) \{ await blockFailed\(e\); \}$/gm)].length, marks.length + 2, "every block, the storage checks and the app lock end in the same catch");
+  const first = marks[0][1];
+  assert.deepEqual(lines.slice(first).filter((l) => /^(const|let|function|async function) /.test(l)), [], "a block's own top-level names are var, so the blocks after it still see them");
+  assert.match(run, /const blockFailed = async \(e\) => \{ failures\+\+;/, "a stopped block counts as a failure");
+});
+
+test("checks that keep a picture are skipped on WebKit with the owner's reason, and only those", () => {
+  const engine = read("e2e/engine.mjs"), run = read("e2e/run.mjs");
+  assert.match(engine, /pictureStore: ENGINE === "chromium"/);
+  assert.ok(engine.includes('"WebKit test build cannot store pictures in IndexedDB; the owner\'s iPhone does (pictures are saved and backed up there)."'), "the owner's words, exactly");
+  const blocks = [...run.matchAll(/^try \{ blockName = "(.+)"; if \(!TOOLS\.pictureStore\) skippedPictures\(blockName\); else \{$/gm)].map((m) => m[1]);
+  assert.deepEqual(blocks, ["5x. old pictures are shrunk, recent ones are not", '5x2. \\"Shrink them now\\"', "5y. the Pictures file: back up, lose the pictures, put them back"]);
+});

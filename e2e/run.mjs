@@ -4,7 +4,7 @@
 import { createRequire } from "node:module";
 import { protectionChecks } from "./protection.mjs";
 import { appLockChecks } from "./applock.mjs";
-import { ENGINE, TOOLS, launchBrowser, skipped } from "./engine.mjs";
+import { ENGINE, TOOLS, launchBrowser, skipped, skippedPictures } from "./engine.mjs";
 import { execSync } from "node:child_process";
 import { readFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -169,9 +169,17 @@ async function addAccount(page, name, kind, opening, covers) {
   await page.waitForFunction((n) => [...document.querySelectorAll("#screen .row, #screen .choice, #screen li")].some((e) => e.innerText.includes(n)) || document.getElementById("screen").innerText.includes(n), name, { timeout: 8000 }).catch(() => {});   // saving is asynchronous: wait until the account is listed before going on
 }
 
+// EVERY BLOCK RUNS AND REPORTS (owner, Nov 1): each block below sits in try/catch. A step that throws (a button that is not there, a page that
+// never loads) is ONE failure for its block: it is said with the block's name, the block's window is closed, and the next block runs, so one
+// stuck step can no longer hide every check after it. Blocks share helpers, so what a block declares at its top level is `var` (it stays
+// visible to the blocks after it). A check that merely fails is counted as before.
+let blockName = "";
+const blockFailed = async (e) => { failures++; console.log("  FAIL block \"" + blockName + "\" stopped: " + String(e?.message ?? e).split("\n")[0].slice(0, 240)); try { await ctx?.close(); } catch { /* already closed */ } };
+
 // ===== 1. first run, setup =====
+try { blockName = "1. first run, setup";
 console.log("First run and setup");
-let { ctx, page, errors } = await open({ styled: false });
+var { ctx, page, errors } = await open({ styled: false });
 check((await text(page, "#screen")).includes("No data on this device") && await page.locator('#first-run button[data-action="open-restore"]').count() === 1 && !(await text(page, "#banner")).includes("No data on this device"), "first run explains the empty state on Log, with a Restore button, not as a banner");
 check((await text(page)).includes("Add the accounts you pay from first"), "log asks for accounts first");
 await shot(page, "01-first-run");
@@ -186,15 +194,17 @@ check(await seen(page, "#screen", "covers Test Card"), "a reserve is linked to i
 await page.selectOption("#r-src", { label: "Test Debit" });
 await shot(page, "02-setup");
 check(!(await text(page, "#banner")).includes("No data on this device") && !(await text(page, "#screen")).includes("No data on this device"), "the first-run note goes away once accounts exist");
-let s = await stored(page);
+var s = await stored(page);
 check(s.local && s.idb && s.local === s.idb, "the same text is in localStorage and IndexedDB");
 check(JSON.parse(s.local).state.categories.length > 5 && JSON.parse(s.local).state.presets.length === 3, "defaults were saved with the first save");
 await page.click('button:has-text("Add account")'); await afterAdd(page);
 check(await seen(page, "#screen", "Give the account a name"), "an empty name is refused plainly");
 await page.fill("#a-name", "test cash"); await page.click('button:has-text("Add account")'); await afterAdd(page);
 check(await seen(page, "#screen", "already have an account"), "a duplicate name is refused");
+} catch (e) { await blockFailed(e); }
 
 // ===== 2. logging =====
+try { blockName = "2. logging";
 console.log("Logging");
 await page.click('#nav button:has-text("Log")');
 await shot(page, "03-log");
@@ -207,9 +217,9 @@ check(await seen(page, "#toast", "Saved Lunch ₱95.00 · Test Cash"), "saving i
 check(await seen(page, "#screen", "₱95.00"), "today's list shows it");
 await page.click('#toast button:has-text("Undo")');
 check(await seen(page, "#screen", "Nothing logged today"), "undo removes the draft");
-const txCount = async () => JSON.parse((await stored(page)).local).state.transactions.length;
-const presetsNow = async () => JSON.parse((await stored(page)).local).state.presets;
-const nBefore = await txCount();
+var txCount = async () => JSON.parse((await stored(page)).local).state.transactions.length;
+var presetsNow = async () => JSON.parse((await stored(page)).local).state.presets;
+var nBefore = await txCount();
 check((await text(page, ".tiles")).includes("Food") && await page.locator(".tile .tcat").first().evaluate((e) => getComputedStyle(e).fontSize === "12px"), "each tile shows its category, small and quiet");
 check((await text(page, "#screen")).includes("Hold a tile to move, change or remove it."), "a one-line hint says how to arrange the tiles");
 // the pencil in a tile's window opens the tile editor
@@ -235,8 +245,8 @@ await page.click('button.tile:has-text("Snack")'); await page.click('#sheet butt
 await page.fill("#pay-name", "Dinner"); await page.fill("#f-amount", "95"); await page.click('#sheet .chip:has-text("Food")'); await page.click("#f-save");
 check(await seen(page, "#toast", "Tile saved.") && (await text(page, ".tiles")).includes("Dinner"), "and a tile can be changed back");
 // hold a tile: arrange mode
-const centre = async (sel) => { const b = await page.locator(sel).first().boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
-let c0 = await centre('.tile[data-id="pre-breakfast"]');
+var centre = async (sel) => { const b = await page.locator(sel).first().boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+var c0 = await centre('.tile[data-id="pre-breakfast"]');
 await page.mouse.move(c0.x, c0.y); await page.mouse.down(); await page.waitForTimeout(700); await page.mouse.up();
 check(await page.locator(".tiles.arranging").count() === 1 && await page.locator("#sheet .sheet").count() === 0, "holding a tile switches the tiles to arrange mode, and does not also log or open it");
 check(!(await text(page, "#screen")).includes("Hold a tile to move"), "the hint goes away once it has been used");
@@ -267,7 +277,7 @@ check(await seen(page, "#toast", "Tile added.") && (await presetsNow()).map((p) 
 await page.click(".tile.addtile"); await page.fill("#pay-name", "Breakfast"); await page.fill("#f-amount", "20"); await page.click('#sheet .chip:has-text("Food")'); await page.click("#f-save");
 await seen(page, "#toast", "Tile added.");
 // the minus badge takes a tile away at once, with a vanishing, like an app on a phone's home screen
-const nTx = await txCount();
+var nTx = await txCount();
 await page.click('.tiles.arranging .tile:has-text("Coffee") .tminus', { force: true });
 await page.waitForFunction(() => !document.querySelector('.tiles.arranging .tile[data-id]:not(.vanish) b')?.parentElement.textContent.includes("Coffee") && ![...document.querySelectorAll(".tiles.arranging .tile")].some((t) => t.textContent.includes("Coffee")));
 check((await presetsNow()).map((p) => p.name).join() === "Lunch,Dinner,Breakfast" && await txCount() === nTx && await page.locator("#sheet .sheet").count() === 0, "the minus removes the tile at once, logs nothing and opens no window");
@@ -290,7 +300,7 @@ await shot(page, "05-other-sheet");
 await page.click('#sheet .chip:has-text("Test Card")');
 await page.click("#f-save");
 check(await seen(page, "#toast", "Shopping ₱120.50 · Test Card"), "a card purchase is saved");
-let led = JSON.parse((await stored(page)).local);
+var led = JSON.parse((await stored(page)).local);
 check(led.state.transactions.some((t) => t.id.startsWith("rsv:")), "its reserve transfer was generated with it");
 check(!(await text(page, "#toast")).includes("short"), "no shortage note when the reserve covers the card");
 await page.fill("#f-amount", "").catch(() => {});
@@ -299,14 +309,18 @@ await page.fill("#f-amount", "abc");
 check(await page.locator("#f-save").isDisabled(), "a non-number cannot be saved");
 await page.click('#sheet button:has-text("Cancel")');
 check((await text(page, "#screen")).includes("₱120.50") && !(await text(page, "#screen")).toLowerCase().includes("reserve"), "the reserve transfer is hidden from the list");
+} catch (e) { await blockFailed(e); }
 
 // ===== 3. persistence across reload =====
+try { blockName = "3. persistence across reload";
 console.log("Persistence");
 await page.reload(); await page.waitForSelector("#nav button");
 check((await text(page, "#screen")).includes("₱120.50") && (await text(page, "#screen")).includes("₱95.00"), "entries survive a reload");
 check(errors.length === 0, "no script errors so far" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
 
 // ===== 4. verification the next day =====
+try { blockName = "4. verification the next day";
 console.log("Verifying");
 await page.clock.setFixedTime(new Date(T0.getTime() + 86400000));
 await page.reload(); await page.waitForSelector("#nav button");
@@ -314,7 +328,7 @@ check(await seen(page, "#nav", "Verify (3)"), "the tab counts three drafts from 
 check((await text(page, "#screen")).includes("3 earlier entries are waiting for you to verify"), "the log page says so once, plainly");
 await page.click('#nav button:has-text("Verify")');
 await shot(page, "06-verify");
-let card = await text(page, ".card");
+var card = await text(page, ".card");
 check(/₱\d/.test(card) && (await text(page, "#screen")).includes("3 to check"), "one card at a time, with its position");
 check(!(await text(page, "#screen")).toLowerCase().includes("all correct"), "there is no all-correct shortcut");
 await page.click('button:has-text("Correct")');
@@ -332,13 +346,15 @@ check((await text(page, ".card")).length > 0 && (await text(page, ".card")).incl
 await page.click('button:has-text("Tap again to delete")');
 check(await seen(page, "#screen", "Nothing to verify"), "after the last one: nothing to verify");
 led = JSON.parse((await stored(page)).local);
-const statuses = led.state.transactions.map((t) => t.id.startsWith("rsv:") ? "rsv:" + t.status : t.status).sort();
+var statuses = led.state.transactions.map((t) => t.id.startsWith("rsv:") ? "rsv:" + t.status : t.status).sort();
 check(statuses.every((x) => x === "verified" || x === "rsv:verified"), "everything left is verified, including the reserve transfer: " + statuses.join(","));
 check(led.state.transactions.every((t) => !t.verified_at || /\+08:00$/.test(t.verified_at)), "verification times are Philippine time");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5. one store lost =====
+try { blockName = "5. one store lost";
 console.log("Losing one store");
 ({ ctx, page, errors } = await open());
 await addAccount(page, "Test Cash", "asset", "500");
@@ -369,39 +385,43 @@ s = await stored(page);
 check(s.local && s.idb && s.local === s.idb, "repair restored both stores");
 check(await seen(page, "#top", "Log") && !(await text(page, "#screen")).includes("Add the accounts"), "the app is usable again");
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5b. several accounts in a row, by touch =====
+try { blockName = "5b. several accounts in a row, by touch";
 console.log("Adding accounts one after another");
 ({ ctx, page, errors } = await open());
-async function tapAdd(page, name, kind, opening) {
+var tapAdd = async function tapAdd(page, name, kind, opening) {
   await menuGo(page, "Setup");
   await page.tap("#a-name"); await page.keyboard.type(name);
   await page.selectOption("#a-kind", kind);
   await page.tap("#a-open"); await page.keyboard.type(opening);
   await page.tap('button:has-text("Add account")'); await afterAdd(page);
-}
+};
 await tapAdd(page, "Wallet", "asset", "250");
 check(await seen(page, "#toast", "Added Wallet"), "adding an account says so");
 await tapAdd(page, "Bank", "asset", "1,000.50");
 check(await seen(page, "#toast", "Added Bank"), "a second account can be added right after the first");
 await tapAdd(page, "Card", "liability", "");
 check(await seen(page, "#toast", "Added Card"), "a third, owed this time, with no balance typed");
-const rowsText = await text(page, "#screen");
+var rowsText = await text(page, "#screen");
 check(["Wallet", "Bank", "Card", "₱1,000.50"].every((x) => rowsText.includes(x)), "all three are listed with their balances");
 await openAddForm(page);
 await page.tap("#a-name"); await page.keyboard.type("bank");
 await page.tap('button:has-text("Add account")');
 check(await seen(page, "#screen", "already have an account"), "a repeated name is refused");
-const box = await page.locator("#a-error").boundingBox();
-const vh = page.viewportSize().height;
+var box = await page.locator("#a-error").boundingBox();
+var vh = page.viewportSize().height;
 check(box && box.y >= 0 && box.y + box.height <= vh - 70, "the refusal is on screen where you are looking, not above the fold");
 await page.evaluate(() => { Promise.reject(new Error("boom")); });   // a timer would not fire under the test clock
-const sawFault = await seen(page, "#banner", "Something went wrong: boom");
+var sawFault = await seen(page, "#banner", "Something went wrong: boom");
 if (!sawFault) console.log("   banner was:", JSON.stringify(await text(page, "#banner")));
 check(sawFault, "an unexpected error is shown on screen, not swallowed");
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5c. verify the same day =====
+try { blockName = "5c. verify the same day";
 console.log("Verifying the same day");
 ({ ctx, page, errors } = await open());
 await addAccount(page, "Test Cash", "asset", "500");
@@ -429,10 +449,12 @@ check((await text(page, "#nav")).includes("Verify (1)"), "only yesterday's entry
 await page.click('#nav button:has-text("Verify")');
 check((await text(page, ".card")).includes("Breakfast") && (await text(page, "#screen")).includes("2 to check"), "yesterday's comes first, today's after it");
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5d. backup and restore =====
+try { blockName = "5d. backup and restore";
 console.log("Backup and restore");
-const PASS = "correct horse battery";
+var PASS = "correct horse battery";
 ({ ctx, page, errors } = await open());
 await addAccount(page, "Test Cash", "asset", "500");
 await addAccount(page, "Test Card", "liability", "");
@@ -453,16 +475,16 @@ await page.fill("#b-pass2", PASS);
 check(await page.locator("#f-save").isEnabled(), "matching long passphrases turn it on");
 check((await page.locator("#b-pass").getAttribute("autocomplete")) === "new-password" && (await page.locator('#sheet input[autocomplete="username"]').count()) === 1, "the fields ask the phone to offer a new password");
 await page.click('button[data-action="make-passphrase"]');
-const made = await page.locator("#b-made").innerText();
+var made = await page.locator("#b-made").innerText();
 check(/^[2-9a-z]{5}(-[2-9a-z]{5}){3}$/.test(made) && (await page.inputValue("#b-pass")) === made && (await page.inputValue("#b-pass2")) === made && await page.locator("#f-save").isEnabled(), "Make one for me fills both fields, shows the passphrase, and turns the button on");
 check(await page.locator('button[data-action="copy-passphrase"]').isVisible(), "and offers to copy it");
 await page.fill("#b-pass", PASS); await page.fill("#b-pass2", PASS);
 await shot(page, "10-backup-sheet");
-const [download] = await Promise.all([page.waitForEvent("download"), page.click("#f-save")]);
-const file = join(mkdtempSync(join(tmpdir(), "bk-")), download.suggestedFilename());
+var [download] = await Promise.all([page.waitForEvent("download"), page.click("#f-save")]);
+var file = join(mkdtempSync(join(tmpdir(), "bk-")), download.suggestedFilename());
 await download.saveAs(file);
 check(/^fo-und backup 2026-10-03 \d\d-\d\d\.json$/.test(download.suggestedFilename()), "the file is named fo-und backup, the date and the time: " + download.suggestedFilename());
-const raw = readFileSync(file, "latin1"), { readBackupHeader } = await import("../src/model/index.js"), box1 = (await readBackupHeader(new Blob([readFileSync(file)]))).header;
+var raw = readFileSync(file, "latin1"), { readBackupHeader } = await import("../src/model/index.js"), box1 = (await readBackupHeader(new Blob([readFileSync(file)]))).header;
 check(box1.kind === "backup" && box1.v === 2 && box1.iterations === 600000 && box1.parts === 1 && box1.part === 1, "it is ONE encrypted backup file, with the same 600,000 rounds of key stretching");
 check(!["Test Cash", "Test Card", "Lunch", "9500"].some((x) => raw.includes(x)), "the file contains none of your data in the clear");
 check(await seen(page, "#toast", "Backup file created"), "the app says what to do next");
@@ -483,8 +505,14 @@ await page.click('#nav button:has-text("Log")');
 check(!(await text(page, "#screen")).includes("No backup yet"), "the Log page stops mentioning it");
 
 // wipe everything, as if iOS had cleared the storage
-await page.evaluate(async () => { localStorage.clear(); await new Promise((res) => { const r = indexedDB.deleteDatabase("financialTracker"); r.onsuccess = r.onerror = r.onblocked = () => res(); }); });
-await page.reload(); await page.waitForSelector("#nav button"); await dismissNotice(page);
+// iOS clears storage while the app is closed: leave the app (a plain page of the same site, so the app holds no connection), delete, and only
+// then open the app again. Deleting with the app still open is BLOCKED by its connection; Chromium finished the deletion at the reload, but
+// WebKit drops a deletion still waiting when the page goes away, so there the "empty" phone kept its data.
+await page.goto(new URL(BASE).origin + "/e2e/");
+await page.evaluate(async () => { localStorage.clear(); await new Promise((res) => { const r = indexedDB.deleteDatabase("financialTracker"); r.onsuccess = r.onerror = () => res(); setTimeout(res, 5000); }); });
+check(await page.evaluate(async () => localStorage.length === 0 && !(await indexedDB.databases()).some((d) => d.name === "financialTracker")), "the wipe really emptied both stores before the app opened again");
+await page.goto(BASE);
+await page.waitForSelector("#nav button"); await dismissNotice(page);
 check((await text(page, "#screen")).includes("No data on this device"), "the empty phone says so, on Log");
 await menuGo(page, "Setup");
 await page.click('button:has-text("Restore from a backup")');
@@ -513,7 +541,7 @@ check(JSON.parse(s.local).rev >= 2, "stamped newer than before");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 // a file that is not a backup
 await menuGo(page, "Setup"); await page.click('button:has-text("Restore from a backup")');
-const junk = join(mkdtempSync(join(tmpdir(), "bk-")), "notes.json"); (await import("node:fs")).writeFileSync(junk, "hello");
+var junk = join(mkdtempSync(join(tmpdir(), "bk-")), "notes.json"); (await import("node:fs")).writeFileSync(junk, "hello");
 await page.setInputFiles("#r-file", junk); await page.fill("#r-pass", PASS);
 await page.click('button:has-text("Open the backup")');
 check(await seen(page, "#sheet", "That file is not a backup"), "a file that is not a backup is refused plainly");
@@ -540,19 +568,21 @@ for (const cancel of [false, true]) {
   }
   await ctx.close();
 }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5e. pictures for accounts, and the Money charts =====
+try { blockName = "5e. pictures for accounts, and the Money charts";
 console.log("Pictures and charts");
 ({ ctx, page, errors } = await open({ blockSw: true }));   // page-level network staging does not reach a service worker
-const dir = mkdtempSync(join(tmpdir(), "pic-"));
-const png = await page.evaluate(() => { const c = document.createElement("canvas"); c.width = 200; c.height = 100; const g = c.getContext("2d"); g.fillStyle = "#d00"; g.fillRect(0, 0, 100, 100); g.fillStyle = "#00d"; g.fillRect(100, 0, 100, 100); return c.toDataURL("image/png"); });
+var dir = mkdtempSync(join(tmpdir(), "pic-"));
+var png = await page.evaluate(() => { const c = document.createElement("canvas"); c.width = 200; c.height = 100; const g = c.getContext("2d"); g.fillStyle = "#d00"; g.fillRect(0, 0, 100, 100); g.fillStyle = "#00d"; g.fillRect(100, 0, 100, 100); return c.toDataURL("image/png"); });
 writeFileSync(join(dir, "icon.png"), Buffer.from(png.split(",")[1], "base64"));
-const pixel = (url, x, y) => page.evaluate(async ([u, px, py]) => { const i = new Image(); await new Promise((r) => { i.onload = r; i.src = u; }); const c = document.createElement("canvas"); c.width = c.height = 96; const g = c.getContext("2d"); g.drawImage(i, 0, 0); return Array.from(g.getImageData(px, py, 1, 1).data); }, [url, x, y]);
-const red = ([r, , b]) => r > 180 && b < 60, blue = ([r, , b]) => b > 180 && r < 60;
+var pixel = (url, x, y) => page.evaluate(async ([u, px, py]) => { const i = new Image(); await new Promise((r) => { i.onload = r; i.src = u; }); const c = document.createElement("canvas"); c.width = c.height = 96; const g = c.getContext("2d"); g.drawImage(i, 0, 0); return Array.from(g.getImageData(px, py, 1, 1).data); }, [url, x, y]);
+var red = ([r, , b]) => r > 180 && b < 60, blue = ([r, , b]) => b > 180 && r < 60;
 
 await addAccount(page, "Wallet", "asset", "1000"); await seen(page, "#toast", "Added Wallet");
 await addAccount(page, "Bank", "asset", "5000"); await seen(page, "#toast", "Added Bank");
-const monoN = await page.locator("#screen .row .mono").count(); if (monoN !== 2) console.log("   mono count:", monoN, JSON.stringify((await text(page, "#screen")).slice(0, 300)));
+var monoN = await page.locator("#screen .row .mono").count(); if (monoN !== 2) console.log("   mono count:", monoN, JSON.stringify((await text(page, "#screen")).slice(0, 300)));
 check(monoN === 2, "until a picture is chosen, each account shows its first letter");
 await page.click('.icobtn[aria-label="Choose a picture for Wallet"]');
 check((await text(page, "#sheet")).includes("zoom and drag"), "tapping the tile opens the picture chooser, with plain instructions");
@@ -563,19 +593,19 @@ await shot(page, "12-icon-sheet");
 check(await page.locator("#f-save").isEnabled() && await page.locator("#i-zoom").isEnabled(), "choosing a picture turns on zoom and save");
 await page.click("#f-save");
 check(await seen(page, "#toast", "Picture saved"), "the picture is saved");
-let ledgerNow = JSON.parse((await stored(page)).local);
-const walletIcon = ledgerNow.state.accounts.find((a) => a.name === "Wallet").icon;
+var ledgerNow = JSON.parse((await stored(page)).local);
+var walletIcon = ledgerNow.state.accounts.find((a) => a.name === "Wallet").icon;
 check(/^data:image\/(png|jpeg);base64,/.test(walletIcon) && walletIcon.length < 40000, "it is stored inside the account as a small embedded image");
 check(red(await pixel(walletIcon, 24, 48)) && blue(await pixel(walletIcon, 72, 48)), "an uncropped picture is centred: the red half left, the blue half right");
 
 await page.click('.icobtn[aria-label="Choose a picture for Bank"]');
 await page.setInputFiles("#i-file", join(dir, "icon.png"));
 await page.waitForFunction(() => !document.getElementById("i-img").hidden);
-const stageBox = await page.locator("#i-stage").boundingBox();
+var stageBox = await page.locator("#i-stage").boundingBox();
 await page.mouse.move(stageBox.x + stageBox.width / 2, stageBox.y + stageBox.height / 2); await page.mouse.down();
 await page.mouse.move(stageBox.x + stageBox.width / 2 + 300, stageBox.y + stageBox.height / 2, { steps: 6 }); await page.mouse.up();
 await page.click("#f-save"); await seen(page, "#toast", "Picture saved");
-const bankIcon = JSON.parse((await stored(page)).local).state.accounts.find((a) => a.name === "Bank").icon;
+var bankIcon = JSON.parse((await stored(page)).local).state.accounts.find((a) => a.name === "Bank").icon;
 check(red(await pixel(bankIcon, 72, 48)), "dragging the picture moves what is cropped: the blue half is out of the square");
 check((await page.locator("#screen .row img.ico").count()) === 2, "both accounts now show their picture in Setup");
 await page.click('.icobtn[aria-label="Choose a picture for Bank"]');
@@ -583,9 +613,9 @@ check((await text(page, "#sheet")).includes("Remove the picture"), "a picture ca
 await page.click('#sheet button:has-text("Cancel")');
 
 // log and verify across three months, through the real screens
-const logPreset = async (name, acct) => { await page.click('#nav button:has-text("Log")'); await page.click(`button.tile:has-text("${name}")`); await page.click(`#sheet .chip:has-text("${acct}")`); await seen(page, "#toast", "Saved " + name); };
-const logOther = async (amount, cat, acct) => { await page.click('#nav button:has-text("Log")'); await page.click('button:has-text("Add expense")'); await page.fill("#f-amount", amount); await page.click(`#sheet .chip:has-text("${cat}")`); await page.click(`#sheet .chip:has-text("${acct}")`); await page.click("#f-save"); await seen(page, "#toast", "Saved"); };
-const verifyAll = async () => {
+var logPreset = async (name, acct) => { await page.click('#nav button:has-text("Log")'); await page.click(`button.tile:has-text("${name}")`); await page.click(`#sheet .chip:has-text("${acct}")`); await seen(page, "#toast", "Saved " + name); };
+var logOther = async (amount, cat, acct) => { await page.click('#nav button:has-text("Log")'); await page.click('button:has-text("Add expense")'); await page.fill("#f-amount", amount); await page.click(`#sheet .chip:has-text("${cat}")`); await page.click(`#sheet .chip:has-text("${acct}")`); await page.click("#f-save"); await seen(page, "#toast", "Saved"); };
+var verifyAll = async () => {
   await page.click('#nav button:has-text("Verify")');
   for (let guard = 0; guard < 20; guard++) {
     const t = await text(page, "#screen");
@@ -605,14 +635,14 @@ await logPreset("Dinner", "Wallet");   // left as a draft on purpose
 
 await menuGo(page, "Spending");
 await shot(page, "13-money-category");
-let screen = await text(page, "#screen");
+var screen = await text(page, "#screen");
 check(screen.includes("October 2026") && screen.includes("₱395.00"), "the hero number is this month's verified spending");
 check(screen.includes("spent in October"), "and says what it is (the year is in the month switcher above)");
 check(!screen.includes("than September"), "no comparison line: the screen stays quiet");
 check(screen.includes("plus ₱95.00 not verified yet"), "unverified drafts are mentioned but not counted");
-const rowsNow = await page.locator(".catrow").allInnerTexts();
+var rowsNow = await page.locator(".catrow").allInnerTexts();
 check(rowsNow.length === 2 && rowsNow[0].includes("Shopping") && rowsNow[0].includes("₱300.00") && rowsNow[1].includes("Food") && rowsNow[1].includes("₱95.00"), "By category is one white card, biggest first, each category with its amount: " + rowsNow.join(" | ").replace(/\n/g, " "));
-const barW = await page.locator(".catrow .catbar span").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width / e.parentElement.getBoundingClientRect().width * 100)));
+var barW = await page.locator(".catrow .catbar span").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width / e.parentElement.getBoundingClientRect().width * 100)));
 check(barW[0] === 100 && barW[1] === 32, "each thin bar is scaled to the largest category (300 is full, 95 is 32%): " + barW.join(","));
 check((await page.locator("svg.donut").count()) === 0 && (await page.locator("#screen .modebar").count()) === 0 && (await page.locator("#screen .catrow .catbar span").first().evaluate((e) => getComputedStyle(e).backgroundColor)) === "rgb(30, 91, 71)", "no donut and no List switch: the card is its own list, the bars in the accent green");
 await page.click('button[data-action="open-entries"]');
@@ -621,13 +651,13 @@ await page.click('#sheet button:has-text("Close")');
 
 await page.click('#screen .seg button:has-text("Accounts")');
 await shot(page, "14-money-account");
-const accRows = await page.locator(".catrow").allInnerTexts();
+var accRows = await page.locator(".catrow").allInnerTexts();
 check(accRows.length === 2 && accRows[0].includes("Bank") && accRows[0].includes("₱300.00") && accRows[1].includes("Wallet") && accRows[1].includes("₱95.00"), "by account: where each peso came out of");
 check((await page.locator(".catrow img.ico").count()) === 2, "each account shows its own picture beside its name");
 await page.click('#screen .seg button:has-text("Accounts")');
-const widths = await page.locator(".catrow .catbar span").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
+var widths = await page.locator(".catrow .catbar span").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
 check(widths[0] > widths[1] * 2 && widths[0] > 100, "bar lengths are in proportion (" + widths.join(", ") + ")");
-const thick = await page.locator(".catrow .catbar span").first().evaluate((e) => e.getBoundingClientRect().height);
+var thick = await page.locator(".catrow .catbar span").first().evaluate((e) => e.getBoundingClientRect().height);
 check(thick <= 24, "bars are thin (" + thick + "px)");
 check((await page.locator(".catrow .catbar span").evaluateAll((els) => new Set(els.map((e) => getComputedStyle(e).backgroundColor)).size)) === 1, "every bar is the same single color");
 
@@ -670,7 +700,7 @@ check((await text(page, "#screen")).includes("Nothing verified for this month ye
 console.log("Menu and budgets");
 await page.click('#nav button:has-text("Log")');
 check((await page.locator("#nav button").count()) === 2, "the bottom bar has just Log and Verify");
-const mb = await page.locator("#menuBtn").boundingBox();
+var mb = await page.locator("#menuBtn").boundingBox();
 check(mb && mb.x < 40 && mb.y < 60 && mb.width >= 44 && mb.height >= 44, "the menu button is at the upper left, big enough to tap");
 check((await page.locator("#menuBtn svg rect").count()) === 3 && (await page.locator("#menuBtn").evaluate((b) => getComputedStyle(b).borderTopWidth === "0px" && getComputedStyle(b).backgroundColor === "rgba(0, 0, 0, 0)")), "it is just three lines, without a box around it");
 check(await page.getAttribute("#menuBtn", "aria-expanded") === "false", "and says it is closed");
@@ -692,10 +722,10 @@ check((await page.locator("#menu .drawer").count()) === 0 && (await text(page, "
 check((await page.locator("#nav [aria-current]").count()) === 0, "no bottom button is marked while a menu screen is open");
 
 // ---- setting budgets ----
-let budgetRows = await page.locator("button.catrow").allInnerTexts();
+var budgetRows = await page.locator("button.catrow").allInnerTexts();
 check(budgetRows.length === 8 && !budgetRows.some((r) => r.includes("Unlogged")) && budgetRows.every((r) => r.includes("No budget")), "every spending category can have a budget, except Unlogged; none set yet");
 await shot(page, "18-budget");
-const setBudget = async (cat, amount, startLabel) => {
+var setBudget = async (cat, amount, startLabel) => {
   await page.click(`button.catrow:has-text("${cat}")`);
   await page.fill("#f-amount", amount);
   if (startLabel) await page.click(`#sheet button:has-text("${startLabel}")`);
@@ -717,7 +747,7 @@ await setBudget("Food", "100");
 await setBudget("Rent", "2000");
 check(await seen(page, "#screen", "₱250.00 a month"), "changing a budget this month replaces it from now on");
 await setBudget("Family", "500", "Next month");
-const famText = await text(page, "button.catrow:has-text('Family')");
+var famText = await text(page, "button.catrow:has-text('Family')");
 if (!famText.includes("from November 2026")) console.log("   Family row was:", JSON.stringify(famText));
 check(famText.includes("from November 2026"), "a budget that starts next month says so");
 await setBudget("Family", "0", "This month");
@@ -732,16 +762,16 @@ for (let i = 0; i < 9; i++) if (await page.locator('button[aria-label="Later"]')
 await page.click('#screen .seg button:has-text("Category")');
 await shot(page, "19-money-graded");
 check((await page.locator("#screen .legend").count()) === 0 && (await page.locator("svg.donut").count()) === 0 && (await page.locator(".catcard").count()) === 1, "the category view has no budget legend and no donut: one white card");
-const names = (await page.locator("#screen .seg button").allInnerTexts()).join();
+var names = (await page.locator("#screen .seg button").allInnerTexts()).join();
 check(names === "Category,Budget,Accounts,Trends", "the four views are Category, Budget, Accounts and Trends (cards are their own menu item): " + names);
 await shot(page, "32-category-card");
 // switching views keeps the top still: only what is under the view buttons fades
-const topY = () => page.evaluate(() => [".hero", "#screen .seg", "#screen .stepper"].map((q) => Math.round(document.querySelector(q).getBoundingClientRect().top)).join());
-const topBefore = await topY();
+var topY = () => page.evaluate(() => [".hero", "#screen .seg", "#screen .stepper"].map((q) => Math.round(document.querySelector(q).getBoundingClientRect().top)).join());
+var topBefore = await topY();
 await page.click('#screen .seg button:has-text("Accounts")');
-const topDuring = await topY();
+var topDuring = await topY();
 await page.waitForTimeout(40);
-const topLater = await topY();
+var topLater = await topY();
 check(topBefore === topDuring && topDuring === topLater && await page.locator("#screen .viewbody").count() === 1, "switching views keeps the month, the total and the view buttons perfectly still (" + [topBefore, topDuring, topLater].join(" / ") + ")");
 await page.click('#screen .seg button:has-text("Category")');
 // the title is the switch between Spending and Income
@@ -800,28 +830,28 @@ await page.click('#screen .seg button:has-text("Category")');
 
 await page.click('#screen .seg button:has-text("Budget")');
 await shot(page, "20-money-budgets");
-const cards = await page.locator(".catrow").allInnerTexts();
+var cards = await page.locator(".catrow").allInnerTexts();
 check(cards.length === 3 && cards[0].includes("Shopping") && cards[1].includes("Food") && cards[2].includes("Rent"), "budgets are listed most-used first: " + cards.map((c) => c.split("\n")[0]).join(", "));
 check(cards[0].includes("\u20B1300.00 / \u20B1250.00") && cards[0].includes("Over budget"), "an overspent budget reads spent / budget and says Over budget in words, beside its shape");
 check(cards[1].includes("\u20B195.00 / \u20B1100.00") && !cards[1].includes("left") && !cards[1].includes("Nearly used up") && !cards[2].includes("left"), "a row that is not over budget is one slim line: its name, its shape and spent / budget");
 await page.click('.catrow:has-text("Food") .pair'); await page.waitForTimeout(600);
-const foodOpen = await page.locator('.catrow:has-text("Food")').innerText(), rentOpen = await page.locator('.catrow:has-text("Rent")').innerText(), shopOpen = await page.locator('.catrow:has-text("Shopping")').innerText();
+var foodOpen = await page.locator('.catrow:has-text("Food")').innerText(), rentOpen = await page.locator('.catrow:has-text("Rent")').innerText(), shopOpen = await page.locator('.catrow:has-text("Shopping")').innerText();
 check(foodOpen.includes("\u20B15.00 left") && rentOpen.includes("\u20B12,000.00 left") && shopOpen.includes("\u20B150.00 over") && !foodOpen.includes("/"), "one tap on a figure turns every row into what is left (and an overspent one into how much over)");
 check(JSON.parse(await page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem("financialTracker.ledger")).settings.figure_left))) === true, "and the choice is kept");
 await page.click('.catrow:has-text("Rent") .pair'); await page.waitForTimeout(600);
 check((await page.locator('.catrow:has-text("Food")').innerText()).includes("\u20B195.00 / \u20B1100.00"), "tap again and every row reads spent / budget again");
-const meters = await page.locator(".catrow").evaluateAll((els) => els.map((e) => ({ cls: [...e.classList].find((c) => c.startsWith("g-")), color: getComputedStyle(e.querySelector(".catbar span")).backgroundColor, w: Math.round(e.querySelector(".catbar span").getBoundingClientRect().width / e.querySelector(".catbar").getBoundingClientRect().width * 100) })));
+var meters = await page.locator(".catrow").evaluateAll((els) => els.map((e) => ({ cls: [...e.classList].find((c) => c.startsWith("g-")), color: getComputedStyle(e.querySelector(".catbar span")).backgroundColor, w: Math.round(e.querySelector(".catbar span").getBoundingClientRect().width / e.querySelector(".catbar").getBoundingClientRect().width * 100) })));
 check(meters[0].cls === "g-critical" && meters[0].w === 100, "the over-budget meter is full and red");
 check(meters[1].cls === "g-serious" && meters[1].w === 95 && meters[1].color === "rgb(30, 91, 71)", "a 95% meter is 95% full and the dark accent green");
 check((await text(page, ".legend")).replace(/\s+/g, " ").includes("On track Nearly used up Over budget") && !(await text(page, ".legend")).includes("Getting there") && !(await text(page, ".legend")).includes("No budget"), "the key lists only the shapes that are in use");
 check(meters[2].cls === "g-good" && meters[2].w === 0 && meters[2].color === "rgb(127, 176, 158)", "an unused meter is empty and light green");
-const ticks = await page.locator(".catbar .flatmark").evaluateAll((els) => els.map((e) => e.style.left));
+var ticks = await page.locator(".catbar .flatmark").evaluateAll((els) => els.map((e) => e.style.left));
 check(ticks.length === 2 && ticks.every((t) => t === "10%"), "only the two budgets that are ahead of the calendar (Shopping, Food) have the line, at today's place (3 of 31 days): " + ticks.join());
 check(await page.locator(".catrow", { hasText: "Rent" }).locator(".flatmark").count() === 0, "a budget that is not ahead of the month has no line");
 check((await text(page, ".legend")).includes("Today") && (await page.locator(".legend svg").count()) === 3, "the key names the line, Today, beside three shapes");
 check((await page.locator(".tbl").count()) === 0, "the chart view has no table under it: the List switch has it");
 await page.click('#screen .modebar button');
-const vcolors = await page.locator(".tbl td.vo, .tbl td.vu").evaluateAll((els) => els.map((e) => e.className.includes("vo") ? "over" : "under"));
+var vcolors = await page.locator(".tbl td.vo, .tbl td.vu").evaluateAll((els) => els.map((e) => e.className.includes("vo") ? "over" : "under"));
 check(vcolors.includes("over") && vcolors.includes("under"), "variance cells are marked over and under");
 check(/Shopping[\s\S]*-₱50\.00 over/.test(await text(page, ".tbl")) && /Food[\s\S]*\+₱5\.00 under/.test(await text(page, ".tbl")) && (await text(page, ".tbl")).includes("Total"), "the list twin has budget, actual and a signed variance in words");
 await page.click('#screen .modebar button');
@@ -838,7 +868,7 @@ await verifyAll();
 await menuGo(page, "Spending");
 for (let i = 0; i < 9; i++) if (await page.locator('button[aria-label="Later"]').isEnabled()) await page.click('button[aria-label="Later"]');
 await page.click('#screen .seg button:has-text("Budget")');
-const noBud = await page.waitForFunction(() => document.getElementById("screen").innerText.toLowerCase().includes("no budget set"), null, { timeout: 4000 }).then(() => true, () => false);   // the heading is shown in capitals
+var noBud = await page.waitForFunction(() => document.getElementById("screen").innerText.toLowerCase().includes("no budget set"), null, { timeout: 4000 }).then(() => true, () => false);   // the heading is shown in capitals
 if (!noBud) console.log("   screen was:", JSON.stringify((await text(page, "#screen")).slice(0, 600)));
 check(noBud && /Upskill\s+₱80\.00/.test(await text(page, "#screen")), "spending in a category with no budget is shown under its own heading");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
@@ -847,7 +877,7 @@ check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors
 await menuGo(page, "Spending");
 await page.click('#screen .seg button:has-text("Trends")');
 check((await page.locator("svg.trend").count()) === 1 && (await page.locator(".tmonth").count()) === 6, "the trend line chart has one tappable label per month");
-const paths = await page.locator("svg.trend path.tl").count(), dots = await page.locator("svg.trend circle").count();
+var paths = await page.locator("svg.trend path.tl").count(), dots = await page.locator("svg.trend circle").count();
 check(paths === 2 && dots >= 2 && dots < 12, "two lines, with points only where a month has data (" + dots + " points)");
 await shot(page, "24-trend");
 await page.click('#screen .modebar button');
@@ -861,10 +891,10 @@ check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors
 await menuGo(page, "Weekly review");
 check((await text(page, "#top")).includes("Weekly review") && (await text(page, "#screen")).includes("0 / "), "the weekly review lists every account, none counted yet");
 check(!(await text(page, "#screen")).includes("Weekly questions"), "the weekly questions wait until something is counted");
-const ck = await text(page, "#screen"), lastBackup = JSON.parse((await stored(page)).local).settings.last_backup_at;
+var ck = await text(page, "#screen"), lastBackup = JSON.parse((await stored(page)).local).settings.last_backup_at;
 check(ck.includes("One reminder: back up after this check-in") === !lastBackup, "the check-in carries the backup reminder when a backup is due, and stays quiet right after one (last backup: " + (lastBackup ? "today" : "never") + ")");
 // A count with a gap is only kept until you say what happened (here: "I spent some of it", which books the missing money as unlogged spending, as the owner chose).
-const decide = async (page, name, why) => {   // `why` is wanted when that choice exists (a shortfall offers "spent"); a count with no gap has nothing to decide
+var decide = async (page, name, why) => {   // `why` is wanted when that choice exists (a shortfall offers "spent"); a count with no gap has nothing to decide
   const card = `#screen .card:has-text("${name}") button[data-action="gap-decide"]`;
   if (!(await page.locator(card).count())) return;
   await page.click((await page.locator(`${card}[data-why="${why}"]`).count()) ? `${card}[data-why="${why}"]` : `${card}[data-why="later"]`);
@@ -880,7 +910,7 @@ check((await text(page, ".choice:has-text('Wallet')")).includes("missing"), "aft
 ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.state.checkIns.length === 1 && ledgerNow.state.transactions.some((t) => t.source === "reconciliation" && t.status === "verified"), "the count is kept, with a verified Unlogged entry for the gap");
 await page.click('.choice:has-text("Four quick questions")');
-const sheetText = await text(page, "#sheet");
+var sheetText = await text(page, "#sheet");
 check(sheetText.includes("Compared with the spreadsheet, was logging easier or harder"), "question 2 compares with the spreadsheet");
 check(await page.inputValue("#q-count") === "1" && /^0\.\d\d$|^\d+\.\d\d$/.test(await page.inputValue("#q-amount")), "question 1 is filled in from the count (" + await page.inputValue("#q-count") + ", " + await page.inputValue("#q-amount") + ") and can be changed");
 check(sheetText.includes("4. Photo or voice entries that needed fixing: 0"), "question 4 is filled in by the app");
@@ -889,7 +919,7 @@ await page.fill("#q-count", "2"); await page.fill("#q-amount", "50");
 await page.click('#sheet button[data-action="survey-ease"][data-id="4"]'); await page.fill("#f-annoy", "too many taps");
 await page.click("#f-save"); await seen(page, "#toast", "Answers saved");
 ledgerNow = JSON.parse((await stored(page)).local);
-const sv1 = ledgerNow.state.surveyResponses[0];
+var sv1 = ledgerNow.state.surveyResponses[0];
 check(ledgerNow.state.surveyResponses.length === 1 && sv1.q2_ease === 4 && sv1.q1_missed_count === 2 && sv1.q1_missed_amount === 5000, "the survey answers are saved, with the owner's confirmed figures for question 1");
 await menuGo(page, "Checks");
 check((await text(page, "#screen")).includes("1 of 4 weeks answered"), "the review waits for about 4 weeks and says how far along it is");
@@ -905,7 +935,7 @@ for (let wk = 1; wk <= 3; wk++) {   // three more weeks, so there are four answe
   await page.click("#f-save"); await seen(page, "#toast", "Answers saved");
 }
 await menuGo(page, "Checks");
-const review = await text(page, "#screen");
+var review = await text(page, "#screen");
 check(review.includes("Easier (1-5)") && review.includes("week 3 note") && review.toLowerCase().includes("what annoyed you"), "after four weeks the review shows each week's answers and what annoyed you");
 check(/Not accounted for went from .* in the first week to .* in the latest/.test(review), "and the Unlogged trend in words, with a shape");
 await shot(page, "40-survey-review");
@@ -917,7 +947,7 @@ check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors
 
 // ---- quick day totals ----
 await page.click('#nav button:has-text("Log")');
-const todayTotal = await text(page, ".daytotal");
+var todayTotal = await text(page, ".daytotal");
 check(/^₱\d/.test(todayTotal) && !(await text(page, "#screen")).includes("Spent today") && (await page.locator(".daycap").count()) === 0, "today's total is centered on the Log screen with no label");
 check((await text(page, ".datelink")).includes("Select date") && (await page.locator(".datelink").boundingBox()).height < 50 && await page.locator(".topdate").count() === 0, "one small 'Select date' link replaces the open date box; the date at the top is plain text");
 await page.click(".datelink");
@@ -940,7 +970,7 @@ check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors
 
 // ---- checks: card reserve and the Unlogged habit ----
 await menuGo(page, "Checks");
-const ctext = await text(page, "#screen");
+var ctext = await text(page, "#screen");
 check(/No card reserve|Covered|Short by/.test(ctext), "the card reserve check says covered, short, or that none is set up");
 check(await page.locator(".catcard .catrow").count() === 1, "Uncategorized by week has one row for the one week that was counted");
 check(((await page.locator(".catcard .catbar").first().getAttribute("aria-label")) ?? "").includes("could not be accounted for"), "its bar says what it means in words");
@@ -1015,13 +1045,13 @@ await page.fill("#b-buf", "600"); await page.fill("#b-allow", "500");
 check((await text(page, "#f-msg")).includes("more than the wallet holds") && await page.locator("#f-save").isDisabled(), "envelopes bigger than the wallet are refused, with the amount");
 await page.fill("#b-allow", "300");
 await page.click("#f-save"); await seen(page, "#toast", "Wallet split");
-const bt = await text(page, "#screen");
+var bt = await text(page, "#screen");
 check(bt.includes("₱600.00") && bt.includes("₱300.00"), "the buffer and the allowance are shown separately");
 await page.click('#nav button:has-text("Log")');
 await page.click('button:has-text("Add expense")'); await page.fill("#f-amount", "400"); await page.click('#sheet .chip:has-text("Upskill")'); await page.click('#sheet .chip:has-text("GCash")'); await page.click("#f-save");
 check(await seen(page, "#toast", "₱100.00 came out of the overrun buffer"), "spending past the allowance says how much came out of the buffer");
 await menuGo(page, "Buffer");
-const bt2 = await text(page, "#screen");
+var bt2 = await text(page, "#screen");
 check(bt2.includes("everyday allowance in GCash is empty") && /Upskill[\s\S]*₱100\.00/.test(bt2) && bt2.includes("₱500.00"), "the draw is listed by category, and the empty allowance is said in words");
 await shot(page, "29-buffer");
 await page.click('#nav button:has-text("Verify")');
@@ -1036,9 +1066,9 @@ await page.click("#a-bank");
 check((await page.locator("#sheet .bankrow").count()) === 14 && (await text(page, "#sheet")).includes("Coins.ph") && (await text(page, "#sheet")).includes("Beep"), "it opens a list: twelve banks and wallets (Coins.ph and Beep included), Cash, and 'not in the list'");
 check(/^[\s\S]*?Cash[\s\S]*BDO[\s\S]*Beep[\s\S]*BPI[\s\S]*Coins\.ph[\s\S]*GCash[\s\S]*GoTyme[\s\S]*Landbank[\s\S]*MariBank[\s\S]*Maya[\s\S]*Metrobank[\s\S]*Security Bank[\s\S]*UnionBank/.test((await page.locator("#sheet .bankrow").allInnerTexts()).join(" ")) && /Cash/.test((await page.locator("#sheet .bankrow").first().innerText())), "the bank list starts with Cash, then every bank from A to Z");
 check((await page.locator("#sheet .banklist").evaluate((e) => getComputedStyle(e).overflowY)) === "auto", "the list scrolls");
-const tiles = await page.locator("#sheet .bankrow > :first-child").evaluateAll((els) => els.map((e) => { const c = getComputedStyle(e.matches(".icowrap") ? e.querySelector(".mono") ?? e : e); const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)].join("x"); }));
+var tiles = await page.locator("#sheet .bankrow > :first-child").evaluateAll((els) => els.map((e) => { const c = getComputedStyle(e.matches(".icowrap") ? e.querySelector(".mono") ?? e : e); const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)].join("x"); }));
 check(tiles.length === 14 && new Set(tiles.filter((_, i) => i < 13)).size === 1, "every bank picture is the same size, in the same framed tile: " + [...new Set(tiles)].join());
-const framed = await page.locator("#sheet .bankrow img.ico").evaluateAll((els) => els.every((e) => getComputedStyle(e).borderTopWidth === "1px" && getComputedStyle(e).objectFit === "contain"));
+var framed = await page.locator("#sheet .bankrow img.ico").evaluateAll((els) => els.every((e) => getComputedStyle(e).borderTopWidth === "1px" && getComputedStyle(e).objectFit === "contain"));
 check(framed, "every logo sits inside a white frame, shrunk to fit, never cropped");
 await shot(page, "30-banks");
 await page.click('#sheet .bankrow:has-text("GoTyme")');
@@ -1063,9 +1093,9 @@ check(ledgerNow.state.accounts.filter((a) => a.bank === "gotyme").length === 2, 
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
 // ---- bank logos: loaded for every listed bank by themselves (the network is faked here) ----
-const pngB64 = await page.evaluate(() => { const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d"); x.fillStyle = "#1a8"; x.fillRect(0, 0, 64, 64); return c.toDataURL("image/png").split(",")[1]; });
-const tileB64 = await page.evaluate(() => { const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d"); x.fillStyle = "#d6d6d6"; x.fillRect(0, 0, 128, 128); x.fillStyle = "#9a9a9a"; x.font = "bold 60px sans-serif"; x.textAlign = "center"; x.fillText("U", 64, 88); return c.toDataURL("image/png").split(",")[1]; });   // the flat grey letter tile some services invent
-const pngReply = (b64, cors) => ({ status: 200, contentType: "image/png", headers: cors ? { "access-control-allow-origin": "*" } : {}, body: Buffer.from(b64, "base64") });
+var pngB64 = await page.evaluate(() => { const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d"); x.fillStyle = "#1a8"; x.fillRect(0, 0, 64, 64); return c.toDataURL("image/png").split(",")[1]; });
+var tileB64 = await page.evaluate(() => { const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d"); x.fillStyle = "#d6d6d6"; x.fillRect(0, 0, 128, 128); x.fillStyle = "#9a9a9a"; x.font = "bold 60px sans-serif"; x.textAlign = "center"; x.fillText("U", 64, 88); return c.toDataURL("image/png").split(",")[1]; });   // the flat grey letter tile some services invent
+var pngReply = (b64, cors) => ({ status: 200, contentType: "image/png", headers: cors ? { "access-control-allow-origin": "*" } : {}, body: Buffer.from(b64, "base64") });
 iconServe = (r) => {
   const u = r.request().url();
   if (u === "https://icon.horse/icon/gotyme.com.ph") return r.fulfill(pngReply(pngB64, true));          // copyable
@@ -1079,13 +1109,13 @@ await page.click("#a-bank");
 check((await text(page, "#sheet")).includes("No logo found online yet for"), "with no internet at the start, the list says which logos are still missing");
 await page.click('#sheet button:has-text("Try again")');
 await page.waitForFunction(() => !document.getElementById("sheet").innerText.includes("Loading logos"), null, { timeout: 15000 });
-const gotymeImg = await page.locator('#sheet .bankrow:has-text("GoTyme") img.ico').getAttribute("src");
+var gotymeImg = await page.locator('#sheet .bankrow:has-text("GoTyme") img.ico').getAttribute("src");
 check(gotymeImg?.startsWith("data:image/"), "a copyable logo is copied and kept on the phone");
 check((await page.locator('#sheet .bankrow:has-text("Landbank") img.ico').getAttribute("src")) === "https://landbank.com/apple-touch-icon.png", "a bank's own site icon is shown from there");
 check((await page.locator('#sheet .bankrow:has-text("UnionBank") img').count()) === 0, "a generated grey placeholder is refused, so UnionBank keeps its letter");
 check(!iconAsked.some((u) => /maya|paymaya/.test(u) && !/wiki/.test(u)), "Maya is never asked of the icon services (they only return a grey arrow for it)");
 check((await page.locator('#sheet .bankrow:has-text("Maya") img.ico').getAttribute("src"))?.startsWith("data:image/") && iconAsked.some((u) => u.includes("wikipedia.org")), "Maya's logo is found through Wikipedia and copied onto the phone, with nothing to tap");
-const rep = await text(page, "#logo-report");
+var rep = await text(page, "#logo-report");
 check(rep.includes("UnionBank") && rep.includes("only a generated placeholder came back") && rep.includes("GCash") && rep.includes("its website: could not be loaded") && !rep.includes("Maya"), "and the reasons are listed for each bank and source");
 await shot(page, "31-logos");
 await page.click('#sheet button:has-text("Cancel")');
@@ -1149,13 +1179,13 @@ check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors
 await menuGo(page, "Pay plan");
 check((await text(page, "#screen")).includes("You can skip it. Buckets works without it."), "the pay plan starts empty");
 check((await page.locator('button:has-text("Load a plan")').count()) === 0 && (await page.locator('#screen button[data-action="open-planform"]').count()) === 1 && (await page.locator("#screen button").count()) === (await page.locator("#screen .hub button").count()) + 1, "the Pay plan screen offers typing a plan in, and nothing else besides the picture strip (there is no plan file to load)");
-const plan = { schema_version: 1, unit: "PHP_whole_pesos", effective_from: "2026-10-01",
+var plan = { schema_version: 1, unit: "PHP_whole_pesos", effective_from: "2026-10-01",
   paydays: [{ id: "first", day: 15, expected_income: 5100 }, { id: "second", day: "last", expected_income: 7100 }],
   lines: [{ name: "Food", first: 3000, second: 3000 }, { name: "Shopping", first: 1000, second: 1000 }, { name: "Rent", first: 0, second: 2000 },
     { name: "Apartment", kind: "goal", first: 1000, second: 1000 }, { name: "Mystery", first: 100, second: 100 }],
   ef_target_basis: ["Rent", "Food"], ef_target_months: 3 };
 await installPlan(page, plan); await menuGo(page, "Pay plan");
-const ptxt = await text(page, "#screen");
+var ptxt = await text(page, "#screen");
 if (!ptxt.includes("last day of the month")) console.log("   plan screen:", JSON.stringify(ptxt.slice(0, 500)));
 check(ptxt.includes("last day of the month") && ptxt.includes("₱5,100.00") && ptxt.includes("₱7,100.00") && ptxt.includes("₱12,200.00") && ptxt.toLowerCase().includes("this cutoff"), "the plan shows both paydays (the second at month end) and the totals per payday and month");
 check(ptxt.includes("Mystery") && ptxt.includes("not tracked") && ptxt.includes("In effect since"), "a line with no matching category is said out loud, and the start date is shown");
@@ -1168,7 +1198,7 @@ check(await page.locator("#f-save").isDisabled(), "pay needs an amount first");
 await page.fill("#f-amount", "5000.50");
 check(await page.locator("#f-save").isDisabled(), "and What it is has to be chosen too (it starts empty)");
 await page.click('#sheet .chip:has-text("Salary")'); await page.click("#f-save"); await seen(page, "#toast", "Pay recorded");
-const inc = await text(page, "#screen");
+var inc = await text(page, "#screen");
 check(inc.includes("₱5,000.50") && inc.includes("-₱2,099.50 less"), "pay received is shown against the plan as a signed difference in words");
 ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.settings.plans[0].paydays[1].income === 710000, "the plan itself is not changed by the real pay");
@@ -1185,7 +1215,7 @@ await page.click('button:has-text("Add a goal")'); await page.fill("#g-name", "E
 await seen(page, "#screen", "Emergency Fund");
 if (await page.locator('button[data-action="toggle-reveal"][aria-pressed="false"]').count()) await page.click('button[data-action="toggle-reveal"][aria-pressed="false"]');
 await openGoal(page, "Emergency Fund");
-const efText = await text(page, "#sheet");
+var efText = await text(page, "#sheet");
 check(/Target\s*₱24,000\.00/.test(efText) && efText.includes("3 months of Rent, Food from your plan"), "the Emergency Fund target is worked out from the plan (3 x Rent + Food), not the 999 typed when the goal was made");
 check(/Months to target\s*Not known yet/.test(efText) && /Monthly contribution\s*none in your plan/.test(efText), "with no contribution line in the plan, months to target says it is not known");
 check(!efText.includes("Your plan suggests") && !efText.includes("Use it"), "there is no 'use it' button that would freeze the target as a typed number");
@@ -1200,9 +1230,11 @@ await shot(page, "16-pay-with-pictures");
 await page.click('#sheet button:has-text("Cancel")');
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5f. scanning a photo =====
-const closeViewer = async () => {   // tap the dark strip above the picture; wait for the picture to settle first, and tap once more if the first tap landed too early
+try { blockName = "5f. scanning a photo";
+var closeViewer = async () => {   // tap the dark strip above the picture; wait for the picture to settle first, and tap once more if the first tap landed too early
   await page.waitForFunction(() => { const i = document.querySelector(".lightbox img"); return i && i.complete; }, null, { timeout: 5000 }).catch(() => {}); await page.waitForTimeout(300);
   for (let k = 0; k < 3 && await page.locator(".lightbox").count(); k++) { const b = await page.locator(".lightbox .lbstage").boundingBox(); await page.mouse.click(b.x + 5, b.y + 3); await page.waitForTimeout(400); }
 };
@@ -1212,7 +1244,7 @@ await addAccount(page, "Wallet", "asset", "1000");
 await addAccount(page, "MariBank", "asset", "0");
 await addAccount(page, "MariBank \u00b7 Credit card", "liability", "0");   // the same bank holds a money account and a credit card
 // An invented receipt drawn in the page, so no real paper is ever in the repository.
-const receiptPng = await page.evaluate(() => {
+var receiptPng = await page.evaluate(() => {
   const c = document.createElement("canvas"); c.width = 900; c.height = 1000;
   const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 900, 1000); x.fillStyle = "#000"; x.font = "bold 44px monospace";
   ["SAMPLE BURGER HOUSE", "Official Receipt", "Date: Oct 2, 2026", "1 Burger meal   150.00", "Subtotal   150.00", "VAT 12%   16.07", "TOTAL   150.00", "Cash   200.00", "Change   50.00", "Thank you"].forEach((l, i) => x.fillText(l, 40, 80 + i * 80));
@@ -1264,8 +1296,8 @@ check(await page.waitForSelector(".lightbox img", { timeout: 4000 }).then(() => 
 await closeViewer();
 await page.click('button:has-text("Edit")'); await page.fill("#f-amount", "140"); await page.click("#f-save");
 await seen(page, "#screen", "₱140.00");
-let scanned = JSON.parse((await stored(page)).local);
-const tx = scanned.state.transactions.find((t) => t.source === "photo");
+var scanned = JSON.parse((await stored(page)).local);
+var tx = scanned.state.transactions.find((t) => t.source === "photo");
 check(tx && tx.status === "draft" && tx.edited_before_verify === true, "fixing the amount is recorded as an edit of a photo draft");
 check(scanned.state.attachments.length === 1 && scanned.state.attachments[0].transaction_id === tx.id, "the ledger records the attachment, not the picture itself");
 check(!JSON.stringify(scanned).includes("data:image/jpeg"), "the picture is not inside the ledger text");
@@ -1274,10 +1306,10 @@ check(await page.waitForSelector("img.shot[data-photo]:not([hidden])", { timeout
 await page.click('button:has-text("Delete")'); await page.click('button:has-text("Tap again to delete")');
 await seen(page, "#screen", "Nothing to verify");
 await page.waitForTimeout(300);
-const left = await page.evaluate(() => new Promise((res) => { const r = indexedDB.open("financialTracker"); r.onsuccess = () => { const g = r.result.transaction("photos").objectStore("photos").count(); g.onsuccess = () => res(g.result); }; }));
+var left = await page.evaluate(() => new Promise((res) => { const r = indexedDB.open("financialTracker"); r.onsuccess = () => { const g = r.result.transaction("photos").objectStore("photos").count(); g.onsuccess = () => res(g.result); }; }));
 check(left === 0, "deleting the draft deletes its photo from the phone");
 // A bank app screenshot: the bank on the From line paid, and nothing else is guessed over it.
-const bankPng = await page.evaluate(() => {
+var bankPng = await page.evaluate(() => {
   const c = document.createElement("canvas"); c.width = 900; c.height = 1000;
   const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 900, 1000); x.fillStyle = "#000"; x.font = "bold 40px sans-serif";
   ["Transaction Details", "PHP 592.50", "From MariBank", "To SAMPLE SUPERMARKET", "Transaction Amount PHP 592.50", "Transaction Type Credit Card Transaction", "Transaction Time 01 Oct 2026, 19:52"].forEach((l, i) => x.fillText(l, 40, 80 + i * 90));
@@ -1306,8 +1338,8 @@ await page.fill("#f-split", "150");
 check(await page.locator("#f-save").isDisabled(), "a second part as big as the whole is refused");
 await page.fill("#f-split", "50"); await page.click("#f-save");
 check(await seen(page, "#screen", "as a draft with its photo"), "the split is saved as one draft");
-const sp = JSON.parse((await stored(page)).local), spTx = sp.state.transactions.filter((t) => t.source === "photo" && t.payee.includes("BURGER")).pop();
-const spEntries = sp.state.entries.filter((e) => e.transaction_id === spTx.id);
+var sp = JSON.parse((await stored(page)).local), spTx = sp.state.transactions.filter((t) => t.source === "photo" && t.payee.includes("BURGER")).pop();
+var spEntries = sp.state.entries.filter((e) => e.transaction_id === spTx.id);
 check(spEntries.some((e) => e.category_id === "cat-food" && e.amount === 10000) && spEntries.some((e) => e.category_id === "cat-essentials" && e.amount === 5000) && spEntries.some((e) => e.account_id && e.amount === -15000), "Food ₱100.00 and Essentials ₱50.00 are charged once, ₱150.00, to the account");
 await page.click('#nav button:has-text("Verify")');
 check((await text(page, "#screen")).includes("Food ₱100.00") && (await text(page, "#screen")).includes("Essentials ₱50.00"), "Verify shows both parts and the photo");
@@ -1503,10 +1535,10 @@ check(await page.locator('#sheet input[data-scan="quick"][capture="environment"]
 await page.click('#sheet button:has-text("Cancel")');
 await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles('input[data-scan="quick"]:not([capture])', { name: "bank.png", mimeType: "image/png", buffer: Buffer.from(bankPng, "base64") });
 check(await seen(page, "#toast", "Saved", 180000), "one photo is enough: it is read and saved as a draft by itself");
-let q = JSON.parse((await stored(page)).local);
-const quick = q.state.transactions.find((t) => t.source === "photo" && t.status === "draft");
+var q = JSON.parse((await stored(page)).local);
+var quick = q.state.transactions.find((t) => t.source === "photo" && t.status === "draft");
 check(quick && quick.edited_before_verify === false && q.state.attachments.some((a) => a.transaction_id === quick.id) && (q.settings.scan_queue ?? []).length === 0, "it is a photo draft with its photo, and the queue is empty again");
-const quickEntries = q.state.entries.filter((e) => e.transaction_id === quick.id), mari = q.state.accounts.find((a) => a.name === "MariBank \u00b7 Credit card");
+var quickEntries = q.state.entries.filter((e) => e.transaction_id === quick.id), mari = q.state.accounts.find((a) => a.name === "MariBank \u00b7 Credit card");
 check(quickEntries.some((e) => e.account_id === mari.id && e.amount === -59250) && quickEntries.some((e) => e.category_id === "cat-essentials" && e.amount === 59250), "it chose MariBank, ₱592.50 and Essentials without being asked");
 await menuGo(page, "Cards");
 check((await text(page, "#top")).includes("Cards") && (await text(page, "#screen")).includes("MariBank \u00b7 Credit card") && await page.locator(".row small:has-text('you owe'), .tile span").count() === 0 && !(await text(page, "#screen")).includes("in it") && !(await text(page, "#screen")).includes("owed on cards") && await page.locator('.netcard[aria-label^="Free"]').count() === 1 && await page.locator(".swipe .swcard").count() >= 2, "the Cards screen shows the net on top, then a card for each account and credit card, with pictures and no little sentences");
@@ -1534,13 +1566,13 @@ await page.click('#nav button:has-text("Log")');
 
 // closing the app right after the photo: nothing is lost, it is read the next time the app opens
 await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles('input[data-scan="quick"]:not([capture])', { name: "bank2.png", mimeType: "image/png", buffer: Buffer.from(bankPng, "base64") });
-const qlen = await page.evaluate(() => new Promise((resolve) => {   // watch the saved ledger from inside the page, so a quick reader cannot slip past
+var qlen = await page.evaluate(() => new Promise((resolve) => {   // watch the saved ledger from inside the page, so a quick reader cannot slip past
   const t0 = Date.now(), look = () => { let n = 0; try { for (const k of Object.keys(localStorage)) { const v = localStorage.getItem(k); if (v && v.includes('"scan_queue"')) n = Math.max(n, (JSON.parse(v).settings?.scan_queue ?? []).length); } } catch { /* not the ledger */ } if (n > 0 || Date.now() - t0 > 20000) resolve(n); else setTimeout(look, 5); };
   look();
 }));
 check(qlen === 1, "the photo is kept in the queue the moment it is taken (" + qlen + ")");
 await page.reload(); await page.waitForSelector("#nav button");
-let resumed = false;
+var resumed = false;
 for (let i = 0; i < 1800 && !resumed; i++) { const l = JSON.parse((await stored(page)).local); resumed = l.state.transactions.filter((t) => t.source === "photo" && t.status === "draft").length === 2 && (l.settings.scan_queue ?? []).length === 0; if (!resumed) await page.waitForTimeout(100); }
 check(resumed, "after the app is closed and opened again, the waiting photo is read and saved as a draft");
 
@@ -1556,8 +1588,10 @@ await page.click('#sheet button:has-text("Throw this photo away")');
 check(await seen(page, "#toast", "thrown away") && (JSON.parse((await stored(page)).local).settings.scan_queue ?? []).length === 0, "throwing it away empties the queue");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5g. income: a payslip with overtime =====
+try { blockName = "5g. income: a payslip with overtime";
 console.log("Income");
 ({ ctx, page, errors } = await open({ blockSw: true }));
 await addAccount(page, "Wallet", "asset", "1000");
@@ -1565,7 +1599,7 @@ await addAccount(page, "Savings", "asset", "0");
 await menuGo(page, "Goals");
 await page.click('button:has-text("Add a goal")'); await page.fill("#g-name", "Emergency Fund"); await page.click('#sheet button[data-action="pick-goal-role"]'); await page.click('#sheet .chip:has-text("Savings")'); await page.click("#f-save");
 await seen(page, "#screen", "Emergency Fund");
-const receiptPngForSlip = await page.evaluate(() => { const c = document.createElement("canvas"); c.width = 600; c.height = 300; const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 600, 300); x.fillStyle = "#000"; x.font = "bold 36px sans-serif"; x.fillText("Net Pay   1,000.00", 30, 120); return c.toDataURL("image/png").split(",")[1]; });
+var receiptPngForSlip = await page.evaluate(() => { const c = document.createElement("canvas"); c.width = 600; c.height = 300; const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 600, 300); x.fillStyle = "#000"; x.font = "bold 36px sans-serif"; x.fillText("Net Pay   1,000.00", 30, 120); return c.toDataURL("image/png").split(",")[1]; });
 await menuGo(page, "Income");
 check((await text(page, "#screen")).includes("Nothing recorded"), "Income starts empty and says how to begin");
 await page.click('button:has-text("Add income")');
@@ -1573,7 +1607,7 @@ await page.click('button:has-text("Add income")');
   check(t.includes("Add income") && t.includes("Type a payslip") && t.includes("Take a photo") && t.includes("Choose from photos or files") && t.includes("Other income") && !t.includes("(interest, refund)") && await page.locator('#screen button:has-text("Add other income")').count() === 0, "Add income opens one window: type a payslip, take or choose a photo, or other income; no step in between"); }
 await page.click('#sheet button:has-text("Cancel")');
 await addPayslipFlow(page);
-const choice = await text(page, "#sheet");
+var choice = await text(page, "#sheet");
 check(choice.includes("Type a payslip") && choice.includes("Take a photo") && choice.includes("Choose from photos or files") && await page.locator('#sheet input[data-scan="payslip"][capture="environment"]').count() === 1, "Add a payslip offers two ways: type it in, or read it from a photo (camera, or photos and files)");
 await page.click('#sheet button:has-text("Type a payslip")');
 check(await page.locator("#p-emp").count() === 1, "'Type a payslip' opens the payslip form");
@@ -1606,7 +1640,7 @@ check((await text(page, ".hero")).includes("₱10,300.00") && (await text(page, 
 await page.click('button[aria-label="Earlier"]');
 check((await text(page, ".hero")).includes("₱0.00") && (await text(page, "#screen")).includes("earned in September 2026"), "and not in September, the month of its pay period");
 await page.click('button[aria-label="Later"]');
-const incText = await text(page, "#screen");
+var incText = await text(page, "#screen");
 check(/Gross\s*₱11,500\.00[\s\S]*Deductions\s*-₱1,200\.00[\s\S]*Net\s*₱10,300\.00/.test(incText) && !incText.includes("Basic salary") && (await page.locator("#screen .bars").count()) === 0, "the Overview is gross, deductions and net, with no bar graph");
 { const ov = await page.evaluate(() => { const r = (el) => Math.round(el.getBoundingClientRect().right); return { rows: [...document.querySelectorAll("#screen .mlist .mline .mv")].map(r), net: r(document.querySelector("#screen .mtotal .mv")) }; });
   check(ov.rows.length === 2 && ov.rows.every((x) => Math.abs(x - ov.net) <= 1), "on the Overview the gross and deductions amounts line up at the right with the net (" + JSON.stringify(ov) + ")"); }
@@ -1622,7 +1656,7 @@ check(await page.locator('#screen .seg button:has-text("Pay history")').count() 
 await page.click('#screen .seg button:has-text("Overview")');
 await shot(page, "38-income");
 await page.click('button[aria-label="Earlier"]'); await page.click('button[aria-label="Earlier"]');
-const prevMonth = await text(page, "#screen");
+var prevMonth = await text(page, "#screen");
 check(prevMonth.includes("Nothing recorded for August 2026") && !prevMonth.includes("Sample Employer") && !prevMonth.includes("Plan against what arrived") && !prevMonth.includes("Employers"), "another month shows only that month");
 await page.click('button[aria-label="Later"]'); await page.click('button[aria-label="Later"]');
 await page.click('#nav button:has-text("Verify")');
@@ -1641,12 +1675,12 @@ await page.click('#sheet button:has-text("Close")');
 await page.click('#nav button:has-text("Verify")');
 check((await text(page, "#screen")).includes("2 to check"), "Verify now holds two drafts: the Emergency Fund part and the free part");
 // the title and the first line below it sit at the same height on Log and on Verify
-const barAt = () => page.evaluate(() => ({ h1: Math.round(document.querySelector("#top h1").getBoundingClientRect().top), below: Math.round(document.querySelector("#screen").getBoundingClientRect().top) }));
-const onVerify = await barAt(); await page.click('#nav button:has-text("Log")'); const onLog = await barAt(); await page.click('#nav button:has-text("Verify")');
+var barAt = () => page.evaluate(() => ({ h1: Math.round(document.querySelector("#top h1").getBoundingClientRect().top), below: Math.round(document.querySelector("#screen").getBoundingClientRect().top) }));
+var onVerify = await barAt(); await page.click('#nav button:has-text("Log")'); const onLog = await barAt(); await page.click('#nav button:has-text("Verify")');
 check(onVerify.h1 === onLog.h1 && onVerify.below === onLog.below, "the title and the content start at the same height on Log and Verify (" + JSON.stringify(onVerify) + " vs " + JSON.stringify(onLog) + ")");
 // changing the payslip: the window opens filled in, and saving replaces the payslip (the pay is not counted twice)
 await menuGo(page, "Income");
-const heroBefore = await text(page, ".hero");
+var heroBefore = await text(page, ".hero");
 await page.click('button.choice[data-action="open-payslips"]');
 await page.click('#sheet button[data-action="edit-slip"]');
 check(await page.locator('#sheet details.tot[data-keep="e"] .pl').count() === 3 && await page.locator('#sheet details.tot[data-keep="d"] .pl').count() === 4 && await page.locator("#sheet details.tot").count() === 2, "Change this payslip opens with its printed lines (3 earnings, 4 deductions) and no Employer share row");
@@ -1684,10 +1718,10 @@ await page.click('#sheet button[data-action="del-inc-yes"]');
 check(await seen(page, "#toast", "Entry removed") && !(await text(page, "#sheet")).includes("Added without a payslip"), "removing takes it out of the list");
 await page.click('#sheet button:has-text("Close")');
 // the view buttons stay exactly where they are when the view or the month changes (with or without payslips in the month)
-const segTop = () => page.evaluate(() => Math.round(document.querySelector("#screen .seg").getBoundingClientRect().top));
-const vp = page.viewportSize(); await page.setViewportSize({ width: vp.width, height: 560 });   // short enough that the Months list scrolls, so a shorter view could make the page jump
+var segTop = () => page.evaluate(() => Math.round(document.querySelector("#screen .seg").getBoundingClientRect().top));
+var vp = page.viewportSize(); await page.setViewportSize({ width: vp.width, height: 560 });   // short enough that the Months list scrolls, so a shorter view could make the page jump
 await page.click('#screen .seg button:has-text("Earnings")'); await page.evaluate(() => window.scrollTo(0, 120));
-const t0 = await segTop();
+var t0 = await segTop();
 await page.click('#screen .seg button:has-text("Deductions")'); const t1 = await segTop();
 await page.click('#screen .seg button:has-text("Earnings")'); const t2 = await segTop();
 await page.evaluate(() => document.querySelector('button[aria-label="Earlier"]').click()); const t3 = await segTop();
@@ -1724,8 +1758,10 @@ await page.click('#nav button:has-text("Log")');
 check(await page.locator(".sumgrid").count() === 0, "the Log screen has no In, Spent, Saved, Left card");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5h. saying an entry =====
+try { blockName = "5h. saying an entry";
 console.log("Voice");
 ({ ctx, page, errors } = await open({ blockSw: true, noSpeech: true }));
 await addAccount(page, "Wallet", "asset", "1000");
@@ -1737,12 +1773,12 @@ check((await text(page, "#sheet")).includes("Speech is not available here") && a
 check((await text(page, "#sheet")).includes("audio leaves your phone") , "the window says plainly that the audio leaves the phone while speaking");
 await page.fill("#v-text", "lunch 95 pesos at Sample Burger using GCash yesterday");
 await page.click("#f-save");
-const savedVoice = await seen(page, "#toast", "Saved Sample Burger", 15000);
+var savedVoice = await seen(page, "#toast", "Saved Sample Burger", 15000);
 if (!savedVoice) console.log("   debug toast:", JSON.stringify(await text(page, "#toast")), "banner:", JSON.stringify(await text(page, "#banner")), "sheet:", JSON.stringify((await text(page, "#sheet")).slice(0, 300)), "errors:", JSON.stringify(errors));
 check(savedVoice, "a clear sentence is saved as a draft at once");
-let vl = JSON.parse((await stored(page)).local);
-const vt = vl.state.transactions.find((t) => t.source === "voice");
-const gc = vl.state.accounts.find((a) => a.name === "GCash"), vEntries = vl.state.entries.filter((e) => e.transaction_id === vt.id);
+var vl = JSON.parse((await stored(page)).local);
+var vt = vl.state.transactions.find((t) => t.source === "voice");
+var gc = vl.state.accounts.find((a) => a.name === "GCash"), vEntries = vl.state.entries.filter((e) => e.transaction_id === vt.id);
 check(vt.status === "draft" && vt.edited_before_verify === false && vt.date === "2026-10-02" && vt.payee === "Sample Burger" && vt.memo.includes("lunch 95"), "as a voice draft dated yesterday, named, with what was said kept");
 check(vEntries.some((e) => e.account_id === gc.id && e.amount === -9500) && vEntries.some((e) => e.category_id === "cat-food" && e.amount === 9500), "paid from GCash, ₱95.00, Food");
 await page.click('#nav button:has-text("Verify")');
@@ -1763,8 +1799,10 @@ vl = JSON.parse((await stored(page)).local);
 check(vl.state.transactions.filter((t) => t.source === "voice").length === 2 && vl.state.attachments.length === 0, "two voice drafts, and a spoken entry has no photo");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5i. windows and speech on a phone-sized screen =====
+try { blockName = "5i. windows and speech on a phone-sized screen";
 console.log("Windows and speech");
 ({ ctx, page, errors } = await open({ blockSw: true, fakeSpeech: true }));
 await addAccount(page, "Wallet", "asset", "1000"); await addAccount(page, "GCash", "asset", "500");
@@ -1773,11 +1811,11 @@ await page.setViewportSize({ width: 360, height: 520 });   // a short screen, so
 await page.click('button:has-text("Add expense")');
 await page.fill("#f-amount", "50");
 await page.evaluate(() => { const s = document.querySelector("#sheet .sheet"); s.scrollTop = s.scrollHeight; });
-const before = await page.evaluate(() => document.querySelector("#sheet .sheet").scrollTop);
+var before = await page.evaluate(() => document.querySelector("#sheet .sheet").scrollTop);
 check(before > 50, "the window is taller than the screen and was scrolled to the bottom (" + before + ")");
 check(await page.evaluate(() => document.body.classList.contains("locked") && getComputedStyle(document.body).position === "fixed"), "while a window is open the page behind it is held still");
 await page.click('#sheet .chip:has-text("GCash")');
-const after = await page.evaluate(() => document.querySelector("#sheet .sheet").scrollTop);
+var after = await page.evaluate(() => document.querySelector("#sheet .sheet").scrollTop);
 check(after >= before - 2, "choosing something at the bottom does not throw the window back to the top (" + before + " to " + after + ")");
 await page.click('#sheet button:has-text("Cancel")');
 check(await page.evaluate(() => !document.body.classList.contains("locked") && getComputedStyle(document.body).position !== "fixed"), "closing the window lets the page move again");
@@ -1789,7 +1827,7 @@ check(await page.locator("#v-wave.on").count() === 1, "while it listens, the mov
 check(await page.waitForFunction(() => document.getElementById("v-msg")?.textContent.includes("did not catch anything"), null, { timeout: 5000 }).then(() => true, () => false), "when nothing is caught it says so, once, and does not keep reopening the microphone");
 await page.click("#v-mic");
 check(await page.waitForFunction(() => document.getElementById("v-text")?.value === "lunch 95 at sample burger using gcash", null, { timeout: 5000 }).then(() => true, () => false), "the next tap hears the sentence");
-const langs = await page.evaluate(() => window.__langs);
+var langs = await page.evaluate(() => window.__langs);
 check(langs.length === 2 && langs[0] !== langs[1], "the second try listens for the other language, by itself: " + langs.join());
 check(await page.waitForFunction(() => document.getElementById("v-mic")?.textContent.includes("Tap and speak"), null, { timeout: 3000 }).then(() => true, () => false), "and the button is ready again");
 check(await page.locator("#v-wave.on").count() === 0, "and the sound bars go away when it stops");
@@ -1800,19 +1838,21 @@ check(await seen(page, "#toast", "Saved") && (await text(page, "#toast")).toLowe
 // (said with no amount, so the check-what-I-heard form opens and the amount is typed there)
 await page.click('button[aria-label="Say an entry out loud"]'); await page.fill("#v-text", "lunch at sample burger using gcash"); await page.click('#sheet [data-action="use-spoken"]');
 await page.waitForSelector("#sheet #f-amount"); await page.fill("#f-amount", "95");
-const lunchesBefore = JSON.parse((await stored(page)).local).state.transactions.length;
+var lunchesBefore = JSON.parse((await stored(page)).local).state.transactions.length;
 await page.click("#f-save");
 check(await seen(page, "#sheet", "This looks like one you already have") && await page.locator('#sheet button[data-action="link-dup"]').count() === 0, "a second entry like one already logged (same amount, account and day) is caught, even with no reference number; a spoken one offers no photo link");
 await page.click('#sheet button:has-text("It is that one: add nothing")'); await page.waitForTimeout(300);
 check(JSON.parse((await stored(page)).local).state.transactions.length === lunchesBefore && await page.locator("#sheet .sheet").count() === 0, "It is that one: nothing is added and the window closes");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5j. a payslip photo, line by line =====
+try { blockName = "5j. a payslip photo, line by line";
 console.log("Payslip photo");
 ({ ctx, page, errors } = await open({ blockSw: true }));
 await addAccount(page, "Wallet", "asset", "1000");
-const slipPng = await page.evaluate(() => {   // an invented payslip, drawn in the page
+var slipPng = await page.evaluate(() => {   // an invented payslip, drawn in the page
   const c = document.createElement("canvas"); c.width = 1500; c.height = 1400;
   const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 1500, 1400); x.fillStyle = "#000"; x.font = "bold 56px sans-serif";
   ["Sample Employer Inc", "PAYSLIP", "Pay period: 01/10/2026 - 02/10/2026", "Pay date: Oct 2, 2026", "EARNINGS", "Basic Salary   9,000.00", "Rice Subsidy   1,000.00", "Overtime   1,500.00", "Gross Pay   11,500.00", "DEDUCTIONS", "Withholding Tax   700.00", "SSS   300.00", "PhilHealth   100.00", "Pag-IBIG   100.00", "Net Pay   10,300.00"].forEach((l, i) => x.fillText(l, 40, 70 + i * 80));
@@ -1822,7 +1862,7 @@ await menuGo(page, "Scan");
 await page.setInputFiles("input[data-scan]:not([capture])", { name: "payslip.png", mimeType: "image/png", buffer: Buffer.from(slipPng, "base64") });
 check(await seen(page, "#sheet", "Add a payslip", 180000), "a payslip photo opens the payslip window, not a one-line pay entry");
 check(await page.locator("#sheet .pagepeek").count() === 0 && await page.locator('#sheet img.shot[alt="Your payslip photo"]').count() === 1, "a photo payslip keeps its picture at the top and has no page fold");
-const val = (id) => page.inputValue("#" + id);
+var val = (id) => page.inputValue("#" + id);
 check((await text(page, "#sheet")).includes("Check each figure against the paper"), "the payslip window says, in one short line, that every figure was read from the photo and must be checked");
 check(/Total earnings[\s\S]*?₱11,500\.00/.test(await text(page, "#sheet")) && /Total deductions[\s\S]*?₱1,200\.00/.test(await text(page, "#sheet")), "the total earnings and total deductions are shown right away");
 check(await page.locator("#sheet details[data-keep='e']").evaluate((d) => !d.open) && await page.locator("#sheet details[data-keep='d']").evaluate((d) => !d.open), "the lines (basic, SSS and the rest) are folded away until opened");
@@ -1835,15 +1875,15 @@ await page.dblclick(".lightbox .lbstage");
 check(Number(await page.locator(".lightbox img").getAttribute("data-scale")) === 1, "and a second double-tap brings the whole photo back");
 await closeViewer();
 check(await page.locator(".lightbox").count() === 0 && await val("p-emp") === "Sample Employer Inc", "closing it returns to the window with everything as it was");
-const order = await page.evaluate(() => { const ids = ["p-tot-e", "p-tot-d", "p-emp", "p-from", "p-to", "p-date"].map((i) => document.getElementById(i).getBoundingClientRect().top); return ids.every((v, i) => i === 0 || v > ids[i - 1]); });
+var order = await page.evaluate(() => { const ids = ["p-tot-e", "p-tot-d", "p-emp", "p-from", "p-to", "p-date"].map((i) => document.getElementById(i).getBoundingClientRect().top); return ids.every((v, i) => i === 0 || v > ids[i - 1]); });
 check(order, "the order is totals, landed in, employer, then the dates");
-const tv = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById("p-tot-e")).fontSize));
+var tv = await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById("p-tot-e")).fontSize));
 check(tv >= 22, "the totals are the largest figures in the window (" + tv + "px)");
 check(await page.locator("#sheet .chip[data-action='pick-employer']").count() === 0, "no saved-employer suggestions are offered");
 await page.waitForTimeout(450);   // the window slides up first; measure after it has settled
-const sheetBox = await page.locator("#sheet .sheet").boundingBox(), totBox = await page.locator("#p-tot-d").boundingBox();   // the window itself, not the empty box that holds it
+var sheetBox = await page.locator("#sheet .sheet").boundingBox(), totBox = await page.locator("#p-tot-d").boundingBox();   // the window itself, not the empty box that holds it
 check(totBox && totBox.y + totBox.height < sheetBox.y + sheetBox.height, "the totals are on screen without scrolling");
-const slipRows = (key) => page.evaluate((k) => [...document.querySelectorAll(`#sheet details.tot[data-keep="${k}"] .pl`)].map((r) => [r.querySelector(".pl-label").textContent, r.querySelector(".pl-amt").textContent, [...r.querySelectorAll(".pl-t")].map((t) => t.textContent)]), key);
+var slipRows = (key) => page.evaluate((k) => [...document.querySelectorAll(`#sheet details.tot[data-keep="${k}"] .pl`)].map((r) => [r.querySelector(".pl-label").textContent, r.querySelector(".pl-amt").textContent, [...r.querySelectorAll(".pl-t")].map((t) => t.textContent)]), key);
 { const er = await slipRows("e"), dr = await slipRows("d");
   check(er.map((r) => r[1]).join("|") === "₱9,000.00|₱1,000.00|₱1,500.00" && dr.map((r) => r[1]).join("|") === "₱700.00|₱300.00|₱100.00|₱100.00", "the printed lines are listed as read, in print order, nothing squeezed into fixed boxes (" + JSON.stringify([er, dr]) + ")");
   check(er[2][2].includes("Overtime (suggested)") && !er[0][2].includes("Overtime (suggested)"), "only the exact line Overtime is suggested as overtime"); }
@@ -1852,7 +1892,7 @@ check(await page.locator("#sheet img.shot").count() === 1 && await page.locator(
 await shot(page, "45-payslip-scan");
 await page.click('#sheet .chip:has-text("Wallet")'); await page.click("#f-save");
 check(await seen(page, "#toast", "Payslip saved"), "after checking, it is saved as a payslip");
-const ps = JSON.parse((await stored(page)).local);
+var ps = JSON.parse((await stored(page)).local);
 check(ps.state.payslipLines.filter((l) => l.side === "deduction").length === 4 && ps.state.payslipLines.filter((l) => l.side === "earning").length === 3, "with seven lines");
 check(ps.state.attachments.length === 1 && ps.state.attachments[0].transaction_id === ps.state.payslips[0].transaction_id, "and the photo kept with the pay");
 await menuGo(page, "Income");
@@ -1864,7 +1904,7 @@ check((await text(page, "#sheet")).includes("View the photo"), "and the Payslips
 await page.click('#sheet button:has-text("Close")');
 
 // a payslip with the earnings on the left, the deductions on the right, photographed a little crooked (invented figures)
-const crookedPng = await page.evaluate(() => {
+var crookedPng = await page.evaluate(() => {
   const c = document.createElement("canvas"); c.width = 1400; c.height = 1000;
   const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 1400, 1000); x.fillStyle = "#000";
   x.translate(60, 40); x.rotate(0.05);
@@ -1879,18 +1919,20 @@ const crookedPng = await page.evaluate(() => {
 await menuGo(page, "Scan");
 await page.setInputFiles("input[data-scan]:not([capture])", { name: "crooked.png", mimeType: "image/png", buffer: Buffer.from(crookedPng, "base64") });
 check(await seen(page, "#sheet", "Add a payslip", 240000), "a crooked two-column payslip photo opens the payslip window");
-const gotD = (await slipRows("d")).map((r) => r[0].toLowerCase().replace(/[^a-z]/g, "") + " " + r[1]).join("|");   // the label is what the reader made of the photo; its letters, not its punctuation
+var gotD = (await slipRows("d")).map((r) => r[0].toLowerCase().replace(/[^a-z]/g, "") + " " + r[1]).join("|");   // the label is what the reader made of the photo; its letters, not its punctuation
 check(gotD === "withholdingtax ₱650.00|ssspremiumcont ₱400.00|philhealthpremiumcont ₱225.00|pagibigpremiumcont ₱100.00|absences ₱50.00", "the deductions side by side with the earnings land on their own printed labels, as printed (" + gotD + ")");
-const gotE = (await slipRows("e")).map((r) => r[0] + " " + r[1]).join("|");
+var gotE = (await slipRows("e")).map((r) => r[0] + " " + r[1]).join("|");
 check(gotE === "Basic Salary ₱9,000.00|Rice Subsidy ₱1,000.00|Skills Allowance ₱500.00", "and the earnings (" + gotE + ")");
-const head = [await val("p-gross"), await val("p-net"), await val("p-emp"), await val("p-from"), await val("p-to")].join("|");
+var head = [await val("p-gross"), await val("p-net"), await val("p-emp"), await val("p-from"), await val("p-to")].join("|");
 check(head === "10500.00|9075.00|PHIL SAMPLE, INC.|2026-04-16|2026-04-30", "the printed gross and net with the P sign, the company under the title, and a date range (" + head + ")");
 await shot(page, "46-crooked-payslip");
 await page.click('#sheet button:has-text("Cancel")');
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5k. Read now while the app is already reading by itself =====
+try { blockName = "5k. Read now while the app is already reading by itself";
 console.log("Read now");
 { const HUNG = /\/src\/vendor\/paddle\/ort\.wasm\.min\.mjs/;   // a reader that never answers
   ({ ctx, page, errors } = await open({ blockSw: true }));   // without the service worker the page's own requests can be held back
@@ -1908,8 +1950,10 @@ console.log("Read now");
   check(await seen(page, "#screen", "Reading the photos", 4000), "tapping Read now while the app is already reading says it is still reading (it used to do nothing)");
   check(await seen(page, "#screen", "could not run", 30000), "and when that run gives up the reason is shown, with Read now to try again");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5l. several employers, old payslips, what changed =====
+try { blockName = "5l. several employers, old payslips, what changed";
 console.log("Income round 5");
 { ({ ctx, page, errors } = await open({ blockSw: true }));
   await addAccount(page, "Test Cash", "asset", "500");
@@ -1950,8 +1994,10 @@ console.log("Income round 5");
   const earlier = await page.locator('#sheet details.earlier:has(summary:text-is("Earlier figures"))').first().textContent();
   check(/Basic salary ₱\d[\d,]*\.00 to ₱4,000\.00/.test(earlier) && /Received ₱\d[\d,]*\.00 to ₱4,000\.00/.test(earlier), "Earlier figures names which lines changed: Basic salary and Received, old to new (" + earlier.slice(-160) + ")");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5m. the date at the top of Log, and Cash first =====
+try { blockName = "5m. the date at the top of Log, and Cash first";
 console.log("Log date and Cash first");
 { ({ ctx, page, errors } = await open({ blockSw: true }));
   await addAccount(page, "Test Debit", "asset", "1000"); await addAccount(page, "Cash", "asset", "500");
@@ -2002,8 +2048,10 @@ console.log("Log date and Cash first");
   led = JSON.parse((await stored(page)).local);
   check(led.state.goals[0].account_id === "w", "the account is kept");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5n. help, and upgrading old data safely =====
+try { blockName = "5n. help, and upgrading old data safely";
 console.log("Help and upgrade safety");
 { ({ ctx, page, errors } = await open({ blockSw: true }));
   await page.click("#menuBtn");
@@ -2047,7 +2095,7 @@ console.log("Help and upgrade safety");
   check(await page.locator("#sheet svg.hd[data-drawing=data]").isVisible(), "the first-run notice shows the where-your-data-lives drawing");
   await ctx.close(); }
 
-const V1 = { v: 1, rev: 3, saved_at: "2026-10-01T08:00:00.000+08:00", settings: {}, state: {
+var V1 = { v: 1, rev: 3, saved_at: "2026-10-01T08:00:00.000+08:00", settings: {}, state: {
   accounts: [{ id: "w", name: "Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" }],
   goals: [], envelopes: [], categories: [{ id: "cat-food", name: "Food", kind: "expense" }], categoryMaps: [], rules: [], templates: [], presets: [], payeeRules: [], subscriptions: [], checkIns: [], attachments: [], tags: [], foreignAmounts: [], surveyResponses: [],
   transactions: [{ id: "t1", date: "2026-10-01", payee: "Sample Shop", memo: "", status: "verified", source: "manual", created_at: "2026-10-01T09:00:00.000+08:00", verified_at: "2026-10-01T09:00:00.000+08:00" }],
@@ -2097,8 +2145,10 @@ const V1 = { v: 1, rev: 3, saved_at: "2026-10-01T08:00:00.000+08:00", settings: 
   const after = JSON.parse((await stored(page)).local), idb2 = JSON.parse((await stored(page)).idb);
   check(after.v === 1 && idb2.v === 1 && after.state.entries.length === 2 && JSON.stringify(after.state.transactions) === JSON.stringify(V1.state.transactions), "both stores hold the data as it was, with every entry");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5o. friend fixes, round 1 =====
+try { blockName = "5o. friend fixes, round 1";
 console.log("Friend fixes 1");
 { // a brand-new install: the notice once, plain starter categories, no tiles, editable categories
   ({ ctx, page, errors } = await open({ blockSw: true, styled: false, keepNotice: true }));
@@ -2132,7 +2182,7 @@ console.log("Friend fixes 1");
   await page.click('#sheet button:has-text("I understand")');
   await ctx.close(); }
 
-const FIX = { v: 3, rev: 1, saved_at: "2026-10-01T08:00:00.000+08:00", settings: { notice_seen_at: "2026-10-01T08:00:00.000+08:00", gcash: { account_id: "wal", allowance_id: "env-a", buffer_id: "env-b" } }, state: {
+var FIX = { v: 3, rev: 1, saved_at: "2026-10-01T08:00:00.000+08:00", settings: { notice_seen_at: "2026-10-01T08:00:00.000+08:00", gcash: { account_id: "wal", allowance_id: "env-a", buffer_id: "env-b" } }, state: {
   ...OWNER_STYLE.state,
   accounts: ["chk:Checking:asset:100000", "wal:Wallet:asset:0", "pa:Pocket A:asset:0", "pb:Pocket B:asset:0"].map((x) => { const [id, name, cls, ob] = x.split(":"); return { id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: Number(ob), opening_date: "2026-09-01" }; }),
   goals: [{ id: "g-a", account_id: "pa", name: "Alpha", hidden_by_default: true }, { id: "g-b", account_id: "pb", name: "Beta", hidden_by_default: true }, { id: "g-c", account_id: "pb", name: "Emergency Fund", hidden_by_default: true }],
@@ -2184,8 +2234,10 @@ const FIX = { v: 3, rev: 1, saved_at: "2026-10-01T08:00:00.000+08:00", settings:
   const sw = JSON.parse((await stored(page)).local).state, swTx = sw.transactions.find((t) => t.payee === "Month-end buffer sweep");
   check(JSON.stringify(sw.entries.filter((e) => e.transaction_id === swTx.id).map((e) => [e.account_id, e.amount])) === JSON.stringify([["pa", 10000], ["pb", 20000], ["wal", -30000]]), "Alpha is filled to its 100.00 target and Beta takes the other 200.00");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5p. no Type to set any more: the old one-time notice is not shown =====
+try { blockName = "5p. no Type to set any more: the old one-time notice is not shown";
 console.log("No Type notice");
 { const cats = OWNER_STYLE.state.categories.map((c) => c.id === "cat-shopping" ? { ...c, role: "shopping" } : c).concat([owner("cat-fun", "Fun", "fun")]);
   ({ ctx, page, errors } = await open({ blockSw: true, keepNotice: true, seed: { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, categories: cats } } }));
@@ -2194,8 +2246,10 @@ console.log("No Type notice");
   const led = JSON.parse((await stored(page)).local);
   check(led.state.categories.find((c) => c.id === "cat-shopping").role === "shopping", "stored Types are kept, never deleted");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5q. buckets read from the name: needs, wants, savings, other =====
+try { blockName = "5q. buckets read from the name: needs, wants, savings, other";
 console.log("Buckets");
 { const cats = OWNER_STYLE.state.categories.concat([owner("cat-util", "Kuryente"), owner("cat-fun", "Fun"), owner("cat-coffee", "Coffee"), owner("cat-shabu", "Shabu Kain"), owner("cat-misc", "Misc")]);
   const rule = (id, cat, amount) => ({ id, kind: "budget", subject_id: cat, amount, effective_from: "2026-10-01", created_at: "2026-10-01T08:00:00.000+08:00" });
@@ -2231,8 +2285,10 @@ console.log("Buckets");
   check(await page.waitForFunction(() => document.getElementById("screen").innerText.replace(/\s+/g, " ").includes("Coffee beans Wants"), null, { timeout: 4000 }).then(() => true, () => false), "Use takes the bucket the new name reads as");
   check(errors.length === 0, "no script errors in the buckets flow");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5s. What's new after an update, and the how-to clips =====
+try { blockName = "5s. What\"s new after an update, and the how-to clips";
 console.log("What's new and how-tos");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-09-01" };
   const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, income_base_pin: 2500000 }, state: { ...OWNER_STYLE.state, accounts: [acct], rules: [{ id: "r1", kind: "budget", subject_id: "cat-lakat", amount: 300000, effective_from: "2026-10-01", created_at: "2026-10-01T08:00:00.000+08:00" }], presets: [{ id: "p1", name: "Corner Cafe", amount: 18000, category_id: "cat-food" }, { id: "p2", name: "Train", amount: 3000, category_id: "cat-food" }, { id: "p3", name: "Lunch", amount: 9500, category_id: "cat-food" }] } };
@@ -2315,8 +2371,10 @@ console.log("What's new and how-tos");
   check(await seen(page, "#sheet", "Scan a receipt"), "a how-to can be played from Help too");
   check(errors.length === 0, "no script errors with the pop-up and the clips");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5s2. signs, folded entries, Budget bars =====
+try { blockName = "5s2. signs, folded entries, Budget bars";
 console.log("Signs and folded entries");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-10-01" };
   const TS = "2026-10-03T09:00:00.000+08:00";
@@ -2338,8 +2396,10 @@ console.log("Signs and folded entries");
   check((await text(page, "#screen")).includes("a month") && await page.locator('button.catrow[data-action="open-budget"]').count() >= 1, "Buckets lists each category with its monthly limit");
   check(errors.length === 0, "no script errors with signs and folded entries");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5s3. Setup form behind a button, Cash flow tabs, the Goals ring, swipe to Correct, folded explanations =====
+try { blockName = "5s3. Setup form behind a button, Cash flow tabs, the Goals ring, swipe to Correct, folded explanations";
 console.log("Round 3: tabs, ring, swipe, folds");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-10-01" };
   const sav = { id: "s", name: "Test Savings", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 250000, opening_date: "2026-10-01" };
@@ -2372,8 +2432,10 @@ console.log("Round 3: tabs, ring, swipe, folds");
   check(await seen(page, "#screen", "Nothing to verify") && JSON.parse((await stored(page)).local).state.transactions.find((t) => t.id === "d1").status === "verified", "swiping the entry to the right marks it Correct");
   check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5s4. Setup as a short list of pages (no long scrolling) =====
+try { blockName = "5s4. Setup as a short list of pages (no long scrolling)";
 console.log("Setup as pages");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-10-01" };
   ({ ctx, page, errors } = await open({ blockSw: true, setupFlat: false, seed: { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acct] } } }));
@@ -2400,8 +2462,10 @@ console.log("Setup as pages");
   await page.click('button:has-text("Add accounts")'); await page.waitForTimeout(300);
   check((await text(page, "#top")).includes("Accounts") && await page.locator("#a-bank").count() === 1, "on a new phone, Add accounts goes straight to the Accounts page with its form");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5s5. saving up for a planned expense (a sinking fund) is spending, not savings =====
+try { blockName = "5s5. saving up for a planned expense (a sinking fund) is spending, not savings";
 console.log("Sinking funds");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 900000, opening_date: "2026-08-01" };
   const TS = "2026-09-10T09:00:00.000+08:00";
@@ -2424,8 +2488,10 @@ console.log("Sinking funds");
   check(JSON.parse((await stored(page)).local).v === LEDGER_V, "no data version change");
   check(errors.length === 0, "no script errors with sinking funds");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5t. spending dated before an account was added is history only =====
+try { blockName = "5t. spending dated before an account was added is history only";
 console.log("Start date of an account");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-10-03" };
   const TS = "2026-10-03T09:00:00.000+08:00";
@@ -2443,8 +2509,10 @@ console.log("Start date of an account");
   check(!(await text(page, "#sheet")).includes("Balances that changed"), "the note is not shown again");
   check(errors.length === 0, "no script errors around the start date");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5v. putting right a verified entry at the Weekly review =====
+try { blockName = "5v. putting right a verified entry at the Weekly review";
 console.log("Correct a verified entry");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-10-01" };
   const TS = "2026-10-03T09:00:00.000+08:00";
@@ -2499,8 +2567,10 @@ console.log("Correct a verified entry");
   check((await text(page, "#screen")).includes("A gap can come from a wrong entry"), "a count that shows a gap points to the entries that can be put right");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5w. what is kept on the phone, and the photo reader ahead of time =====
+try { blockName = "5w. what is kept on the phone, and the photo reader ahead of time";
 console.log("Space, pictures and the photo reader");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-10-01" };
   const TS = "2026-10-03T09:00:00.000+08:00";
@@ -2520,8 +2590,10 @@ console.log("Space, pictures and the photo reader");
   check((await text(page, "#screen")).includes("Your pictures have not been backed up yet."), "and says the pictures have never been backed up");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5x. old pictures are shrunk, recent ones are not =====
+try { blockName = "5x. old pictures are shrunk, recent ones are not"; if (!TOOLS.pictureStore) skippedPictures(blockName); else {
 console.log("Shrink old pictures");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-04-01" };
   const TS = "2026-05-02T09:00:00.000+08:00", TS2 = "2026-09-20T09:00:00.000+08:00";
@@ -2558,8 +2630,10 @@ console.log("Shrink old pictures");
   check(await seen(page, "#screen", "shrunk to save space, one time each: 1 of 1 done"), "Setup says how far the shrinking got");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} } catch (e) { await blockFailed(e); }
 
 // ===== 5x2. "Shrink them now" =====
+try { blockName = "5x2. \"Shrink them now\""; if (!TOOLS.pictureStore) skippedPictures(blockName); else {
 console.log("Shrink now");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-04-01" };
   const mk = (id, date) => { const ts = date + "T09:00:00.000+08:00"; return { tx: { id: "t" + id, date, payee: "Corner Cafe", memo: "", status: "verified", source: "manual", created_at: ts, verified_at: ts }, es: [{ transaction_id: "t" + id, category_id: "cat-food", amount: 5000 }, { transaction_id: "t" + id, account_id: "w", amount: -5000 }], at: { id: "pic-" + id, transaction_id: "t" + id, type: "photo", file: "pic-" + id, file_timestamp: ts } }; };
@@ -2584,8 +2658,10 @@ console.log("Shrink now");
   check((await text(page, "#screen")).includes("5 of 5 done") && await page.locator('button[data-action="shrink-now"]').count() === 0, "and the line says 5 of 5, with no button left");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} } catch (e) { await blockFailed(e); }
 
 // ===== 5y. the Pictures file: back up, lose the pictures, put them back =====
+try { blockName = "5y. the Pictures file: back up, lose the pictures, put them back"; if (!TOOLS.pictureStore) skippedPictures(blockName); else {
 console.log("Pictures file");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" };
   const TS = "2026-09-20T09:00:00.000+08:00";
@@ -2692,8 +2768,10 @@ console.log("Pictures file");
   }
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} } catch (e) { await blockFailed(e); }
 
 // ===== 5z. suggested scheduled payments (from history), the owner decides =====
+try { blockName = "5z. suggested scheduled payments (from history), the owner decides";
 console.log("Suggested scheduled payments");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 900000, opening_date: "2026-04-01" };
   const pay = (id, payee, date, amount) => [{ id, date, payee, memo: "", status: "verified", source: "manual", created_at: date + "T09:00:00.000+08:00", verified_at: date + "T09:00:00.000+08:00" }, [{ transaction_id: id, category_id: "cat-food", amount }, { transaction_id: id, account_id: "w", amount: -amount }]];
@@ -2719,8 +2797,10 @@ console.log("Suggested scheduled payments");
   check(!(await text(page, "#screen")).toLowerCase().includes("maybe add"), "and they stay gone after a restart");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5vd. the same amount on the same day, noted in Verify =====
+try { blockName = "5vd. the same amount on the same day, noted in Verify";
 console.log("Same amount in Verify");
 { ({ ctx, page, errors } = await open());
   await addAccount(page, "Test Cash", "asset", "500"); await addAccount(page, "Test Debit", "asset", "1000");
@@ -2735,8 +2815,10 @@ console.log("Same amount in Verify");
   check(await seen(page, "#screen", "already verified"), "after one is verified, the other says it is already verified, so you can delete the double");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5pf. the Pay plan: one payday at a time, a bar for each line =====
+try { blockName = "5pf. the Pay plan: one payday at a time, a bar for each line";
 console.log("Pay plan");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" };
   const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, try_new_budget: true }, state: { ...OWNER_STYLE.state, accounts: [acct], transactions: [], entries: [], attachments: [] } };
@@ -2802,8 +2884,10 @@ console.log("Pay plan");
   check(!unused || !(await text(page, "#sheet")).includes("Your Pay plan has a line"), "and a category the plan does not use (" + (unused?.name ?? "none left") + ") has no such note");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5ps. changing a line, adding one, removing one =====
+try { blockName = "5ps. changing a line, adding one, removing one";
 console.log("Pay plan lines");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" };
   const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, try_new_budget: true, starter_rent: 500000 }, state: { ...OWNER_STYLE.state, accounts: [acct], transactions: [], entries: [], attachments: [] } };
@@ -2833,9 +2917,11 @@ console.log("Pay plan lines");
   await ctx.close(); }
 
 // Buckets has its own popup the first times it opens: close it so the next tap reaches the strip.
-async function toBuckets(page) { await page.click('#screen .hub button:has-text("Buckets")'); await page.waitForTimeout(350); if (await page.locator("#sheet .in-draw").count()) { await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw")); } }
+var toBuckets = async function toBuckets(page) { await page.click('#screen .hub button:has-text("Buckets")'); await page.waitForTimeout(350); if (await page.locator("#sheet .in-draw").count()) { await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw")); } };
+} catch (e) { await blockFailed(e); }
 
 // ===== 5pi. the small popup that says what the screen is for =====
+try { blockName = "5pi. the small popup that says what the screen is for";
 console.log("Pay plan popup");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" };
   const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, try_new_budget: true }, state: { ...OWNER_STYLE.state, accounts: [acct], transactions: [], entries: [], attachments: [] } };
@@ -2861,8 +2947,10 @@ console.log("Pay plan popup");
   check((await page.locator("#sheet .in-bar").first().evaluate((e) => getComputedStyle(e).animationName)) === "none", "with Reduce Motion the drawing stands still, finished");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5pj. the popup on every screen, and the ? beside every title =====
+try { blockName = "5pj. the popup on every screen, and the ? beside every title";
 console.log("Popups on every screen");
 { ({ ctx, page, errors } = await open({ keepIntro: true }));
   const settingsOf = async () => JSON.parse((await stored(page)).local).settings;
@@ -2900,8 +2988,10 @@ console.log("Popups on every screen");
   check(await page.locator(".in-draw").count() === 1 && (await settingsOf()).intro_seen?.money === 1 && !(await settingsOf()).intro_off?.money, "the other screens' popups are untouched (Cash flow shows again, not switched off)");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5dd. Category, Paid from and "It looks like" as dropdown rows =====
+try { blockName = "5dd. Category, Paid from and \"It looks like\" as dropdown rows";
 console.log("Dropdown rows");
 { const acct = (id, name, cls = "asset") => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" });
   const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acct("z", "Zeta Wallet"), acct("a", "Alpha Bank"), acct("c", "Beta Card", "liability")], transactions: [], entries: [], attachments: [] } };
@@ -2933,8 +3023,10 @@ console.log("Dropdown rows");
   check(await page.locator("#sheet .picklist:not([hidden])").count() === 1, "opening one list closes the other");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5dd2. the other chip lists as dropdown rows: Move money From and To, money received "What it is" =====
+try { blockName = "5dd2. the other chip lists as dropdown rows: Move money From and To, money received \"What it is\"";
 console.log("Dropdown rows, the rest");
 { const acct = (id, name, cls = "asset") => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" });
   const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, intro_off: { cards: true, income: true } }, state: { ...OWNER_STYLE.state, accounts: [acct("z", "Zeta Wallet"), acct("a", "Alpha Bank"), acct("c", "Beta Card", "liability")], transactions: [], entries: [], attachments: [] } };
@@ -2962,8 +3054,10 @@ console.log("Dropdown rows, the rest");
   check(!(await page.locator("#f-save").isDisabled()), "choosing one turns Save on");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5dd3. a Search box in a long dropdown list =====
+try { blockName = "5dd3. a Search box in a long dropdown list";
 console.log("Dropdown search");
 { const acct = (id, name, cls = "asset") => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" });
   const names = ["Cash on hand", "Alpha Bank", "Beta Bank", "Gamma Wallet", "Delta Savings", "Epsilon Pay", "Zeta Wallet", "Eta Bank", "Theta Savings", "Iota Wallet"];
@@ -2986,8 +3080,10 @@ console.log("Dropdown search");
   check((await text(page, "#sheet .pickrow >> nth=1")).includes("Zeta Wallet") && await page.locator("#sheet .picklist:not([hidden])").count() === 0, "choosing from the filtered list works and folds it shut");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5nm. the name fo/und and the icon; saved data is still found under the old storage names =====
+try { blockName = "5nm. the name fo/und and the icon; saved data is still found under the old storage names";
 console.log("Name and icon");
 { const TS = "2026-03-04T09:00:00.000+08:00";
   // a copy saved by data version 4, written by hand (invented names and amounts), put where the app has always kept its data
@@ -3010,8 +3106,10 @@ console.log("Name and icon");
   check(kept.v === LEDGER_V && kept.state.entries.length === 2 && kept.state.accounts[0].name === "Test Wallet", "and it was upgraded in place with its entries kept");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5u. importing old spending from a spreadsheet =====
+try { blockName = "5u. importing old spending from a spreadsheet";
 console.log("Multiple transactions at once");
 { const { deflateRawSync } = await import("node:zlib");
   const zipOf = (files) => { const parts = [], central = []; let off = 0;
@@ -3054,8 +3152,10 @@ console.log("Multiple transactions at once");
   check(await seen(page, "#sheet", "2 already logged, left out", 10000), "importing the same file again adds nothing twice");   // reading the file can take a few seconds on a busy machine
   check(errors.length === 0, "no script errors while importing");
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 6. wrong phone, wrong place =====
+try { blockName = "6. wrong phone, wrong place";
 console.log("Wrong device");
 ({ ctx, page } = await open({ ua: ANDROID }));
 check((await text(page, "#banner")).includes("not the finance phone") && (await text(page, "#banner")).includes("not lost data"), "Android says empty is normal, not lost data");
@@ -3066,8 +3166,10 @@ await ctx.close();
 check((await text(page, "#banner")).includes("Safari tab"), "a Safari tab is told to open the Home Screen icon");
 check((await page.locator("button.tile").count()) === 0, "nothing can be logged in a Safari tab");
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 6b. a trial copy on the Android phone =====
+try { blockName = "6b. a trial copy on the Android phone";
 console.log("Trial");
 ({ ctx, page, errors } = await open({ ua: ANDROID, standalone: false, blockSw: true, url: BASE + "?trial" }));
 check((await text(page, "#banner .trialstrip")).includes("Trial copy. Do not enter real data.") && await page.locator("#banner .trialstrip").count() === 1 && (await page.locator("#banner .trialstrip").evaluate((e) => getComputedStyle(e).borderTopStyle)) === "dashed", "the Android phone with ?trial shows one dashed line: Trial copy. Do not enter real data.");
@@ -3075,12 +3177,12 @@ check((await page.locator("#top button[data-action=\"open-scan-pick\"]").count()
 await addAccount(page, "Wallet", "asset", "100");
 await page.click('#nav button:has-text("Log")'); await page.click('button.tile:has-text("Lunch")'); await page.click('#sheet .chip:has-text("Wallet")');
 check(await seen(page, "#toast", "Saved Lunch"), "something can be logged in the trial copy");
-const keys = await page.evaluate(async () => ({ ls: Object.keys(localStorage), dbs: (await indexedDB.databases()).map((d) => d.name) }));
+var keys = await page.evaluate(async () => ({ ls: Object.keys(localStorage), dbs: (await indexedDB.databases()).map((d) => d.name) }));
 check(keys.ls.includes("financialTracker.trial.ledger") && !keys.ls.includes("financialTracker.ledger") && keys.dbs.includes("financialTracker-trial") && !keys.dbs.includes("financialTracker"), "the trial keeps its data under its own names, never the real ledger's");
 await page.click('.trialstrip button:has-text("Start over")');
 check((await text(page, "#banner")).includes("Tap again to erase"), "starting over asks for a second tap");
 await page.click('.trialstrip button:has-text("Tap again to erase")');
-const erased = await page.waitForFunction(() => localStorage.getItem("financialTracker.trial.ledger") === null && document.querySelectorAll("button.tile").length === 0 && document.querySelector("#banner")?.innerText.includes("Trial copy") && !document.querySelector("#banner")?.innerText.includes("Tap again"), null, { timeout: 8000 }).then(() => true, () => false);
+var erased = await page.waitForFunction(() => localStorage.getItem("financialTracker.trial.ledger") === null && document.querySelectorAll("button.tile").length === 0 && document.querySelector("#banner")?.innerText.includes("Trial copy") && !document.querySelector("#banner")?.innerText.includes("Tap again"), null, { timeout: 8000 }).then(() => true, () => false);
 check(erased, "starting over erases the trial copy and leaves a fresh, empty one");
 await ctx.close();
 ({ ctx, page, errors } = await open({ ua: ANDROID, standalone: false, blockSw: true }));
@@ -3090,8 +3192,10 @@ await ctx.close();
 check(!(await text(page, "#banner")).includes("Trial copy"), "the iPhone Home Screen app ignores ?trial, so the real ledger cannot be swapped for a trial");
 check((await page.evaluate(() => Object.keys(localStorage))).every((k) => k !== "financialTracker.trial.ledger"), "and writes nothing under the trial names");
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 6w. the welcome card, editing categories, required marks =====
+try { blockName = "6w. the welcome card, editing categories, required marks";
 console.log("Welcome card, category editing, required marks");
 {
   const settingsOf = async () => JSON.parse((await stored(page)).local).settings;
@@ -3555,15 +3659,17 @@ console.log("Welcome card, category editing, required marks");
   check(await page.locator("#sheet .sheet").count() === 0, "Cancel at the password closes the window");
   await ctx.close();
 }
+} catch (e) { await blockFailed(e); }
 
 // ===== 7. offline =====
+try { blockName = "7. offline";
 console.log("Offline");
 ({ ctx, page, errors } = await open({ blockSw: false }));   // the one place the service worker itself is under test
 await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
 await page.reload(); await page.waitForSelector("#nav button");
 await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
 await page.evaluate(() => fetch("../src/vendor/paddle/ppocr_keys_v1.txt").then((r) => r.text()));
-const kept = await page.evaluate(async () => { const c = await caches.open("finance-reader-v1"); return (await c.keys()).map((r) => new URL(r.url).pathname); });
+var kept = await page.evaluate(async () => { const c = await caches.open("finance-reader-v1"); return (await c.keys()).map((r) => new URL(r.url).pathname); });
 check(kept.some((p) => p.endsWith("/src/vendor/paddle/ppocr_keys_v1.txt")), "a reader file fetched once is kept in the reader's own cache");
 await ctx.setOffline(true);
 check(await page.evaluate(() => fetch("../src/vendor/paddle/ppocr_keys_v1.txt").then((r) => r.ok)), "and it is served with no network");
@@ -3572,13 +3678,15 @@ check((await text(page, "#screen")).length > 0, "the app opens with no network")
 check(await page.evaluate(() => Promise.all(["icon.svg", "icon-180.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "favicon-32.png", "manifest.json"].map((f) => fetch(f).then((r) => r.ok))).then((all) => all.every(Boolean))), "every icon and the manifest are served with no network, from the saved copy");
 await ctx.setOffline(false);
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5ph0. storage safety: IndexedDB is the main store; a full localStorage is not an error =====
+try { blockName = "5ph0. storage safety: IndexedDB is the main store; a full localStorage is not an error";
 ({ ctx, page, errors } = await open());
 await addAccount(page, "Quota Cash", "asset", "100");
 await seen(page, "#screen", "Quota Cash");
 await page.evaluate(() => { const real = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (k === "financialTracker.ledger") throw new DOMException("full", "QuotaExceededError"); return real.call(this, k, v); }; });
-const mirrorBefore = (await stored(page)).local;
+var mirrorBefore = (await stored(page)).local;
 await addAccount(page, "After Full", "asset", "5");
 check(await seen(page, "#screen", "After Full"), "an account is saved while localStorage is full");
 check(await page.waitForFunction(async () => { const r = await new Promise((res) => { const q = indexedDB.open("financialTracker"); q.onsuccess = () => { const g = q.result.transaction("kv").objectStore("kv").get("ledger"); g.onsuccess = () => res(g.result); }; }); return !!r && r.includes("After Full"); }, null, { timeout: 4000 }).then(() => true, () => false), "IndexedDB holds the new save");
@@ -3586,13 +3694,15 @@ check((await stored(page)).local === mirrorBefore, "the full localStorage keeps 
 check(!(await page.locator("#banner .bar").count()), "no error banner appears for a full localStorage");
 await page.reload(); await page.waitForSelector("#nav button");
 await page.waitForFunction(() => { const l = localStorage.getItem("financialTracker.ledger"); return !!l && l.includes("After Full"); }, null, { timeout: 4000 }).catch(() => {});
-const spareAfter = await stored(page);
+var spareAfter = await stored(page);
 check(spareAfter.idb.includes("After Full") && spareAfter.local === spareAfter.idb, "after a restart the newer IndexedDB copy is in use and the spare copy is quietly brought up to date");
 await page.click("#menuBtn"); await page.click('#menu .item:has-text("Cards")');
 check(await seen(page, "#screen", "After Full"), "and the account is on the Cards screen");
 await ctx.close();
+} catch (e) { await blockFailed(e); }
 
 // ===== 5st. Setup, Statements: months proved by a kept statement, Accept this month =====
+try { blockName = "5st. Setup, Statements: months proved by a kept statement, Accept this month";
 console.log("Statements");
 { const acct = { id: "gt", name: "Test GoTyme", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2022-01-01" };
   const ln = (rec, n, date, text, amount, direction, balance, meaning = "spending") => ({ id: `${rec}:${n}`, record_id: rec, n, date, text, payee: text, type: "", amount, direction, balance, meaning });
@@ -3634,8 +3744,10 @@ console.log("Statements");
   check(!(await text(page, "#sheet")).includes("Accept this month") && (await text(page, "#sheet")).includes("Accepted"), "an accepted month cannot be accepted twice");
   check(errors.length === 0, "no script errors on the Statements screens: " + errors.join("; "));
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5mv. Setup, Statements: moves between your own accounts (one move, a fee shown), Add as draft, a payslip noticed =====
+try { blockName = "5mv. Setup, Statements: moves between your own accounts (one move, a fee shown), Add as draft, a payslip noticed";
 console.log("Moves between accounts");
 { const mk = (id, name, last4) => ({ id, name, class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2022-01-01", last4 });
   const ln = (rec, n, date, text, amount, direction, balance, meaning, extra = {}) => ({ id: `${rec}:${n}`, record_id: rec, n, date, text, payee: text, type: "", amount, direction, balance, meaning, ...extra });
@@ -3662,8 +3774,10 @@ console.log("Moves between accounts");
   check(w.includes("1 of the money in is your payslip") && w.includes("1 move is paired with another account"), "the month window says which money in is your payslip and that a move is paired");
   check(errors.length === 0, "no script errors on the moves screens: " + errors.join("; "));
   await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== 5df. Setup, Statements: compare a month with the ledger, Add as draft, Start this account from its statement =====
+try { blockName = "5df. Setup, Statements: compare a month with the ledger, Add as draft, Start this account from its statement";
 console.log("Compare with the ledger");
 { const acct = { id: "bk", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 120000, opening_date: "2022-01-01" };
   const food = OWNER_STYLE.state.categories.find((c) => c.name === "Food");
@@ -3782,8 +3896,10 @@ console.log("\n-- Goals in the flat look --");
     check(!t.includes("15,000.00") && !t.includes("12,000.00") && t.includes("\u20b1\u2022\u2022\u2022\u2022\u2022"), "with balances hidden, no goal figure and no total is shown, only dots");
     await ctx.close(); }
 }
+} catch (e) { await blockFailed(e); }
 
 // ===== Suggest a budget: a window from Buckets, nothing saved until Confirm =====
+try { blockName = "Suggest a budget: a window from Buckets, nothing saved until Confirm";
 console.log("\n-- Suggest a budget --");
 { const mkA = (id, name, ob) => ({ id, name, class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-03-01" });
   const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, income_base_pin: 2500000, starter_rent: 800000 }, state: { ...OWNER_STYLE.state, accounts: [mkA("b", "Test Bank", 1800000), mkA("s", "Test Savings", 1500000)], rules: [],
@@ -3806,8 +3922,10 @@ console.log("\n-- Suggest a budget --");
   check(JSON.parse((await stored(page)).local).state.rules.length >= 3, "Save budgets writes ordinary budget rules");
   check((await text(page, "#screen")).includes("a month"), "Buckets now shows the new limits");
   check(errors.length === 0, "no script errors in Suggest a budget: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== The weekly count of a card: pending purchases the bank already shows are moved to posted, never counted twice =====
+try { blockName = "The weekly count of a card: pending purchases the bank already shows are moved to posted, never counted twice";
 console.log("\n-- Card count --");
 { const mkA = (id, name, cls, ob) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-03-01" });
   const TS = "2026-10-01T09:00:00.000+08:00", buy = (id, date, payee, amt) => [{ id, date, payee, memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS }, [{ transaction_id: id, category_id: "cat-food", amount: amt }, { transaction_id: id, account_id: "k", amount: -amt, card_state: "pending" }]];
@@ -3833,7 +3951,9 @@ console.log("\n-- Card count --");
   await page.click('button[data-action="count-basis"][data-id="owed"]'); await page.fill("#f-amount", "2150.00");
   check(!(await text(page, "#sheet")).includes("Tick the purchases") && (await text(page, "#sheet")).includes("Ledger: \u20B12,150.00"), "'All I owe' compares with everything owed, pending included");
   check(errors.length === 0, "no script errors in the card count: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 // ===== Two goals on one account share it: each counts only its own part =====
+try { blockName = "Two goals on one account share it: each counts only its own part";
 console.log("\n-- Goals sharing an account --");
 { const mkA = (id, name, ob) => ({ id, name, class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-03-01" });
   const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [mkA("b", "Test Bank", 1000000)], rules: [], transactions: [], entries: [], attachments: [],
@@ -3870,8 +3990,10 @@ console.log("\n-- Goals sharing an account --");
   await page.click("#sheet .gpic"); await page.click('#sheet button[data-action="clear-icon"]'); await page.waitForTimeout(400);
   check(JSON.parse((await stored(page)).local).state.goals[0].icon === undefined && await page.locator("#sheet .gview").count() === 1, "removing the picture goes back to the goal window with the letter tile");
   check(errors.length === 0, "no script errors in goal sharing: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Scheduled: a status on every row, Edit, Remove, and your own entry linked instead of doubled =====
+try { blockName = "Scheduled: a status on every row, Edit, Remove, and your own entry linked instead of doubled";
 console.log("\n-- Scheduled status, edit and remove --");
 { const T0b = new Date("2026-10-16T03:00:00Z"), TS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, cls, ob) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-04-01" });
@@ -3902,8 +4024,10 @@ console.log("\n-- Scheduled status, edit and remove --");
   check(await page.locator("#screen button.catrow", { hasText: "Internet" }).count() === 0 && await rowOf("Rent").count() === 1, "a removed payment leaves the list and the others stay");
   check(JSON.parse((await stored(page)).local).state.transactions.some((t) => t.id === "m1" && t.status === "verified"), "what was verified is untouched");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== A payment that starts in the past: ask which payments were already paid =====
+try { blockName = "A payment that starts in the past: ask which payments were already paid";
 console.log("\n-- Already paid? --");
 { const mkA = (id, name, ob) => ({ id, name, class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-03-01" });
   const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [mkA("b", "Test Bank", 1800000)], rules: [], goals: [], transactions: [], entries: [], attachments: [] } };
@@ -3922,8 +4046,10 @@ console.log("\n-- Already paid? --");
   { const l = JSON.parse((await stored(page)).local), keys = l.state.transactions.filter((t) => t.schedule_id).map((t) => t.schedule_key + ":" + t.status).sort();
     check(l.state.schedules[0].made === 2 && keys.join() === "3:draft", "two payments count as made; only the one still unpaid waits in Verify: " + keys.join()); }
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Pay plan on the smallest iPhone: the tables stay inside their cards =====
+try { blockName = "Pay plan on the smallest iPhone: the tables stay inside their cards";
 console.log("\n-- Pay plan at 320 px --");
 { const plan = parsePlan(JSON.stringify({ schema_version: 1, unit: "PHP_whole_pesos", effective_from: "2026-10-01", paydays: [{ id: "first", day: 15, expected_income: 12500 }, { id: "second", day: "last", expected_income: 12500 }],
     lines: [{ name: "Food", first: 3000, second: 6000 }, { name: "Rent", first: 8000, second: 0 }, { name: "Essentials", first: 1000, second: 1000 }, { name: "Shopping", first: 500, second: 500 }, { name: "New Laptop", kind: "goal", first: 0, second: 5000 }], ef_target_basis: ["Rent", "Food"], ef_target_months: 3 }));
@@ -3934,8 +4060,10 @@ console.log("\n-- Pay plan at 320 px --");
   const over = await page.evaluate(() => [...document.querySelectorAll("#screen .tbl")].filter((t) => { const edge = t.parentElement.getBoundingClientRect().right; return [...t.querySelectorAll("td,th")].some((c) => c.getBoundingClientRect().right > edge + 1); }).length);
   check(over === 0 && await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "at 320 px wide no plan table sticks out of its card and the page does not scroll sideways");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Search in "See every entry" =====
+try { blockName = "Search in \"See every entry\"";
 console.log("\n-- Search --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, cls, ob) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-04-01" });
@@ -3957,8 +4085,10 @@ console.log("\n-- Search --");
   await page.fill("#e-q", "zzz"); await page.waitForTimeout(200);
   check((await text(page, "#sheet")).includes("Nothing found"), "nothing found says so");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Account history: tap an account on Cards, see every entry with the balance right after it =====
+try { blockName = "Account history: tap an account on Cards, see every entry with the balance right after it";
 console.log("\n-- Account history --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, cls, ob) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-04-01" });
@@ -3977,8 +4107,10 @@ console.log("\n-- Account history --");
   await page.click('#sheet button[data-action="close-sheet"]'); await page.waitForTimeout(300);
   check(await page.locator("#sheet .regl").count() === 0, "Close puts it away");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Export entries as a spreadsheet file =====
+try { blockName = "Export entries as a spreadsheet file";
 console.log("\n-- Spreadsheet export --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, cls, ob) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-04-01" });
@@ -4000,8 +4132,10 @@ console.log("\n-- Spreadsheet export --");
   check(csv.includes("'=Sample Grocer") && csv.includes(",draft"), "a name starting with = is kept as text, and the draft is in");
   check(await seen(page, "#toast", "not encrypted"), "the app says again that it is not encrypted");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Net worth over time =====
+try { blockName = "Net worth over time";
 console.log("\n-- Net worth over time --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, cls, ob, d) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: d });
@@ -4021,8 +4155,10 @@ console.log("\n-- Net worth over time --");
   await page.click('button[data-action="cards-eye"]'); await page.click('button[data-action="open-networth"]'); await page.waitForSelector("#sheet .sheet");
   check((await text(page, "#sheet")).includes("\u20b1\u2022\u2022\u2022\u2022\u2022") && await page.locator("#sheet svg path").count() === 0 && await page.locator('#sheet button[data-action="nw-show"]').count() === 1, "with the Cards eye closed it shows dots and no line, and offers Show amounts");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Goal pictures: pick one of the sixteen line pictures =====
+try { blockName = "Goal pictures: pick one of the sixteen line pictures";
 console.log("\n-- Goal pictures --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, cls, ob, d) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: d });
@@ -4041,8 +4177,10 @@ console.log("\n-- Goal pictures --");
   await page.click('#sheet button[data-action="clear-icon"]'); await page.waitForSelector("#sheet .gview");
   check(JSON.parse((await stored(page)).local).state.goals[0].symbol === undefined, "Remove the picture takes it away");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Goals: the Cards eye and dots instead of Show / Hide balances =====
+try { blockName = "Goals: the Cards eye and dots instead of Show / Hide balances";
 console.log("\n-- Goals eye --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, cls, ob, d) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: d });
@@ -4066,8 +4204,10 @@ console.log("\n-- Goals eye --");
   const letter = await page.evaluate(() => { const l = document.querySelector("#screen .gname .mono"), probe = document.createElement("i"); probe.style.color = "var(--accent)"; document.body.append(probe); const want = getComputedStyle(probe).color; probe.remove(); return [l ? getComputedStyle(l).color : "none", want]; });
   check(letter[0] === letter[1], "and a goal's first letter is green too (" + letter[0] + ")");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== A spend that would take a debit account below zero asks first; nothing blocks =====
+try { blockName = "A spend that would take a debit account below zero asks first; nothing blocks";
 console.log("\n-- Overdraw warning --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [{ id: "sav", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 220000, opening_date: "2026-01-01" }, { id: "crd", name: "Test Card", class: "liability", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-01-01" }],
@@ -4098,8 +4238,10 @@ console.log("\n-- Overdraw warning --");
   await menuGo(page, "Goals");
   check(!(await text(page, "#screen")).includes("-\u20b1"), "a goal on the overdrawn account never shows a minus");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Move money warns when the account it leaves would go below zero; nothing blocks =====
+try { blockName = "Move money warns when the account it leaves would go below zero; nothing blocks";
 console.log("\n-- Overdraw warning, Move money --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, ob, extra = {}) => ({ id, name, class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-01-01", ...extra });
@@ -4118,8 +4260,10 @@ console.log("\n-- Overdraw warning, Move money --");
   led = JSON.parse((await stored(page)).local);
   check(led.state.entries.some((e) => e.account_id === "main" && e.amount === -500000) && await page.locator("#warn .sheet").count() === 0, "Save anyway saves the move as usual");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== A hand entry that repeats one an import already brought in asks first =====
+try { blockName = "A hand entry that repeats one an import already brought in asks first";
 console.log("\n-- Already logged --");
 { const DTS = "2026-10-01T09:00:00.000+08:00";
   const st = { ...emptyState(), categories: OWNER_STYLE.state.categories, presets: [], accounts: [{ id: "sav", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 5000000, opening_date: "2023-01-01" }],
@@ -4143,8 +4287,10 @@ console.log("\n-- Already logged --");
   await spend("150"); await page.click('#warn button[data-action="warn-save"]'); await page.waitForTimeout(500);
   check(await count() === 5, "Different: save it saves it as usual");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Cashback, rewards and interest on a statement become income drafts =====
+try { blockName = "Cashback, rewards and interest on a statement become income drafts";
 console.log("\n-- Statement rewards --");
 { const FXR = (n) => new URL("./fixtures/" + n, import.meta.url).pathname;
   const acc = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-04-01" };
@@ -4161,8 +4307,10 @@ console.log("\n-- Statement rewards --");
   check(rw.transactions.filter((t) => t.source === "import" && t.status === "draft").length === 1, "the shop payment is still an expense draft; the rewards are not expenses");
   check(rw.statementRecords?.length === 1, "the statement is kept as before");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== A credit card statement (MariCard layout) is read, and goes to the bank's card =====
+try { blockName = "A credit card statement (MariCard layout) is read, and goes to the bank\"s card";
 console.log("\n-- Card statement --");
 { const FXC = (n) => new URL("./fixtures/" + n, import.meta.url).pathname;
   const A = (id, name, cls, extra = {}) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-04-01", bank: "maribank", ...extra });
@@ -4179,8 +4327,10 @@ console.log("\n-- Card statement --");
   const cs = JSON.parse((await stored(page)).local).state;
   check(cs.transactions.map((x) => x.date).sort().join() === "2026-10-01,2026-10-02" && cs.transactions.every((x) => x.status === "draft" && cs.entries.some((e) => e.transaction_id === x.id && e.account_id === "cc")), "two purchase drafts dated by the transaction day, on the card; nothing for the cashback");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== The This month card on Log opens what was spent, by category =====
+try { blockName = "The This month card on Log opens what was spent, by category";
 console.log("\n-- This month card --");
 { const acc = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-09-01" };
   const TS = "2026-10-02T09:00:00.000+08:00";
@@ -4193,8 +4343,10 @@ console.log("\n-- This month card --");
   check(t.includes("spent in October") && t.includes("Food") && t.includes("\u20B1500.00") && await page.locator('#screen button[data-view="category"][aria-pressed="true"]').count() === 1, "tapping This month opens what was spent in October by category, with Food");
   check(await page.locator("#screen .hub").count() === 0 && !t.includes("Buckets"), "it does not open the budget");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== A count that found money brings the month down: its minus row is shown, so the rows add up =====
+try { blockName = "A count that found money brings the month down: its minus row is shown, so the rows add up";
 console.log("\n-- Minus row in Category --");
 { const acc = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-09-01" };
   const TS = "2026-10-02T09:00:00.000+08:00";
@@ -4209,8 +4361,10 @@ console.log("\n-- Minus row in Category --");
   check(t.includes("\u20B1300.00") && t.includes("Food") && t.includes("\u20B1500.00"), "the month says 300.00 spent, with Food at 500.00");
   check(t.includes("Uncategorized") && t.includes("\u2212\u20B1200.00") && t.includes("brings the total down"), "the count that found 200.00 shows as its own minus row, so the rows add up");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== A card counted after it was paid: one tap logs the payment; a count gap can be put right =====
+try { blockName = "A card counted after it was paid: one tap logs the payment; a count gap can be put right";
 console.log("\n-- Card count after paying --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 2000000, opening_date: "2026-09-01", reserve_for: "cc" };
   const card = { id: "cc", name: "Test Card", class: "liability", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-09-01" };
@@ -4251,8 +4405,10 @@ console.log("\n-- Card count after paying --");
   const unl = d.entries.filter((e) => e.category_id === "cat-unlogged").reduce((n, e) => n + e.amount, 0);
   check(unl === 0 && d.transactions.some((x) => x.reverses && x.payee === "Weekly check-in"), "the count gap is cancelled: Unlogged is back to zero");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== A spending draft that was really a move to your own account =====
+try { blockName = "A spending draft that was really a move to your own account";
 console.log("\n-- Spending draft to a move --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 2000000, opening_date: "2026-09-01" };
   const cash = { id: "cash", name: "Cash", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-09-01" };
@@ -4272,8 +4428,10 @@ console.log("\n-- Spending draft to a move --");
   const l = JSON.parse((await stored(page)).local).state, es = l.entries.filter((e) => e.transaction_id === "atm");
   check(l.transactions.find((t) => t.id === "atm").status === "draft" && es.length === 2 && es.every((e) => e.category_id == null) && es.some((e) => e.account_id === "cash" && e.amount === 400000) && es.some((e) => e.account_id === "b" && e.amount === -400000), "the draft is now a move from the bank to Cash, still a draft, with no spending");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Counting every account first, then every gap side by side =====
+try { blockName = "Counting every account first, then every gap side by side";
 console.log("\n-- Count with a gap --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 520000, opening_date: "2026-09-01" };
   const cash = { id: "cash", name: "Cash", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-09-01" };
@@ -4335,8 +4493,10 @@ console.log("\n-- Count with a gap --");
   t = (await text(page, "#screen")).replace(/\s+/g, " ");
   check(t.includes("₱500.00 not verified yet") && !t.includes("Test Bank missing") && t.includes("Cash missing") && t.includes("₱3,800.00") && (t.match(/Not part of what you spent/g) ?? []).length === 1, "the 500.00 entry counts once (it waits in Verify); only the Cash gap of 3,800.00 is still not yet explained");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== A cancelled count does not show as spent today =====
+try { blockName = "A cancelled count does not show as spent today";
 console.log("\n-- Cancelled count and Spent today --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-09-01" };
   const TS = "2026-10-03T09:00:00.000+08:00";
@@ -4350,8 +4510,10 @@ console.log("\n-- Cancelled count and Spent today --");
   const t = await text(page, "#screen");
   check(/spent today/i.test(t) && t.includes("\u20B10.00") && !t.includes("11,000.00"), "a cancelled count that found 11,000.00 shows nothing as spent today");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Spent today and This month count verified entries only; a draft shows apart as waiting in Verify (P0-5 fix 6) =====
+try { blockName = "Spent today and This month count verified entries only; a draft shows apart as waiting in Verify (P0-5 fix 6)";
 console.log("\n-- Waiting in Verify --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-01-01" };
   const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [bank], transactions: [], entries: [] } };
@@ -4369,8 +4531,10 @@ console.log("\n-- Waiting in Verify --");
   check(await day() === "₱95.00" && await month() === "₱95.00", "once verified it counts: exactly ₱95.00 in Spent today and in This month (" + await day() + " / " + await month() + ")");
   check((await page.locator(".note.waiting").count()) === 0 && (await page.locator("#glance .mc-wait").count()) === 0, "and nothing is waiting any more");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== A gap booked as "I spent some of it" is matched by the real charge too (P0-5 fix 3) =====
+try { blockName = "A gap booked as \"I spent some of it\" is matched by the real charge too (P0-5 fix 3)";
 console.log("\n-- A spent gap is explained by the real charge --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-09-01" };
   const TS = "2026-10-03T09:00:00.000+08:00";
@@ -4386,8 +4550,10 @@ console.log("\n-- A spent gap is explained by the real charge --");
   check(mine === -30000, "the bank is still what was counted");
   check(d.state.entries.filter((e) => e.category_id === "cat-unlogged").reduce((n, e) => n + e.amount, 0) === 0, "nothing is left in Unlogged: the 300.00 counts once, in Food");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== A refund brings spending down; past refunds saved as income are put right (P0-5 fix 4) =====
+try { blockName = "A refund brings spending down; past refunds saved as income are put right (P0-5 fix 4)";
 console.log("\n-- Refunds --");
 { const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-09-01" };
   const TS = "2026-10-02T09:00:00.000+08:00";
@@ -4421,8 +4587,10 @@ console.log("\n-- Refunds --");
   d = JSON.parse((await stored(page)).local);
   check(d.state.entries.filter((e) => e.category_id === "cat-food").reduce((n, e) => n + e.amount, 0) === 5000 && d.state.entries.filter((e) => e.category_id === "cat-refund").reduce((n, e) => n + e.amount, 0) === 0, "the new refund took 100.00 off Food and is not income");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Replacing the ledger keeps a safety copy first, and it can be put back =====
+try { blockName = "Replacing the ledger keeps a safety copy first, and it can be put back";
 console.log("\n-- Restore safety copy --");
 { const { upgradeLedger, encryptLedgerBackup } = await import("../src/model/index.js");
   const TSR = "2026-10-01T09:00:00.000+08:00", PASSR = "correct horse battery";
@@ -4527,8 +4695,10 @@ console.log("\n-- Restore safety copy --");
     check(await seen(page, "#sheet", "Your data was replaced"), "and says so, with the way back"); }
   else check(false, "the copy from before the last update is offered");
   check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : "")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== A line repeated inside one picture or file is left out until asked for =====
+try { blockName = "A line repeated inside one picture or file is left out until asked for";
 console.log("\n-- Repeated lines --");
 { const acc = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-04-01" };
   ({ ctx, page, errors } = await open({ blockSw: true, seed: { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acc] } } }));
@@ -4545,8 +4715,10 @@ console.log("\n-- Repeated lines --");
   await page.waitForFunction(() => JSON.parse(localStorage.getItem("financialTracker.ledger")).state.transactions.length === 2, null, { timeout: 5000 });
   check(JSON.parse((await stored(page)).local).state.transactions.every((t) => t.source === "import" && t.status === "draft"), "two drafts were added, both waiting in Verify");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Night: the page follows the phone, and Setup can fix Light or Dark =====
+try { blockName = "Night: the page follows the phone, and Setup can fix Light or Dark";
 console.log("\n-- Appearance --");
 { ({ ctx, page, errors } = await open({ blockSw: true, setupFlat: false }));
   const ground = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--ground").trim().toUpperCase());
@@ -4566,8 +4738,10 @@ console.log("\n-- Appearance --");
   await page.click('button[data-action="set-appearance"][data-id="auto"]'); await page.waitForTimeout(300);
   check(await ground() === "#F5F3EE" && await page.evaluate(() => document.documentElement.dataset.theme === undefined), "Match my phone goes back to following the phone");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Past weekly counts: repaired in one step, after a safety copy; a matching pair becomes a move waiting in Verify =====
+try { blockName = "Past weekly counts: repaired in one step, after a safety copy; a matching pair becomes a move waiting in Verify";
 console.log("\n-- Repair of past counts --");
 { const { naturalBalance, countedEntries, spendingByCategory } = await import("../src/model/index.js");
   const TSG = "2026-09-12T09:00:00.000+08:00";
@@ -4625,8 +4799,10 @@ console.log("\n-- Repair of past counts --");
   await menuGo(page, "Setup");
   check(await seen(page, "#screen", "Restore the copy from before the repair"), "Setup offers the copy from before the repair");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== An entry cancelled twice is put right by the same repair; the card never hides (owner's real-phone bug, Oct 31) =====
+try { blockName = "An entry cancelled twice is put right by the same repair; the card never hides (owner\"s real-phone bug, Oct 31)";
 console.log("\n-- Repair of an entry cancelled twice --");
 { const { naturalBalance, countedEntries, spendingByCategory } = await import("../src/model/index.js");
   const TSG = "2026-10-13T09:00:00.000+08:00";
@@ -4681,8 +4857,10 @@ console.log("\n-- The repair card never hides --");
   check((await page.innerText("#screen")).includes("Nothing was changed.") && await page.locator('#screen button[data-action="copy-repair-check"]').count() === 1, "and what to do, with a button that copies the check");
   check(await page.locator('#screen button[data-action="open-repair"]').count() === 0, "there is no repair button to tap");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Checks: the card reserve and Unlogged by week as white cards with thin bars (owner, Oct 31) =====
+try { blockName = "Checks: the card reserve and Unlogged by week as white cards with thin bars (owner, Oct 31)";
 console.log("\n-- Checks screen --");
 { const TSG = "2026-10-01T09:00:00.000+08:00";
   const acct = (id, name, cls, opening, o = {}) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: opening, opening_date: "2026-01-01", ...o });
@@ -4706,8 +4884,10 @@ console.log("\n-- Checks screen --");
   await page.click('button[data-action="chart-mode"]');
   check((await text(page, "#screen")).includes("Not accounted for"), "Show as list still gives the table twin");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
 // ===== Uncategorized is the name of spending with no category; Not yet explained stays for held count gaps and is never in a total (owner, Oct 31, P1-7) =====
+try { blockName = "Uncategorized is the name of spending with no category; Not yet explained stays for held count gaps and is never in a total (owner, Oct 31, P1-7)";
 console.log("\n-- Uncategorized and Not yet explained --");
 { const TSG = "2026-10-02T09:00:00.000+08:00";
   const bank = { id: "b", name: "Test Bank", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 1000000, opening_date: "2026-01-01" };
@@ -4730,10 +4910,11 @@ console.log("\n-- Uncategorized and Not yet explained --");
   check(Object.entries(names).every(([, v]) => !/unlogged/i.test(v)), "no screen says Unlogged: " + Object.entries(names).filter(([, v]) => /unlogged/i.test(v)).map(([k]) => k).join(", "));
   check(/Uncategorized by week/i.test(names["Checks"]), "Checks names the weekly figure Uncategorized by week");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
 
-await protectionChecks({ browser, base: BASE, open, addAccount, menuGo, check });
-if (TOOLS.virtualAuthenticator) await appLockChecks({ browser, base: BASE, open, menuGo, check, seen, text, stored, OWNER_STYLE, ANDROID });
-else skipped("App lock (the virtual Face ID checks)", "Chrome DevTools virtual authenticator (WebAuthn)");
+try { blockName = "storage protection"; await protectionChecks({ browser, base: BASE, open, addAccount, menuGo, check }); } catch (e) { await blockFailed(e); }
+try { blockName = "app lock"; if (TOOLS.virtualAuthenticator) await appLockChecks({ browser, base: BASE, open, menuGo, check, seen, text, stored, OWNER_STYLE, ANDROID });
+else skipped("App lock (the virtual Face ID checks)", "Chrome DevTools virtual authenticator (WebAuthn)"); } catch (e) { await blockFailed(e); }
 
 await browser.close();
 console.log(failures ? "\n" + failures + " check(s) FAILED" : "\nAll checks passed");

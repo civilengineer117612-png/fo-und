@@ -30,7 +30,11 @@ export async function launchBrowser() {
 export const TOOLS = {
   virtualAuthenticator: ENGINE === "chromium",   // the Chrome DevTools "WebAuthn" virtual Face ID (applock.mjs)
   clipboardPermission: ENGINE === "chromium",    // ctx.grantPermissions(["clipboard-read", "clipboard-write"]): Playwright's WebKit has no such permission
+  pictureStore: ENGINE === "chromium",            // IndexedDB keeping a picture (a Blob): Playwright's WebKit build refuses it (engine-probe.mjs: "write error")
   serviceWorkerNetwork: ENGINE === "chromium",   // staging the network (ctx.route) for requests a service worker makes: Playwright's WebKit cannot, so those requests reach the real internet
 };
 
 export const skipped = (label, tool) => console.log(`  skip ${label} (${ENGINE} has no ${tool})`);
+// The owner's words for the checks that keep a picture (Nov 1): the test build cannot, the phone can.
+export const PICTURE_STORE_REASON = "WebKit test build cannot store pictures in IndexedDB; the owner's iPhone does (pictures are saved and backed up there).";
+export const skippedPictures = (label) => console.log(`  skip ${label} (${PICTURE_STORE_REASON})`);

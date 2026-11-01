@@ -84,7 +84,8 @@ try {
     const colours = await page.evaluate(() => { const c = (sel) => getComputedStyle(document.querySelector(sel)).color; return { zero: c('#sheet .pl.zero .pl-label'), normal: c('#sheet details.tot[data-keep="e"] .pl .pl-label') }; });
     assert.notEqual(colours.zero, colours.normal, "a 0.00 line is shown in lighter text");
     // the category notes: SSS and the loans are found by their words; the rest says Choose a category
-    assert.deepEqual(await rows(page, "d").locator(".pl-cat").allInnerTexts(), ["SSS ›", "Loan repayments ›", "Loan repayments ›", "Choose a category ›"].map((t) => t));
+    assert.deepEqual((await rows(page, "d").locator(".pl-cat").allTextContents()).map((t) => t.replace(/\s+/g, " ").trim()),   // textContent: a known category is screen-reader text (class sronly), which WebKit leaves out of innerText
+    ["SSS ›", "Loan repayments ›", "Loan repayments ›", "Choose a category ›"].map((t) => t));
     assert.equal(await page.locator("#p-tot-e").innerText(), "₱22,000.00"); assert.equal(await page.locator("#p-tot-d").innerText(), "₱2,790.00");
     // the rest of the form
     await page.locator("#p-emp").fill("Sample Employer Inc");
