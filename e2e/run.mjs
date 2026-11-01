@@ -1557,6 +1557,52 @@ check(await seen(page, "#toast", "thrown away") && (JSON.parse((await stored(pag
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await ctx.close();
 
+console.log("A picture that cannot be kept");
+({ ctx, page, errors } = await open({ blockSw: true }));
+await addAccount(page, "MariBank", "asset", "0");
+await addAccount(page, "MariBank \u00b7 Credit card", "liability", "0");
+{ // A picture the phone cannot keep never stops the entry (owner, Nov 1): the entry is saved, the window closes, one plain message says so, and the
+  // entry says "Picture not on this phone". Two ways the phone's store can fail: it refuses (WebKit's test build does), or it never answers.
+  const breakStore = (how) => page.evaluate((how) => {
+    window.__idb = window.__idb ?? { put: IDBObjectStore.prototype.put, tx: IDBDatabase.prototype.transaction };
+    if (how === "refuses") IDBObjectStore.prototype.put = function (v, k) { if (v instanceof Blob) throw new DOMException("simulated: cannot keep a picture", "DataCloneError"); return window.__idb.put.call(this, v, k); };
+    else IDBDatabase.prototype.transaction = function (names, mode) { if (String(names) === "photos" && mode === "readwrite") return { objectStore: () => ({ put: () => ({}) }) }; return window.__idb.tx.call(this, names, mode); };   // a transaction that never finishes
+  }, how);
+  const mendStore = () => page.evaluate(() => { IDBObjectStore.prototype.put = window.__idb.put; IDBDatabase.prototype.transaction = window.__idb.tx; });
+  const accts = JSON.parse((await stored(page)).local).state.accounts, bankId = accts.find((a) => a.name === "MariBank").id, cardId = accts.find((a) => a.class === "liability").id;
+  for (const [how, acct] of [["refuses", bankId], ["never answers", cardId]]) {   // a different account each time, so neither looks like the receipt already logged
+    const before = JSON.parse((await stored(page)).local).state;
+    await breakStore(how);
+    await menuGo(page, "Scan");
+    await page.setInputFiles("input[data-scan]:not([capture])", { name: "receipt.png", mimeType: "image/png", buffer: Buffer.from(receiptPng, "base64") });
+    await seen(page, "#sheet", "Check what I read", 180000);
+    await page.fill("#f-date", "2026-10-03");
+    const chip = page.locator(`#sheet .chip[data-id="${acct}"]`);
+    if (!(await chip.isVisible())) await chip.locator('xpath=ancestor::div[contains(concat(" ", @class, " "), " pick ")][1]').locator(".pickrow").click();
+    await chip.click();
+    await page.click("#f-save");
+    if (how === "refuses") { await page.waitForSelector('#warn button:has-text("Save anyway")', { timeout: 5000 }).catch(() => {}); if (await page.locator('#warn button:has-text("Save anyway")').isVisible()) await page.click('#warn button:has-text("Save anyway")'); }   // MariBank holds nothing yet: the usual below-zero warning comes first
+    check(await seen(page, "#screen", "The picture could not be kept on this phone; the entry is saved.", how === "refuses" ? 5000 : 25000) && await page.locator("#sheet .sheet").count() === 0, "the store " + how + ": the entry is saved, the window closes, and the message says the picture was not kept");
+    const after = JSON.parse((await stored(page)).local).state, added = after.transactions.filter((t) => !before.transactions.some((b) => b.id === t.id));
+    const att = added.length === 1 ? (after.attachments ?? []).find((a) => a.transaction_id === added[0].id) : null;
+    check(added.length === 1 && added[0].status === "draft" && after.entries.filter((e) => e.transaction_id === added[0].id).reduce((n, e) => n + e.amount, 0) === 0 && !!att, "the store " + how + ": exactly one draft entry was saved, balanced, with its picture row");
+    await mendStore();
+    check(att && await page.evaluate((id) => new Promise((ok) => { const r = indexedDB.open("financialTracker"); r.onsuccess = () => { const g = r.result.transaction("photos").objectStore("photos").get(id); g.onsuccess = () => ok(g.result === undefined); g.onerror = () => ok(false); }; r.onerror = () => ok(false); }), att.id), "the store " + how + ": and no picture is on the phone for it");
+    await page.click('#nav button:has-text("Log")');
+    let shown = false;   // open the Log rows until the one holding this picture row
+    for (const row of await page.locator("button.rowbtn").filter({ hasText: /BURGER/i }).all()) {
+      await row.click(); await page.waitForSelector("#sheet .sheet");
+      const btn = page.locator(`#sheet button[data-action="open-photo"][data-id="${att?.id}"]`);
+      if (await btn.count()) { await btn.click(); shown = await seen(page, "#toast", "Picture not on this phone"); }
+      await page.click('#sheet button:has-text("Close")');
+      if (shown) break;
+    }
+    check(shown, "the store " + how + ": the entry says Picture not on this phone");
+  }
+}
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+await ctx.close();
+
 // ===== 5g. income: a payslip with overtime =====
 console.log("Income");
 ({ ctx, page, errors } = await open({ blockSw: true }));

@@ -748,12 +748,14 @@ async function saveAddedLines() {
   if (!r.ok) { showToast(r.violations[0].message); return; }
   let next = r.state;
   const pay = S().payslips.find((x) => x.id === sh.addLinesId), photoId = sh.scanBlob ? (sh.queueId ?? newId("photo")) : null;
+  let pictureKept = true;
   if (photoId && pay && !M.attachmentsFor(next, pay.transaction_id).length) {   // the page that was read is kept with the pay, as for a new payslip
-    try { if (!sh.queueId) await putPhoto(photoId, sh.scanBlob); const att = M.planAttachment(next, { id: photoId, transaction_id: pay.transaction_id }); if (att.ok) next = att.state; } catch { /* the lines matter more than the picture */ }
+    if (!sh.queueId) pictureKept = await keepPicture(photoId, sh.scanBlob);   // the lines matter more than the picture
+    const att = M.planAttachment(next, { id: photoId, transaction_id: pay.transaction_id }); if (att.ok) next = att.state;
   }
   ui.sheet = null; renderSheet();
   if (pendingPhoto) { URL.revokeObjectURL(pendingPhoto.url); pendingPhoto = null; }
-  if (await commit(next, M.rememberChoices(ledger.settings, f.employer.trim(), f.items))) showToast("Breakdown added. The pay is unchanged.");
+  if (await commit(next, M.rememberChoices(ledger.settings, f.employer.trim(), f.items))) showToast("Breakdown added. The pay is unchanged." + (pictureKept ? "" : " The picture could not be kept on this phone."));
 }
 
 // The photo full screen over the window, so it can be compared with the figures. Zoom: pinch with two fingers (or double-tap, or the mouse
@@ -999,7 +1001,7 @@ async function savePayslip(asDraft = false) {
   let next = r.state, note = editId && r.draftsRemoved ? " The overtime draft was removed; make it again if you still want it." : "";
   const photoId = sh?.scanBlob ? (sh.queueId ?? newId("photo")) : null;   // a payslip read from a photo keeps the photo with the pay
   if (photoId) {
-    if (!sh.queueId) { try { await putPhoto(photoId, sh.scanBlob); } catch { showToast("The photo could not be kept on this phone, so nothing was saved."); return; } }
+    if (!sh.queueId && !(await keepPicture(photoId, sh.scanBlob))) note += " " + PICTURE_NOT_KEPT;   // the pay is saved without it
     const att = M.planAttachment(next, { id: photoId, transaction_id: r.transaction.id }); if (att.ok) next = att.state;
   }
   const hasOvertime = !failing && r.lines.some((l) => l.kind === "overtime");   // a draft makes no transfer: its figures are not proven yet
@@ -1013,7 +1015,7 @@ async function savePayslip(asDraft = false) {
   if (pendingPhoto) { URL.revokeObjectURL(pendingPhoto.url); pendingPhoto = null; }
   const saved = await commit(next, { ...(f.items ? M.rememberChoices(ledger.settings, f.employer.trim(), f.items) : ledger.settings), last_employer: f.employer.trim(), last_account_id: f.account_id, ...(sh?.queueId ? { scan_queue: scanQueue().filter((q) => q.id !== sh.queueId) } : {}) });
   if (saved && editId) for (const ph of r.photoIds ?? []) deletePhoto(ph).catch(() => {});
-  if (failing) { showToast("Kept as a draft: " + peso(p.deposit) + ". Check it in Verify; it is not income yet."); return; }
+  if (failing) { showToast("Kept as a draft: " + peso(p.deposit) + ". Check it in Verify; it is not income yet." + note); return; }
   showToast((editId ? "Payslip changed: " : "Payslip saved: ") + peso(p.deposit) + (r.flags.length ? ". " + r.flags.length + (r.flags.length === 1 ? " thing does" : " things do") + " not match; see Income." : ".") + note);
 }
 
@@ -1266,8 +1268,9 @@ async function quickCapture(file) {
   if (isPdf(file)) return startPdfScan(file);
   ui.scan = { busy: true, msg: "Keeping the photo..." }; renderScreen();
   const id = newId("photo");
-  try { await putPhoto(id, await preparePhoto(file)); }
-  catch (e) { ui.scan = { error: "The photo could not be kept (" + e.message + ")." }; renderScreen(); return; }
+  let prepared = file;
+  try { prepared = await preparePhoto(file); } catch { /* read the file as it is */ }
+  if (!(await keepPicture(id, prepared))) { ui.scan = null; renderScreen(); return startScan(file); }   // the queue needs the store; read it now instead, nothing is lost
   ui.scan = null;
   await commit(S(), withQueue([...scanQueue(), { id, at: M.phTimestamp() }]), { quiet: true });
   await processScanQueue({ interactive: true });
@@ -1338,11 +1341,11 @@ async function commitMove(input, { photoId, queueId, recipients = null, force = 
   const t = p.state.transactions.find((x) => x.id === input.transaction_id), es = p.state.entries.filter((e) => e.transaction_id === t.id);
   const dup = force ? null : M.findDuplicate(S(), t, es);
   if (dup) return { ok: false, dup };
-  if (putFile) { try { await putPhoto(photoId, putFile); } catch { showToast("The photo could not be kept on this phone, so nothing was saved."); return { ok: false, dup: null }; } }
+  const kept = putFile ? await keepPicture(photoId, putFile) : true;   // the move is saved even when its picture cannot be kept
   const a = M.planAttachment(p.state, { id: photoId, transaction_id: t.id });
   const ok = a.ok && await commit(a.state, { ...ledger.settings, last_account_id: input.from_account_id, ...(recipients ? { own_recipients: recipients } : {}), ...(queueId ? { scan_queue: scanQueue().filter((q) => q.id !== queueId) } : {}) });
-  if (!ok && putFile) deletePhoto(photoId).catch(() => {});
-  return { ok, dup: null };
+  if (!ok && putFile && kept) deletePhoto(photoId).catch(() => {});
+  return { ok, dup: null, kept };
 }
 const moveInput = (f, id) => ({ transaction_id: id, date: f.date, from_account_id: f.from_id, to_account_id: f.to_id, amount: M.parsePesos(f.amount).centavos,
   fee: (f.fee ?? "").trim() ? M.parsePesos(f.fee).centavos : 0, payee: (f.payee ?? "").trim() || MOVE_TITLE[f.kind] || "Transfer", reference_no: f.ref ?? "", shot_time: f.time ?? "",
@@ -1355,13 +1358,14 @@ async function saveMove() {
   if (!r.ok) return;
   if (pendingPhoto) { URL.revokeObjectURL(pendingPhoto.url); pendingPhoto = null; }
   const amount = M.parsePesos(f.amount).centavos;
-  ui.sheet = null; ui.scan = { done: "Saved " + peso(amount) + " as a draft " + (f.kind === "withdrawal" ? "cash withdrawal" : f.kind === "deposit" ? "cash deposit" : "transfer") + " with its photo." };
+  ui.sheet = null; ui.scan = { done: r.kept === false ? PICTURE_NOT_KEPT : "Saved " + peso(amount) + " as a draft " + (f.kind === "withdrawal" ? "cash withdrawal" : f.kind === "deposit" ? "cash deposit" : "transfer") + " with its photo." };
   renderAll();
 }
 // The photo shows a payment already saved: keep the photo with that entry and add nothing.
 async function linkDuplicate() {
   const f = ui.form, queueId = ui.sheet.queueId ?? null, photoId = queueId ?? newId("photo"), other = f.dupOf;
-  if (!queueId) { try { await putPhoto(photoId, pendingPhoto.blob); } catch { showToast("The photo could not be kept on this phone, so nothing was saved."); return; } }
+  const kept = queueId ? true : await keepPicture(photoId, pendingPhoto.blob);
+  if (!kept) { if (pendingPhoto) { URL.revokeObjectURL(pendingPhoto.url); pendingPhoto = null; } ui.sheet = null; ui.scan = { done: "The picture could not be kept on this phone. The entry you already had is unchanged." }; renderAll(); return; }   // nothing to link
   const a = M.planAttachment(S(), { id: photoId, transaction_id: other });
   const ok = a.ok && await commit(a.state, { ...ledger.settings, ...(queueId ? { scan_queue: scanQueue().filter((q) => q.id !== queueId) } : {}) });
   if (!ok) { if (!queueId) deletePhoto(photoId).catch(() => {}); return; }
@@ -1373,7 +1377,7 @@ async function saveScan() {
   if (M.MOVE_KINDS.some((k) => k.id === ui.form.kind)) { await saveMove(); return; }
   const f = ui.form, amount = M.parsePesos(f.amount).centavos, kind = M.kindById(f.kind), id = newId("tx"), queueId = ui.sheet.queueId ?? null, photoId = queueId ?? newId("photo");
   const voice = ui.sheet.voice === true, source = voice ? "voice" : "photo";   // a spoken entry has no photo
-  if (!queueId && !voice) { try { await putPhoto(photoId, pendingPhoto.blob); } catch { showToast("The photo could not be kept on this phone, so nothing was saved."); return; } }
+  const kept = queueId || voice ? true : await keepPicture(photoId, pendingPhoto.blob);   // the entry is saved even when its picture cannot be kept
   let ok = false;
   if (kind.direction === "in") {
     const p = M.planPayReceived(S(), { transaction_id: id, date: f.date, amount, account_id: f.account_id, category_id: f.category_id, source, payee: f.payee.trim() || kind.label, memo: voice ? f.text : "" }, new Date());
@@ -1391,10 +1395,20 @@ async function saveScan() {
     const second = f.split ? M.parsePesos(f.split_amt).centavos : 0, lines = f.split ? [{ category_id: f.category_id, amount: amount - second }, { category_id: f.split_cat, amount: second }] : undefined;
     ok = await logExpense({ transaction_id: id, date: f.date, payee: f.payee.trim(), category_id: f.category_id, amount, account_id: f.account_id, source, dup_checked: true, ...(voice ? { memo: f.text } : { photo_id: photoId, drop_scan: queueId }), ...(lines ? { lines } : {}), ...(f.ref ? { reference_no: f.ref } : {}), ...(f.time ? { shot_time: f.time } : {}), ...(f.askNo ? { own_recipients: M.rememberRecipient(ledger.settings.own_recipients, f.askNo, "") } : {}) }, (f.payee.trim() || categoryName(f.category_id)) + " " + peso(amount));
   }
-  if (!ok) { if (!queueId && !voice) deletePhoto(photoId).catch(() => {}); return; }   // the window stays open so nothing typed is lost
+  if (!ok) { if (!queueId && !voice && kept) deletePhoto(photoId).catch(() => {}); return; }   // the window stays open so nothing typed is lost
   if (pendingPhoto) { URL.revokeObjectURL(pendingPhoto.url); pendingPhoto = null; }
-  ui.sheet = null; ui.scan = { done: "Saved " + peso(amount) + (voice ? " as a draft." : " as a draft with its photo.") };
+  ui.sheet = null; ui.scan = { done: !kept ? PICTURE_NOT_KEPT : "Saved " + peso(amount) + (voice ? " as a draft." : " as a draft with its photo.") };
   renderAll();
+}
+
+// A picture that cannot be kept on the phone never stops an entry being saved (owner, Nov 1): the entry is saved with its attachment row, which then
+// shows "Picture not on this phone", and one plain message says so. A store that never answers counts as refused after 15 seconds: never a silent hang.
+const PICTURE_NOT_KEPT = "The picture could not be kept on this phone; the entry is saved.";
+async function keepPicture(id, blob) {
+  let timer;
+  try { await Promise.race([putPhoto(id, blob), new Promise((_, no) => { timer = setTimeout(() => no(new Error("the phone's store did not answer")), 15000); })]); return true; }
+  catch { return false; }
+  finally { clearTimeout(timer); }
 }
 
 // Saved photos are loaded from the phone's own store after a screen is drawn, and shown where a picture is waiting.
@@ -1404,8 +1418,8 @@ function hydratePhotos() {
     (async () => {
       let url = photoUrls.get(id);
       if (!url) {
-        const blob = await getPhoto(id);
-        if (!blob) { const p = document.createElement("p"); p.className = "note"; p.textContent = "Picture not on this phone. Pictures are not part of the backup file."; (img.closest("button") ?? img).replaceWith(p); return; }
+        const blob = await getPhoto(id).catch(() => null);   // a store that refuses is the same as a picture that is not there
+        if (!blob) { const p = document.createElement("p"); p.className = "note"; p.textContent = "Picture not on this phone."; (img.closest("button") ?? img).replaceWith(p); return; }
         url = URL.createObjectURL(blob); photoUrls.set(id, url);
       }
       img.src = url; img.hidden = false;
