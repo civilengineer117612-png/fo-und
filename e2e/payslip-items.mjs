@@ -94,6 +94,15 @@ try {
     await page.locator("#p-from").fill("2026-10-01"); await page.locator("#p-to").fill("2026-10-15"); await page.locator("#p-date").fill("2026-10-20");
     await page.locator("#p-rate").fill("1,250.00 / day"); await page.locator("#p-ptype").fill("Semi-Monthly"); await page.locator("#p-basis").fill("Daily");
     assert.equal(await page.locator("#f-save").isDisabled(), false, "all the figures match the lines: Save is ready");
+    // Owner (Nov 1): a line the reader missed is never a silent total. Here the paper's gross is 9,000.00 more than the lines on the form (as
+    // if the reader had lost a "Basic Salary 9,000.00" line): the form must say Check this, with the exact difference.
+    await page.locator("#p-gross").fill("31000");
+    const said = async () => (await page.locator("#chk-gross, #chk-e").allTextContents()).join(" | ");
+    await page.waitForFunction(() => [...document.querySelectorAll("#chk-gross, #chk-e")].some((e) => !e.hidden && /Check this/.test(e.textContent)), null, { timeout: 4000 }).catch(() => {});
+    assert.match(await said(), /Check this: earnings add up to 9,000\.00 less than the printed gross/, "a missed 9,000.00 line says Check this with the exact gap: " + await said());
+    await page.locator("#p-gross").fill("22000");
+    await page.waitForFunction(() => [...document.querySelectorAll("#chk-gross, #chk-e")].every((e) => e.hidden), null, { timeout: 4000 });
+    console.log("ok: a line missing from the form (the paper's gross 9,000.00 higher) says Check this with the exact gap, and the mark goes when the figures agree");
     // "Same for the rest": one tap gives the lines with no category one category (this payslip only)
     await openSection(page, "e");
     assert.ok((await page.locator('#sheet details.tot[data-keep="e"] .pl-cat.need').count()) >= 2, "Meal lines need a category");

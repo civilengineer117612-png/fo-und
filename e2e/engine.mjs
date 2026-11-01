@@ -14,7 +14,7 @@ export const playwright = () => require(process.env.PLAYWRIGHT_MODULE ?? execSyn
 // times out says what the page itself complained about. Nothing else changes.
 const showConsole = (context) => context.on("page", (page) => {
   page.on("pageerror", (e) => console.log("       page error: " + String(e.message).slice(0, 300)));
-  page.on("console", (m) => { if (m.type() === "error") console.log("       page console: " + m.text().slice(0, 300)); });
+  page.on("console", (m) => { if (m.type() === "error" || (m.type() === "warning" && /reader/i.test(m.text()))) console.log("       page console: " + m.text().slice(0, 300)); });   // the reader's own warning says when it falls back
 });
 
 export async function launchBrowser() {
