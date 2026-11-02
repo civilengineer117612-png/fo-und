@@ -9,7 +9,6 @@ export const MAX_INTRO_SHOWS = 3;
 const L = (drawing, a, b) => ({ drawing, lines: [a, b] });
 // One entry per screen that needs explaining, keyed by the screen's id. Two plain lines each.
 const WORDS = {
-  plan: L("bars", "Plan before you spend a peso.", "Tap a bar and start planning."),
   money: L("trail", "Your money, leaving footprints.", "Tap a bar to see where."),
   income: L("columns", "Every payday, on the record.", "Tap a month to open it."),
   cards: L("cards", "What is yours, and what is borrowed.", "Swipe through your accounts."),

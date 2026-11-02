@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-02-one-budget", date: "2026-11-02", text: "Plan & Save has one Budget you can see by month, by payday or by week, and your old Pay plan moves into it once, after you look it over." },
   { id: "2026-11-02-one-income", date: "2026-11-02", text: "Suggest a budget and the Pay plan now use the same income (your own figure if you typed one, else your payslips), and a hidden category gets no suggestion." },
   { id: "2026-11-01-tap-safety", date: "2026-11-01", text: "On iPhone, a tap right after typing or choosing is no longer lost while the screen updates." },
   { id: "2026-11-01-safari-save", date: "2026-11-01", text: "On iPhone, Save on a typed payslip works again when tapped right after typing, and a save that fails now says so and keeps what you typed." },

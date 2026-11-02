@@ -119,7 +119,7 @@ const slipLine = async (page, section, label, amount, { quick = false } = {}) =>
 // Money, Budget and Setup live in the menu at the upper left; only Log and Verify are on the bottom bar.
 const addPayslipFlow = async (page) => { await page.click('button:has-text("Add income")'); };   // the Add income window offers the payslip ways straight away
 // Screens that belong together share one menu row; the picture strip on top of them switches between them (HUBS in names.js).
-const HUB_OF = { Goals: "Plan & Save", "Pay plan": "Plan & Save", Checks: "Weekly review" };
+const HUB_OF = { Goals: "Plan & Save", Checks: "Weekly review" };
 const openAddForm = async (page) => { const b = page.locator("#add-account-open"); if (await b.count()) { await b.click(); await page.waitForSelector("#a-bank"); } };   // with accounts, Setup keeps the form behind a button
 const afterAdd = async (page) => { await page.waitForFunction(() => !document.querySelector("#a-bank") || document.querySelector("#a-error"), null, { timeout: 2500 }).catch(() => {}); await openAddForm(page); };   // adding closes the form: open it again for the next one
 const openGoal = async (page, name) => { await page.click(`#screen .gname:has-text("${name}")`); await page.waitForSelector("#sheet .gview"); };   // a goal's row opens its window
@@ -720,7 +720,7 @@ await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
 check((await page.locator("#menu .drawer").count()) === 0, "tapping outside closes it");
 await page.click("#menuBtn"); await page.click('#menu .item:has-text("Plan & Save")');
 await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
-check((await page.locator("#menu .drawer").count()) === 0 && (await text(page, "#top")).includes("Buckets"), "choosing an item closes the menu and opens the screen");
+check((await page.locator("#menu .drawer").count()) === 0 && (await text(page, "#top")).includes("Budget"), "choosing an item closes the menu and opens the screen");
 check((await page.locator("#nav [aria-current]").count()) === 0, "no bottom button is marked while a menu screen is open");
 
 // ---- setting budgets ----
@@ -740,14 +740,14 @@ check(await page.locator("#f-save").isDisabled(), "saving is off until there is 
 check(await stars(page) === 1 && (await text(page, "#sheet")).includes("needed before you can save"), "a budget marks the amount with the *");
 await page.fill("#f-amount", "350"); await page.click("#f-save");
 check(await seen(page, "#toast", "Budget saved for Shopping"), "a budget is saved");
-check(await seen(page, "#screen", "₱350.00 a month"), "and shown beside the category");
+check(await seen(page, "#screen", "₱350.00"), "and shown beside the category");
 await page.click('button.catrow:has-text("Shopping")');
 check((await page.inputValue("#f-amount")) === "350.00" && (await page.getAttribute('#sheet button:has-text("Next month")', "aria-pressed")) === "true", "a change to an existing budget starts next month by default");
 await page.click('#sheet button:has-text("Cancel")');
 await setBudget("Shopping", "250", "This month");
 await setBudget("Food", "100");
 await setBudget("Rent", "2000");
-check(await seen(page, "#screen", "₱250.00 a month"), "changing a budget this month replaces it from now on");
+check(await seen(page, "#screen", "₱250.00"), "changing a budget this month replaces it from now on");
 await setBudget("Family", "500", "Next month");
 var famText = await text(page, "button.catrow:has-text('Family')");
 if (!famText.includes("from November 2026")) console.log("   Family row was:", JSON.stringify(famText));
@@ -1177,35 +1177,21 @@ ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.state.goals.length === 1 && ledgerNow.state.transactions.some((t) => t.payee === "To Apartment" && t.status === "draft"), "the deposit is a draft transfer until verified");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
-// ---- the pay plan ----
-await menuGo(page, "Pay plan");
-check((await text(page, "#screen")).includes("You can skip it. Buckets works without it."), "the pay plan starts empty");
-check((await page.locator('button:has-text("Load a plan")').count()) === 0 && (await page.locator('#screen button[data-action="open-planform"]').count()) === 1 && (await page.locator("#screen button").count()) === (await page.locator("#screen .hub button").count()) + 1, "the Pay plan screen offers typing a plan in, and nothing else besides the picture strip (there is no plan file to load)");
+// ---- the pay plan has moved into Budget: it is no longer a screen of its own ----
+await menuGo(page, "Budget");
+check((await page.locator('#screen .hub button:has-text("Pay plan")').count()) === 0 && (await page.locator('#screen .hub button').count()) === 2, "Plan & Save has two tabs, Budget and Goals: there is no Pay plan tab");
+check((await text(page, "#screen")).includes("Budget") && (await page.locator('button[data-action="open-planform"]').count()) === 0 && (await page.locator('button:has-text("Load a plan")').count()) === 0, "and no button to type in a pay plan");
 var plan = { schema_version: 1, unit: "PHP_whole_pesos", effective_from: "2026-10-01",
   paydays: [{ id: "first", day: 15, expected_income: 5100 }, { id: "second", day: "last", expected_income: 7100 }],
   lines: [{ name: "Food", first: 3000, second: 3000 }, { name: "Shopping", first: 1000, second: 1000 }, { name: "Rent", first: 0, second: 2000 },
     { name: "Apartment", kind: "goal", first: 1000, second: 1000 }, { name: "Mystery", first: 100, second: 100 }],
   ef_target_basis: ["Rent", "Food"], ef_target_months: 3 };
-await installPlan(page, plan); await menuGo(page, "Pay plan");
-var ptxt = await text(page, "#screen");
-if (!ptxt.includes("last day of the month")) console.log("   plan screen:", JSON.stringify(ptxt.slice(0, 500)));
-check(ptxt.includes("last day of the month") && ptxt.includes("₱5,100.00") && ptxt.includes("₱7,100.00") && ptxt.includes("₱12,200.00") && ptxt.toLowerCase().includes("this cutoff"), "the plan shows both paydays (the second at month end) and the totals per payday and month");
-check(ptxt.includes("Mystery") && ptxt.includes("not tracked") && ptxt.includes("In effect since"), "a line with no matching category is said out loud, and the start date is shown");
-check(ptxt.includes("This divides each payday. Buckets sets your limit per category for the month."), "with a plan loaded, the line under the title says what a plan is for");
+await installPlan(page, plan); await menuGo(page, "Budget");
+check((await text(page, "#screen")).includes("Your Pay plan moves into Budget") && await page.locator('button[data-action="open-plan-move"]').count() === 1, "a plan saved before shows ONE card: it moves into Budget once, after a look");
 { const before = JSON.stringify(JSON.parse((await stored(page)).local).settings.plans);
-  await menuGo(page, "Setup"); await menuGo(page, "Pay plan");
-  check(JSON.stringify(JSON.parse((await stored(page)).local).settings.plans) === before && (await text(page, "#screen")).includes("₱12,200.00"), "viewing the plan again leaves the loaded plan exactly as it was"); }
-await page.click('button:has-text("Record pay received")');
-check(await page.locator("#f-save").isDisabled(), "pay needs an amount first");
-await page.fill("#f-amount", "5000.50");
-check(await page.locator("#f-save").isDisabled(), "and What it is has to be chosen too (it starts empty)");
-await page.click('#sheet .chip:has-text("Salary")'); await page.click("#f-save"); await seen(page, "#toast", "Pay recorded");
-var inc = await text(page, "#screen");
-check(inc.includes("₱5,000.50") && inc.includes("-₱2,099.50 less"), "pay received is shown against the plan as a signed difference in words");
-ledgerNow = JSON.parse((await stored(page)).local);
-check(ledgerNow.settings.plans[0].paydays[1].income === 710000, "the plan itself is not changed by the real pay");
-check((await page.locator('button:has-text("Load a newer plan")').count()) === 0, "and no Load a newer plan button either");
-await shot(page, "26-plan");
+  await menuGo(page, "Setup"); await menuGo(page, "Budget");
+  check(JSON.stringify(JSON.parse((await stored(page)).local).settings.plans) === before, "looking at it leaves the saved plan exactly as it was"); }
+await shot(page, "26-plan-moves");
 ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.settings.plans.length === 1 && ledgerNow.settings.plans[0].lines[0].first === 300000, "the plan is kept in the phone's settings as a dated list, in centavos");
 await menuGo(page, "Goals");
@@ -2446,7 +2432,7 @@ console.log("Signs and folded entries");
   await page.click("#entries-toggle");
   check(await page.locator("#entries-list").isHidden(), "and a second tap folds them again");
   await menuGo(page, "Budget");
-  check((await text(page, "#screen")).includes("a month") && await page.locator('button.catrow[data-action="open-budget"]').count() >= 1, "Buckets lists each category with its monthly limit");
+  check(await page.locator('button.catrow[data-action="open-budget"]').count() >= 1, "Budget lists each category with its monthly figure");
   check(errors.length === 0, "no script errors with signs and folded entries");
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
@@ -2870,133 +2856,120 @@ console.log("Same amount in Verify");
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
-// ===== 5pf. the Pay plan: one payday at a time, a bar for each line =====
-try { blockName = "5pf. the Pay plan: one payday at a time, a bar for each line";
-console.log("Pay plan");
-{ const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" };
-  const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, try_new_budget: true }, state: { ...OWNER_STYLE.state, accounts: [acct], transactions: [], entries: [], attachments: [] } };
+// ===== 5bv. ONE Budget: Month, Per payday, Per week =====
+try { blockName = "5bv. ONE Budget: Month, Per payday, Per week";
+console.log("One Budget");
+var rule = (id, cat, amount) => ({ id, kind: "budget", subject_id: cat, amount, effective_from: "2026-10-01", created_at: "2026-10-01T08:00:00.000+08:00" });
+var wallet = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" };
+var budgetSeed = (rules, extra = {}) => ({ ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, income_base_pin: 3000000, pay_schedule: { days: [15, "last"] }, ...extra }, state: { ...OWNER_STYLE.state, accounts: [wallet], transactions: [], entries: [], attachments: [], rules } });
+{ // the three views of ONE figure: income 30,000.00 typed; paydays on the 15th and the last day cover 16 and 15 days
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: budgetSeed([rule("r1", "cat-food", 500000), rule("r2", "cat-rent", 600000), rule("r3", "cat-shopping", 150000), rule("r4", "cat-upskill", 200000)], { hidden_categories: ["cat-upskill"] }) }));
+  await menuGo(page, "Budget");
+  var bt = (await text(page, "#screen")).replace(/\s+/g, " ");
+  check(bt.includes("₱30,000.00") && bt.includes("Your own figure") && bt.includes("Left: ₱17,500, not assigned") && await page.locator('#screen button[aria-pressed="true"]:has-text("Month")').count() === 1, "Month: the one income with its source, what is left, and the Month button pressed");
+  check(await page.locator('#screen button.primary').count() === 1 && (await text(page, '#screen button.primary')).includes("Suggest a budget"), "Suggest a budget is a real button, and the only filled one");
+  check(await page.locator('button.catrow:has-text("Food")').first().innerText().then((t) => t.includes("₱5,000.00")), "Food is 5,000.00 for the month");
+  check(!(await page.locator("#screen").innerText()).includes("Upskill") && bt.includes("Hidden (1)"), "a hidden category has no line: only the Hidden list");
+  await page.click('#screen button:has-text("Hidden (1)")'); check((await text(page, "#screen")).includes("Upskill"), "and the Hidden list names it"); await page.click('#screen button:has-text("Hidden (1)")');
+  await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
+  var food = async () => (await page.locator('.catrow:has-text("Food")').first().innerText()).replace(/\s+/g, " ");
+  check((await food()).includes("₱2,580.64"), "Per payday, the 15th: Food takes its share of the pay, 2,580.64 (never 5,000.00 on each)");
+  await page.click('#screen button[data-action="bv-payday"][data-id="1"]');
+  check((await food()).includes("₱2,419.36"), "the last day: 2,419.36, and the two add to exactly 5,000.00");
+  await page.click('#screen button[data-action="bv-view"][data-id="week"]');
+  check((await food()).includes("₱1,153.84") && (await text(page, "#screen")).includes("Rounding leaves"), "Per week: 5,000.00 x 12 / 52 = 1,153.84, and what the rounding leaves out is said");
+  check(JSON.stringify(JSON.parse((await stored(page)).local).state.rules.map((r) => r.amount)) === "[500000,600000,150000,200000]", "changing the view changed no figure");
+  // rent whole on the last-day payday
+  await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
+  await page.click('#screen button[data-action="bv-payday"][data-id="0"]');
+  await page.click('button.catrow:has-text("Rent")'); await page.waitForSelector("#bv-a0");
+  await page.click('#sheet button[data-action="bv-pin"][data-id="1"]');
+  await page.waitForFunction(() => document.querySelector("#bv-a0")?.value === "0" && document.querySelector("#bv-a1")?.value === "6000");
+  check(JSON.parse((await stored(page)).local).settings.payday_pins["cat-rent"] === 1, "Rent is pinned whole to the second payday: 0 and 6,000");
+  await page.click('#sheet button:has-text("Cancel")');
+  check((await text(page, "button.catrow:has-text('Rent')")).includes("₱0.00") && (await text(page, "button.catrow:has-text('Rent')")).includes("Whole amount on the last day payday"), "the first payday shows Rent as 0.00");
+  await page.click('#screen button[data-action="bv-view"][data-id="month"]');
+  check((await text(page, "button.catrow:has-text('Rent')")).includes("₱6,000.00"), "and the month still says 6,000.00");
+  // move 500.00 of Food from the second payday to the first: the month stays 5,000.00, no rule is added
+  await page.click('#screen button[data-action="bv-view"][data-id="payday"]'); await page.click('button.catrow:has-text("Food")'); await page.waitForSelector("#bv-a0");
+  var rulesBefore = JSON.parse((await stored(page)).local).state.rules.length;
+  await page.fill("#bv-a0", "3080.64"); await page.fill("#bv-a1", "1919.36"); await page.click("#bv-save");
+  check(await seen(page, "#toast", "The month stays ₱5,000.00"), "moving 500.00 keeps the month at 5,000.00");
+  ledgerNow = JSON.parse((await stored(page)).local);
+  check(ledgerNow.state.rules.length === rulesBefore && JSON.stringify(ledgerNow.settings.budget_split["cat-food"]) === JSON.stringify({ amounts: [308064, 191936], for: 500000 }), "no budget rule was added: only the split is kept");
+  // typing a bigger payday amount changes the month, from this month
+  await page.click('button.catrow:has-text("Food")'); await page.waitForSelector("#bv-a0");
+  await page.fill("#bv-a0", "3000"); await page.fill("#bv-a1", "3000"); await page.click("#bv-save");
+  check(await seen(page, "#toast", "The month is now ₱6,000.00"), "typing 3,000.00 on each payday makes the month 6,000.00, said plainly");
+  ledgerNow = JSON.parse((await stored(page)).local);
+  check(ledgerNow.state.rules.length === rulesBefore + 1 && ledgerNow.state.rules.at(-1).amount === 600000 && ledgerNow.state.rules.at(-1).effective_from === "2026-10-01" && ledgerNow.state.rules.slice(0, rulesBefore).every((r, i) => r.amount === [500000, 600000, 150000, 200000][i]), "one new dated rule from this month; the old rules are untouched");
+  check(errors.length === 0, "no script errors"); await ctx.close(); }
+{ // a payday that is over offers to move an amount to the next payday: only when tapped
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: budgetSeed([rule("r1", "cat-food", 1200000), rule("r2", "cat-rent", 600000), rule("r3", "cat-shopping", 1500000)], { payday_pins: { "cat-rent": 0 } }) }));
+  await menuGo(page, "Budget"); await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
+  var mv = (await text(page, '#screen button[data-action="bv-move-pick"]')).replace(/\s+/g, " ");
+  check(/^Move ₱[\d,.]+ to the next payday\?$/.test(mv) && (await text(page, "#screen")).includes("Over by"), "an over payday offers: " + mv);
+  var before = JSON.stringify(JSON.parse((await stored(page)).local).settings.budget_split ?? {});
+  await page.click('#screen button[data-action="bv-move-pick"]'); await page.click('#sheet button[data-action="bv-move-to-next"]:has-text("Shopping")');
+  await seen(page, "#toast", "to the next payday");
+  ledgerNow = JSON.parse((await stored(page)).local); var sp = ledgerNow.settings.budget_split["cat-shopping"];
+  check(sp && sp.amounts[0] + sp.amounts[1] === 1500000 && sp.for === 1500000 && JSON.stringify(ledgerNow.settings.budget_split ?? {}) !== before, "the amount moved, and Shopping still adds up to its month: " + JSON.stringify(sp));
+  check(errors.length === 0, "no script errors"); await ctx.close(); }
+{ // an old Pay plan moves into Budget: look it over, one choice, a copy first
+  const planObj = parsePlan(JSON.stringify({ schema_version: 1, unit: "PHP_whole_pesos", effective_from: "2026-10-01", paydays: [{ id: "first", day: 15, expected_income: 5100 }, { id: "second", day: "last", expected_income: 7100 }],
+    lines: [{ name: "Food", first: 3000, second: 3000 }, { name: "Shopping", first: 1000, second: 1000 }, { name: "Rent", first: 0, second: 2000 }, { name: "Apartment", kind: "goal", first: 1000, second: 1000 }, { name: "Buffer", kind: "buffer", first: 100, second: 100 }] })).plan;
+  if (!planObj) throw new Error("the invented plan is not valid");
+  const seed = budgetSeed([rule("r1", "cat-food", 300000)], { plans: [planObj], pay_schedule: undefined }); seed.state.goals = [{ id: "g1", name: "Apartment", account_id: "w", hidden_by_default: false }];
   ({ ctx, page, errors } = await open({ blockSw: true, seed }));
-  await menuGo(page, "Pay plan");
-  let st = (await text(page, "#screen")).replace(/\s+/g, " ");
-  check(st.includes("You can skip it. Buckets works without it.") && st.toLowerCase().includes("how to use it") && st.includes("must add up to that payday's pay"), "the empty Pay plan screen keeps its words and adds a how-to note");
-  check(await page.locator('#screen button.primary').count() === 1 && await page.locator('button[data-action="open-planform"]').count() === 1, "with one filled button: Type in a pay plan");
-  await page.click('button[data-action="open-planform"]');
-  await page.waitForSelector(".pp-big");
-  check(await page.locator("#sheet input").count() === 0 && await page.locator("#sheet .pp-row").count() === 0 && await page.locator("#f-save").isDisabled(), "the plan opens as a picture with no boxes to fill; with no pay and nothing to suggest, nothing is placed and it cannot be saved");
-  check((await text(page, "#sheet")).includes("Type this payday") && !(await text(page, "#sheet")).includes("Description"), "and one quiet line says what to do first");
-  await page.click('button[data-action="pf-view"][data-id="pay"]');
-  check(await stars(page) === 5 && (await text(page, "#sheet")).includes("needed before you can save"), "the pay window marks the start, both paydays and both pays with the *");
-  await page.fill("#pf-start", "2026-09-01"); await page.fill("#pf-d1", "15"); await page.fill("#pf-p1", "10000"); await page.fill("#pf-p2", "24000");
-  await page.click('button[data-action="pf-view"][data-id="main"]'); await page.click('button[data-action="pf-view"][data-id="pay"]');
-  check((await text(page, "#sheet")).includes("monthly rent first") && await page.locator("#pf-rent").count() === 1, "with the pay typed but no rent known, the pay window says so and offers a box for the rent");
-  check(!(await text(page, "#sheet")).includes("payslips are dated"), "no payslips, so no note about payslip dates");
-  await page.fill("#pf-rent", "5000"); await page.click('button[data-action="pf-rent-save"]');
-  check(await page.waitForFunction(() => JSON.parse(localStorage.getItem("financialTracker.ledger")).settings.starter_rent === 500000, null, { timeout: 4000 }).then(() => true, () => false), "the rent typed here is kept (the Budget suggestion uses it too)");
-  await page.click('button[data-action="pf-refill"]'); await page.waitForSelector(".pp-row");
-  check(await page.locator("#sheet .pp-row").count() >= 3 && (await text(page, "#sheet")).includes("₱10,000"), "Suggest again fills the bars from the suggestion, built on the pay typed");
-  const amounts = (await page.locator("#sheet .pp-row .v").allTextContents()).map((x) => Number(x.replace(/[^\d]/g, "")));
-  check(amounts.length >= 3 && amounts.every((v, i) => i === 0 || amounts[i - 1] >= v), "the bars are sorted from the biggest amount to the smallest (" + amounts.join(", ") + ")");
-  check(await page.locator(".sheet.center").count() === 1, "the plan window sits in the centre of the screen");
-  check(await page.locator('#sheet button:has-text("+ Plan a category")').count() === 1, "+ Plan a category is a real button, not a faint link");
-  // whatever the suggestion left over or put over on a payday, the owner settles it: leftover on a line chosen, an overshoot taken off Food
-  const settle = async (w) => {
-    for (let n = 0; n < 3; n++) {
-      const t = await text(page, "#sheet .pp-big");
-      if (t.includes("All placed")) return true;
-      if (t.includes("left")) { await page.click(".pp-big .pp-left"); await page.click('button[data-action="pf-rest-to"]:has-text("Food")'); continue; }
-      const over = Number(t.match(/\u20B1([\d,]+) over/)[1].replace(/,/g, ""));
-      await page.click(".pp-row:has-text('Food')"); const box = page.locator(`#sheet input[data-field^="${w ? "b" : "a"}"]`);
-      await box.fill(String(Number(await box.inputValue()) - over)); await page.click('button[data-action="pf-view"][data-id="main"]');
-    }
-    return (await text(page, "#sheet .pp-big")).includes("All placed");
-  };
-  check(!(await text(page, "#sheet .pp-big")).includes("All placed") ? await page.locator("#f-save").isDisabled() : true, "a payday whose bars do not add up to its pay says how much is left or over, and the plan cannot be saved yet");
-  check(await settle(0), "what is left (or over) goes on a line you choose, and the payday says All placed");
-  await page.click('button[data-action="pf-which"][data-id="1"]');
-  check((await text(page, "#sheet .pp-big")).includes("\u20B124,000"), "the switch shows the other payday");
-  check(await settle(1), "the other payday settles the same way");
-  check(!(await page.locator("#f-save").isDisabled()), "when both paydays are all placed the plan can be saved");
-  await page.click("#f-save");
-  check(await seen(page, "#toast", "Plan loaded"), "the plan is saved");
-  const l = JSON.parse((await stored(page)).local), pl = l.settings.plans?.[0];
-  check(l.settings.plans.length === 1 && pl.paydays[0].income === 1000000 && pl.paydays[1].income === 2400000 && pl.paydays[1].day === "last" && pl.lines.length >= 3 && pl.lines.every((x) => x.first + x.second > 0) && pl.lines.reduce((a, x) => a + x.first, 0) === 1000000, "it holds the paydays and only the lines that hold money, adding up to each pay");
-  st = (await text(page, "#screen")).replace(/\s+/g, " ");
-  check(st.includes("Add a newer plan"), "the Pay plan screen now shows it, with a way to add a newer one");
-  check(await page.locator("#plan-agree, #plan-differ").count() === 1, "the Pay plan screen says whether the plan agrees with the budgets");
-  await page.click('button[data-action="open-planform"]'); await page.waitForSelector(".pp-big");
-  check((await text(page, "#sheet .pp-big")).includes("₱10,000") && await page.locator("#sheet .pp-row").count() >= 2, "Add a newer plan starts from the current plan");
-  await page.click('#sheet button:has-text("Cancel")');
-  await menuGo(page, "Help"); await page.locator("#screen details.mrow summary", { hasText: "Pay plan" }).click();
-  check((await text(page, "#screen")).includes("Buckets or Pay plan?") && (await text(page, "#screen")).includes("Buckets is enough on its own"), "Help compares Budget and Pay plan");
-  await menuGo(page, "Setup"); await page.click('button[data-action="cat-edit"]'); await page.click('.row:has-text("Food")'); await page.waitForSelector("#c-name");
-  check((await text(page, "#sheet")).includes("Your Pay plan has a line called Food. After a rename"), "renaming a category the saved plan uses says the plan line will no longer match");
-  const inPlan = new Set(JSON.parse((await stored(page)).local).settings.plans[0].lines.map((x) => x.name.toLowerCase()));
-  const unused = JSON.parse((await stored(page)).local).state.categories.find((c) => c.kind === "expense" && c.id !== "cat-unlogged" && !inPlan.has(c.name.toLowerCase()));
-  await page.click('#sheet button:has-text("Cancel")');
-  if (unused) { await page.click(`.row:has-text("${unused.name}")`); await page.waitForSelector("#c-name"); }
-  check(!unused || !(await text(page, "#sheet")).includes("Your Pay plan has a line"), "and a category the plan does not use (" + (unused?.name ?? "none left") + ") has no such note");
-  check(errors.length === 0, "no script errors");
-  await ctx.close(); }
+  await menuGo(page, "Budget");
+  check((await text(page, "#screen")).includes("Your Pay plan moves into Budget"), "the card says the Pay plan moves into Budget");
+  await page.click('button[data-action="open-plan-move"]'); await page.waitForSelector('#sheet button[data-action="plan-move-run"]');
+  var pm = (await text(page, "#sheet")).replace(/\s+/g, " ");
+  check(pm.includes("Food") && pm.includes("Budget ₱3,000") && pm.includes("Pay plan ₱6,000") && pm.includes("No budget yet") && pm.includes("Apartment ₱2,000 a month") && pm.includes("Buffer: ₱200 a month"), "the review lists what differs, both figures, the goal and the buffer: " + pm.slice(0, 260));
+  check(await page.locator('#sheet button[data-action="plan-move-pick"][data-pick="bucket"][aria-pressed="true"]').count() === 1, "the budget is chosen by default where they differ");
+  await page.click('#sheet button[data-action="plan-move-pick"][data-pick="plan"]');
+  var plansBefore = JSON.stringify(JSON.parse((await stored(page)).local).settings.plans);
+  await page.click('#sheet button[data-action="plan-move-run"]'); await seen(page, "#toast", "Your Pay plan moved into Budget");
+  ledgerNow = JSON.parse((await stored(page)).local);
+  const lastRule = (c) => ledgerNow.state.rules.filter((r) => r.subject_id === c).at(-1)?.amount;
+  check(lastRule("cat-food") === 600000 && lastRule("cat-shopping") === 200000 && lastRule("cat-rent") === 200000 && ledgerNow.state.rules.filter((r) => r.subject_id === "cat-food")[0].amount === 300000, "each category's month is its two payday amounts added; the old rule is still there");
+  check(JSON.stringify(ledgerNow.settings.plans) === plansBefore && ledgerNow.settings.plan_moved === "2026-10" && ledgerNow.settings.goal_monthly.g1 === 200000 && ledgerNow.settings.buffer_monthly === 20000, "the plan is untouched; the goal and the buffer carry their amounts");
+  const copies = await page.evaluate(() => JSON.parse(localStorage.getItem("financialTracker.preupgrade") ?? "[]"));
+  check(copies.length >= 1 && copies[0].kind === "repair" && JSON.parse(copies[0].text).settings.plan_moved === undefined, "a copy of the ledger as it was is kept first");
+  check(!(await text(page, "#screen")).includes("Your Pay plan moves into Budget"), "and the card is gone");
+  await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
+  check((await food()).includes("₱3,000.00"), "Per payday shows the plan's own amounts: Food 3,000.00 on each payday");
+  check(errors.length === 0, "no script errors"); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
-
-// ===== 5ps. changing a line, adding one, removing one =====
-try { blockName = "5ps. changing a line, adding one, removing one";
-console.log("Pay plan lines");
-{ const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" };
-  const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, try_new_budget: true, starter_rent: 500000 }, state: { ...OWNER_STYLE.state, accounts: [acct], transactions: [], entries: [], attachments: [] } };
-  ({ ctx, page, errors } = await open({ blockSw: true, seed }));
-  await menuGo(page, "Pay plan"); await page.click('button[data-action="open-planform"]'); await page.waitForSelector(".pp-big");
-  await page.click('button[data-action="pf-view"][data-id="pay"]'); await page.fill("#pf-p1", "10000"); await page.fill("#pf-p2", "24000"); await page.click('button[data-action="pf-refill"]'); await page.waitForSelector(".pp-row");
-  const food = await text(page, ".pp-row:has-text('Food')");
-  await page.click(".pp-row:has-text('Food')");
-  const boxes = await page.locator('#sheet input[data-field^="a"], #sheet input[data-field^="b"]').count();
-  check(boxes === 2 && (await text(page, "#sheet")).includes("Suggested") && await page.locator('button[data-action="pf-use-line"]').count() === 1, "a tap on a bar opens that line: one box for each payday, with the suggestion beside a Use link");
-  await page.locator('#sheet input[data-field^="a"]').fill("1000"); await page.click('button[data-action="pf-view"][data-id="main"]');
-  check((await text(page, ".pp-row:has-text('Food')")).includes("₱1,000") && food !== (await text(page, ".pp-row:has-text('Food')")), "the new figure shows on the bar after Done");
-  await page.click(".pp-row:has-text('Food')"); await page.click('button[data-action="pf-remove"]');
-  check(await page.locator(".pp-row:has-text('Food')").count() === 0, "Remove from plan takes the line off both paydays");
-  await page.click('button[data-action="pf-view"][data-id="add"]');
-  check(await page.locator('#sheet button.chip:has-text("Food")').count() === 1 && await page.locator('#sheet button.chip:has-text("Another line")').count() === 1, "+ Add lists what is not in the plan, as buttons, and Another line");
-  await page.click('button[data-action="pf-new-line"]'); await page.fill('#sheet input[data-field^="n"]', "Test Line"); await page.locator('#sheet input[data-field^="a"]').fill("100"); await page.click('button[data-action="pf-view"][data-id="main"]');
-  check((await text(page, ".pp-row:has-text('Test Line')")).includes("₱100"), "a line of your own can be added, with a name and an amount");
-  check(await page.locator('button[data-action="plan-add-line"]').count() === 0 && !(await text(page, "#sheet")).includes("Use every suggestion"), "the old long form is gone");
-  await page.locator("#scrim").click({ position: { x: 5, y: 5 } });
-  check(await page.locator(".pp-big").count() === 0, "a tap outside the plan closes it");
-  await page.click('button[data-action="open-planform"]'); await page.waitForSelector(".pp-big");
-  check(await page.locator(".pp-row:has-text('Test Line')").count() === 1, "and opening it again brings the work back, not a fresh plan");
-  await page.click('#sheet button:has-text("Cancel")'); await page.click('button[data-action="open-planform"]'); await page.waitForSelector(".pp-big");
-  check(await page.locator(".pp-row:has-text('Test Line')").count() === 0, "Cancel throws the work away: the next opening starts fresh");
-  check(errors.length === 0, "no script errors");
-  await ctx.close(); }
 
 // Buckets has its own popup the first times it opens: close it so the next tap reaches the strip.
-var toBuckets = async function toBuckets(page) { await page.click('#screen .hub button:has-text("Buckets")'); await page.waitForTimeout(350); if (await page.locator("#sheet .in-draw").count()) { await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw")); } };
-} catch (e) { await blockFailed(e); }
+var toBuckets = async function toBuckets(page) { await page.click('#screen .hub button:has-text("Budget")'); await page.waitForTimeout(350); if (await page.locator("#sheet .in-draw").count()) { await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw")); } };
 
 // ===== 5pi. the small popup that says what the screen is for =====
 try { blockName = "5pi. the small popup that says what the screen is for";
-console.log("Pay plan popup");
+console.log("Budget popup");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" };
   const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, try_new_budget: true }, state: { ...OWNER_STYLE.state, accounts: [acct], transactions: [], entries: [], attachments: [] } };
   ({ ctx, page, errors } = await open({ blockSw: true, seed, keepIntro: true }));
-  await menuGo(page, "Budget"); await page.waitForSelector(".in-draw"); await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw"));
-  await page.click('#screen .hub button:has-text("Pay plan")'); await page.waitForSelector(".in-draw");
-  check((await text(page, "#sheet")).includes("Plan before you spend a peso.") && (await text(page, "#sheet")).includes("Tap a bar and start planning.") && await page.locator('#sheet .sheet.center').count() === 1, "the first time, a centred popup says what the screen is for in two short lines, with a drawing");
+  await menuGo(page, "Budget"); await page.waitForSelector(".in-draw");
+  check((await text(page, "#sheet")).includes("Give each habit a limit.") && (await text(page, "#sheet")).includes("Tap to set it.") && await page.locator('#sheet .sheet.center').count() === 1, "the first time, a centred popup says what the screen is for in two short lines, with a drawing");
   check(await page.locator("#sheet .in-bar").count() >= 3 && (await page.locator("#sheet .in-bar").first().evaluate((e) => getComputedStyle(e).animationName)) === "introgrow", "the drawing moves");
   await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw"));
-  check(JSON.parse((await stored(page)).local).settings.intro_seen?.plan === 1, "Got it counts the popup as shown once");
-  await toBuckets(page); await page.click('#screen .hub button:has-text("Pay plan")'); await page.waitForSelector(".in-draw");
+  check(JSON.parse((await stored(page)).local).settings.intro_seen?.budget === 1, "Got it counts the popup as shown once");
+  await page.click('#screen .hub button:has-text("Goals")'); await page.waitForSelector(".in-draw"); await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw"));
+  await page.click('#screen .hub button:has-text("Budget")'); await page.waitForSelector(".in-draw");
   check(await page.locator(".in-draw").count() === 1, "it comes back the next time, until the check is ticked");
   await page.click('button[data-action="intro-off"]');
   check((await page.getAttribute('button[data-action="intro-off"]', "aria-checked")) === "true", "the check can be ticked");
   await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw"));
-  await toBuckets(page); await page.click('#screen .hub button:has-text("Pay plan")'); await page.waitForTimeout(400);
-  check(await page.locator(".in-draw").count() === 0 && JSON.parse((await stored(page)).local).settings.intro_off?.plan === true, "with the check ticked it does not come back");
-  await page.click('#top button[data-action="intro"][data-id="plan"]'); await page.waitForSelector(".in-draw");
+  await page.click('#screen .hub button:has-text("Goals")'); await page.waitForTimeout(350); if (await page.locator("#sheet .in-draw").count()) { await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw")); }
+  await page.click('#screen .hub button:has-text("Budget")'); await page.waitForTimeout(400);
+  check(await page.locator(".in-draw").count() === 0 && JSON.parse((await stored(page)).local).settings.intro_off?.budget === true, "with the check ticked it does not come back");
+  await page.click('#top button[data-action="intro"][data-id="budget"]'); await page.waitForSelector(".in-draw");
   await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw"));
   check(await page.locator(".in-draw").count() === 0, "the ? next to the title brings the popup back, and Got it returns to the screen");
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.click('#top button[data-action="intro"][data-id="plan"]'); await page.waitForSelector(".in-draw");
+  await page.click('#top button[data-action="intro"][data-id="budget"]'); await page.waitForSelector(".in-draw");
   check((await page.locator("#sheet .in-bar").first().evaluate((e) => getComputedStyle(e).animationName)) === "none", "with Reduce Motion the drawing stands still, finished");
   check(errors.length === 0, "no script errors");
   await ctx.close(); }
@@ -3012,7 +2985,7 @@ console.log("Popups on every screen");
     ["Trips", "Spend on the road, count it once.", "Add dates and it fills itself."], ["Buffer", "A cushion for rainy months.", "Tap to add to it."], ["Setup", "Make the app yours.", "Tap anything to change it."]];
   const seenAll = [];
   for (const [name, one, two] of screens) {
-    const menuName = name === "Budget" ? "Plan & Save" : name, title = name === "Budget" ? "Buckets" : name;
+    const menuName = name === "Budget" ? "Plan & Save" : name, title = name === "Budget" ? "Budget" : name;
     await page.click("#menuBtn"); await page.click(`#menu .item:has-text("${menuName}")`);
     await page.waitForSelector(".in-draw", { timeout: 4000 });
     const t = await text(page, "#sheet");
@@ -3034,7 +3007,7 @@ console.log("Popups on every screen");
   await page.click('#screen .hub button:has-text("Goals")'); await page.waitForSelector(".in-draw");
   check((await text(page, "#sheet")).includes("Dreams with a price tag."), "Goals, inside the Budget strip, has its own popup");
   await page.click('button[data-action="intro-off"]'); await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw"));
-  await page.click('#screen .hub button:has-text("Buckets")'); await page.waitForSelector(".in-draw"); await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw"));
+  await page.click('#screen .hub button:has-text("Budget")'); await page.waitForSelector(".in-draw"); await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw"));
   await page.click('#screen .hub button:has-text("Goals")'); await page.waitForTimeout(400);
   check(await page.locator(".in-draw").count() === 0 && (await settingsOf()).intro_off?.goals === true, "with the check ticked a popup does not come back");
   await page.click("#menuBtn"); await page.click('#menu .item:has-text("Cash flow")'); await page.waitForTimeout(400);
@@ -3479,10 +3452,10 @@ console.log("Welcome card, category editing, required marks");
   { const nb = await page.locator("#nav").boundingBox(), vh = page.viewportSize().height; check(Math.abs(nb.y + nb.height - vh) <= 1, "the Log and Verify bar stays at the bottom of the screen when Help is scrolled"); }
   check(await page.evaluate(() => getComputedStyle(document.body).overflowX) === "visible" && await page.evaluate(() => getComputedStyle(document.documentElement).overflowX) === "hidden", "only the page hides sideways overflow, not the body too");
   await ctx.close();
-  // Budget keeps a hidden category in its place with a quiet word
+  // Budget gives a hidden category no line: it is only listed under Hidden
   ({ ctx, page, errors } = await open({ blockSw: true, seed: { ...seedC, settings: { ...seedC.settings, hidden_categories: ["cat-lakat"] } } }));
   await menuGo(page, "Budget");
-  check(await page.locator('#screen button.catrow:has-text("Lakat/Date") small.hiddennote').count() === 1 && await page.locator("#screen small.hiddennote").count() === 1, "Budget marks only the hidden category, in its own place, with one quiet word");
+  check(await page.locator('#screen button.catrow:has-text("Lakat/Date")').count() === 0 && await page.locator("#screen small.hiddennote").count() === 0, "Budget has no line for the hidden category (it is only listed under Hidden, when it has a budget)");
   await ctx.close();
   // Who: spending by payee inside Trends; naming a number once moves its payments out of Unlogged (verified ones only in the reports, drafts for real)
   { const txW = (id, date, payee, status = "verified") => ({ id, date, payee, memo: "", status, source: "statement", created_at: TSW, ...(status === "verified" ? { verified_at: TSW } : {}) });
@@ -3951,15 +3924,15 @@ console.log("\n-- Goals in the flat look --");
 }
 } catch (e) { await blockFailed(e); }
 
-// ===== Suggest a budget: a window from Buckets, nothing saved until Confirm =====
-try { blockName = "Suggest a budget: a window from Buckets, nothing saved until Confirm";
+// ===== Suggest a budget: a window from Budget, nothing saved until Confirm =====
+try { blockName = "Suggest a budget: a window from Budget, nothing saved until Confirm";
 console.log("\n-- Suggest a budget --");
 { const mkA = (id, name, ob) => ({ id, name, class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-03-01" });
   const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, income_base_pin: 2500000, starter_rent: 800000 }, state: { ...OWNER_STYLE.state, accounts: [mkA("b", "Test Bank", 1800000), mkA("s", "Test Savings", 1500000)], rules: [],
     goals: [{ id: "g1", name: "Test Laptop", account_id: "b", target: 4500000, hidden_by_default: false }], transactions: [], entries: [], attachments: [] } };
   ({ ctx, page, errors } = await open({ blockSw: true, seed }));
   await menuGo(page, "Budget"); await page.waitForTimeout(400); if (await page.locator('button[data-action="intro-done"]').count()) await page.click('button[data-action="intro-done"]');
-  check(await page.locator('button[data-action="open-suggest"]').count() === 1 && await page.locator("#screen button.catrow").count() >= 5, "Buckets is the simple list with one 'Suggest a budget' link");
+  check(await page.locator('button[data-action="open-suggest"]').count() === 1 && await page.locator("#screen button.catrow").count() >= 5, "Budget has one 'Suggest a budget' button, and a row for each category with no budget yet");
   await page.click('button[data-action="open-suggest"]'); await page.waitForSelector("#sheet .catcard");
   const t = (await text(page, "#sheet")).replace(/\s+/g, " ");
   check(t.includes("Suggest a budget") && t.includes("Income") && t.includes("\u20B125,000.00 a month") && t.includes("Needs") && t.includes("Wants") && t.includes("Savings") && /target 50\.0%/.test(t), "the window shows the income and the needs, wants and savings against their targets");
@@ -3973,7 +3946,7 @@ console.log("\n-- Suggest a budget --");
   check((await text(page, "#sheet")).includes("Save these budgets?"), "Confirm shows what would change first");
   await page.click('#sheet button[data-action="save-sug"]'); await page.waitForTimeout(600);
   check(JSON.parse((await stored(page)).local).state.rules.length >= 3, "Save budgets writes ordinary budget rules");
-  check((await text(page, "#screen")).includes("a month"), "Buckets now shows the new limits");
+  check((await text(page, "#screen")).includes("a month"), "Budget now shows the new limits (they start next month by default)");
   check(errors.length === 0, "no script errors in Suggest a budget: " + errors.join("; ")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -4101,17 +4074,18 @@ console.log("\n-- Already paid? --");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
-// ===== Pay plan on the smallest iPhone: the tables stay inside their cards =====
-try { blockName = "Pay plan on the smallest iPhone: the tables stay inside their cards";
-console.log("\n-- Pay plan at 320 px --");
-{ const plan = parsePlan(JSON.stringify({ schema_version: 1, unit: "PHP_whole_pesos", effective_from: "2026-10-01", paydays: [{ id: "first", day: 15, expected_income: 12500 }, { id: "second", day: "last", expected_income: 12500 }],
-    lines: [{ name: "Food", first: 3000, second: 6000 }, { name: "Rent", first: 8000, second: 0 }, { name: "Essentials", first: 1000, second: 1000 }, { name: "Shopping", first: 500, second: 500 }, { name: "New Laptop", kind: "goal", first: 0, second: 5000 }], ef_target_basis: ["Rent", "Food"], ef_target_months: 3 }));
-  const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, plans: [plan.plan] } };
-  check(plan.ok, "the invented plan is valid");
+// ===== Budget on the smallest iPhone: nothing sticks out of its card =====
+try { blockName = "Budget on the smallest iPhone: nothing sticks out of its card";
+console.log("\n-- Budget at 320 px --");
+{ const rule = (id, cat, amount) => ({ id, kind: "budget", subject_id: cat, amount, effective_from: "2026-10-01", created_at: "2026-10-01T08:00:00.000+08:00" });
+  const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, income_base_pin: 12500000, pay_schedule: { days: [15, "last"] } }, state: { ...OWNER_STYLE.state, rules: [rule("r1", "cat-food", 900000), rule("r2", "cat-rent", 800000), rule("r3", "cat-essentials", 200000), rule("r4", "cat-shopping", 100000)] } };
   ({ ctx, page, errors } = await open({ blockSw: true, seed })); await page.setViewportSize({ width: 320, height: 844 });
-  await menuGo(page, "Pay plan"); await page.waitForTimeout(400);
-  const over = await page.evaluate(() => [...document.querySelectorAll("#screen .tbl")].filter((t) => { const edge = t.parentElement.getBoundingClientRect().right; return [...t.querySelectorAll("td,th")].some((c) => c.getBoundingClientRect().right > edge + 1); }).length);
-  check(over === 0 && await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "at 320 px wide no plan table sticks out of its card and the page does not scroll sideways");
+  await menuGo(page, "Budget"); await page.waitForTimeout(300);
+  for (const v of ["month", "payday", "week"]) {
+    await page.click(`#screen button[data-action="bv-view"][data-id="${v}"]`); await page.waitForTimeout(150);
+    const wide = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth || [...document.querySelectorAll("#screen .catrow, #screen .flathero")].some((r) => r.scrollWidth > r.clientWidth + 1));
+    check(!wide, "at 320 px wide the " + v + " view does not scroll sideways and no row sticks out");
+  }
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -4394,7 +4368,7 @@ console.log("\n-- This month card --");
   await page.click("#glance"); await page.waitForTimeout(400);
   const t = await text(page, "#screen");
   check(t.includes("spent in October") && t.includes("Food") && t.includes("\u20B1500.00") && await page.locator('#screen button[data-view="category"][aria-pressed="true"]').count() === 1, "tapping This month opens what was spent in October by category, with Food");
-  check(await page.locator("#screen .hub").count() === 0 && !t.includes("Buckets"), "it does not open the budget");
+  check(await page.locator("#screen .hub").count() === 0 && !t.includes("Suggest a budget"), "it does not open the budget");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 

@@ -93,10 +93,10 @@ test("one row recipe for every share bar: Category, Accounts and the Budget view
   assert.ok(!js.includes("function flipChart") && !m.includes('class="brow') && !js.includes('class="bcard budrow'), "the old Accounts and Budget bars are gone");
 });
 
-test("Buckets and Goals draw their rows through the same barCard, and the old goal card and choice rows are gone", () => {
-  const b = js.slice(js.indexOf("function viewBudgetList()"), js.indexOf("function viewBudget()"));
+test("Budget and Goals draw their rows through the same barCard, and the old goal card and choice rows are gone", () => {
+  const b = js.slice(js.indexOf("function viewBudget()"), js.indexOf("const rowWhy"));
   const g = js.slice(js.indexOf("function viewGoals()"), js.indexOf("// ---------- weekly check-in"));
-  assert.ok(b.includes("barCard(rows)") && g.includes("barCard(goals.map") && !g.includes("goalcard") && !b.includes('class="choice"'));
+  assert.ok(b.includes("barCard(list.map") && g.includes("barCard(goals.map") && !g.includes("goalcard") && !b.includes('class="choice"'));
 });
 
 test("Trends: the day-by-day line and the month-by-month chart are each a white card, and Who draws its rows through the same barCard", () => {
@@ -112,9 +112,9 @@ test("Scheduled draws its rows through the same barCard, and the one progress me
   assert.match(css, /\.meter \.fill \{ display: block; height: 6px;/);
 });
 
-test("Suggest a budget is a window opened from the Buckets list; the list stays simple and nothing is saved before Confirm", () => {
-  const b = js.slice(js.indexOf("function viewBudgetList()"), js.indexOf("function viewBudget()"));
-  assert.ok(b.includes('data-action="open-suggest">Suggest a budget</button>') && !b.includes("never rewrites the past"));
+test("Suggest a budget is a window opened from Budget by a real button; nothing is saved before Confirm", () => {
+  const b = js.slice(js.indexOf("function viewBudget()"), js.indexOf("const rowWhy"));
+  assert.ok(b.includes('<button class="primary" data-action="open-suggest" style="width:100%">Suggest a budget</button>') && !b.includes("never rewrites the past"));
   assert.ok(js.includes('sh.type === "budget-suggest"') && js.includes('case "review-sug"') && js.includes('case "save-sug"') && js.includes('case "sug-edit"'));
   assert.ok(js.includes("barCard(r.rows.map") && js.includes("M.bucketRows({ categories: S().categories"), "the window draws through barCard and shows the split against the targets");
 });
