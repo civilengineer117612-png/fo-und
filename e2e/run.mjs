@@ -2861,9 +2861,9 @@ try { blockName = "5bv. ONE Budget: Month, Per payday, Per week";
 console.log("One Budget");
 var rule = (id, cat, amount) => ({ id, kind: "budget", subject_id: cat, amount, effective_from: "2026-10-01", created_at: "2026-10-01T08:00:00.000+08:00" });
 var wallet = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-09-01" };
-var budgetSeed = (rules, extra = {}) => ({ ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, income_base_pin: 3000000, pay_schedule: { days: [15, "last"] }, ...extra }, state: { ...OWNER_STYLE.state, accounts: [wallet], transactions: [], entries: [], attachments: [], rules } });
+var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, income_base_pin: 3000000, pay_schedule: { days: [15, "last"] }, ...extra }, state: { ...OWNER_STYLE.state, accounts: [wallet], transactions: tx.transactions ?? [], entries: tx.entries ?? [], attachments: [], rules } });
 { // the three views of ONE figure: income 30,000.00 typed; paydays on the 15th and the last day cover 16 and 15 days
-  ({ ctx, page, errors } = await open({ blockSw: true, seed: budgetSeed([rule("r1", "cat-food", 500000), rule("r2", "cat-rent", 600000), rule("r3", "cat-shopping", 150000), rule("r4", "cat-upskill", 200000)], { hidden_categories: ["cat-upskill"] }) }));
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: budgetSeed([rule("r1", "cat-food", 500000), rule("r2", "cat-rent", 600000), rule("r3", "cat-shopping", 150000), rule("r4", "cat-upskill", 200000)], { hidden_categories: ["cat-upskill"] }, { transactions: [{ id: "sp1", date: "2026-10-16", payee: "Sample Grocer", memo: "", status: "verified", source: "manual", created_at: "2026-10-16T09:00:00.000+08:00", verified_at: "2026-10-16T09:00:00.000+08:00" }, { id: "sp2", date: "2026-10-20", payee: "Draft Shop", memo: "", status: "draft", source: "manual", created_at: "2026-10-20T09:00:00.000+08:00" }], entries: [{ transaction_id: "sp1", category_id: "cat-food", amount: 400000 }, { transaction_id: "sp1", account_id: "w", amount: -400000 }, { transaction_id: "sp2", category_id: "cat-food", amount: 99900 }, { transaction_id: "sp2", account_id: "w", amount: -99900 }] }) }));
   await menuGo(page, "Budget");
   var bt = (await text(page, "#screen")).replace(/\s+/g, " ");
   check(bt.includes("₱30,000.00") && bt.includes("Your own figure") && bt.includes("Left: ₱17,500, not assigned") && await page.locator('#screen button[aria-pressed="true"]:has-text("Month")').count() === 1, "Month: the one income with its source, what is left, and the Month button pressed");
@@ -2874,6 +2874,9 @@ var budgetSeed = (rules, extra = {}) => ({ ...OWNER_STYLE, settings: { ...OWNER_
   await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
   var food = async () => (await page.locator('.catrow:has-text("Food")').first().innerText()).replace(/\s+/g, " ");
   check((await food()).includes("₱2,580.64"), "Per payday, the 15th: Food takes its share of the pay, 2,580.64 (never 5,000.00 on each)");
+  check((await food()).includes("Spent ₱4,000.00") && (await food()).includes("₱1,419.36 over") && !(await food()).includes("4,999"), "the cutoff progress stays: spent so far (verified only, the draft is not counted) against the payday's share");
+  check(await page.locator('#screen button[data-action="open-income"]:has-text("Record pay received")').count() === 1 && (await text(page, "#screen")).includes("Pay received ₱0.00") && (await text(page, "#screen")).includes("Only verified spending counts"), "Record pay received stays, with what has arrived in this payday's dates");
+  await page.click('#screen button[data-action="open-income"]'); await page.waitForSelector("#f-amount"); check((await text(page, "#sheet")).includes("Pay received") || (await page.locator("#f-amount").count()) === 1, "it opens the pay form"); await page.click('#sheet button:has-text("Cancel")');
   await page.click('#screen button[data-action="bv-payday"][data-id="1"]');
   check((await food()).includes("₱2,419.36"), "the last day: 2,419.36, and the two add to exactly 5,000.00");
   await page.click('#screen button[data-action="bv-view"][data-id="week"]');

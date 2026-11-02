@@ -10,7 +10,7 @@ export { QUICK_NOTES, FIRST_RUN_NOTICE, PDF_TIP, TOPICS as HELP_TOPICS, checklis
 export { SCREEN_NAMES, MENU_GROUPS, TERMS, menuHidden, HUBS, hubOf, menuRows, STRIP_NAMES } from "./names.js";
 export { drawing, DRAWING_IDS, NOTE_ICONS } from "./helpart.js";
 export { suggestPlan, median, paydayDays, usableMonths, NO_PAYSLIP_MESSAGE } from "./suggest.js";
-export { weekFigure, paydaysFor, paydayIncomes, budgetLines, paydayShares, budgetPlan, movePayday, pinPayday, setPaydayAmount, setPaydayAmounts, planMigrationReview, applyPlanMigration } from "./budgetsplit.js";
+export { weekFigure, paydaysFor, paydayIncomes, budgetLines, paydayShares, budgetPlan, movePayday, pinPayday, setPaydayAmount, setPaydayAmounts, paydayProgress, planMigrationReview, applyPlanMigration } from "./budgetsplit.js";
 export { budgetMonthFor, planBudgetRows, planBudgetMismatches, planWithBudgets } from "./planwrite.js";
 export { toNearest50, fitToIncome, savingsExplained, NO_INCOME_PROMPT, netsByKind, baseIncome, sharePerPayday, shares, tenths, showTenths, incomeChanged, savedRows, suggestBudgets, budgetChangesFromDraft } from "./budgetview.js";
 export { SUGGEST_DEFAULTS, resolveSettings } from "./suggest-settings.js";

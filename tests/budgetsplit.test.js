@@ -141,3 +141,32 @@ test("SAFETY COPY: the move goes through the copy mechanism: the ledger is kept 
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8"), run = app.slice(app.indexOf('case "plan-move-run": {'), app.indexOf('case "plan-move-run": {') + 1400);
   assert.match(run, /M\.replaceWithCopy\(\{ current: ledger, next, io: \{ readCopies, writeCopies, writeLedger/, "the screen's move uses the same copy list as an upgrade"); assert.match(run, /kind: "repair"/);
 });
+
+// ---- cutoff progress and pay received stay (they were on the old Pay plan screen) ----
+test("CUTOFF PROGRESS: per payday, what was verified-spent in that payday's own dates and what arrived; drafts, other cutoffs and held gaps do not count", () => {
+  const s = ledger(), TSX = "2026-10-01T09:00:00.000+08:00";
+  const tx = (id, date, status = "verified") => s.transactions.push({ id, date, payee: "", memo: "", status, source: "manual", created_at: TSX, ...(status === "verified" ? { verified_at: TSX } : {}) });
+  const spend = (id, date, amount, status) => { tx(id, date, status); s.entries.push({ transaction_id: id, category_id: "food", amount }, { transaction_id: id, account_id: "chk", amount: -amount }); };
+  spend("a", "2026-10-10", 100000);                  // before the 15th: the earlier cutoff
+  spend("b", "2026-10-16", 400000);                  // first cutoff (15th to the 30th)
+  spend("c", "2026-10-20", 50000, "draft");          // a draft is not spending yet
+  spend("d", "2026-10-31", 300000);                  // second cutoff (the last day to Nov 14)
+  spend("e", "2026-11-14", 20000);                   // still the second cutoff
+  spend("f", "2026-11-15", 999999);                  // the next month's first cutoff
+  tx("p", "2026-10-15"); s.entries.push({ transaction_id: "p", account_id: "chk", amount: 1200000 }, { transaction_id: "p", category_id: "pay", amount: -1200000 });
+  const prog = M.paydayProgress(s, SET, MONTH);
+  assert.deepEqual(prog.map((p) => [p.start, p.end]), [["2026-10-15", "2026-10-30"], ["2026-10-31", "2026-11-14"]]);
+  assert.deepEqual(prog.map((p) => p.spent.food), [400000, 320000], "verified spending in each payday's own dates, nothing from the neighbours");
+  assert.deepEqual(prog.map((p) => p.received), [1200000, 0], "the pay that really arrived, in the payday it came in");
+  assert.deepEqual(M.paydayProgress(s, {}, MONTH), [], "with no paydays there is no cutoff");
+  const withBudget = M.budgetPlan(budget(s, "food", 500000), SET, MONTH);
+  assert.equal(withBudget.perPayday[0].rows.find((r) => r.key === "food").amount - prog[0].spent.food, 200000 - 400000, "the share less the spent is what the screen says: 1,419.36 style over, here 2,000.00 over");
+});
+
+test("the screen keeps Record pay received and the spent-so-far line on every category of a payday", () => {
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  const view = app.slice(app.indexOf("function viewBudget()"), app.indexOf("const rowWhy"));
+  assert.ok(view.includes('<button data-action="open-income" style="width:100%">Record pay received</button>'), "pay received is recorded from Budget");
+  assert.match(app, /M\.paydayProgress\(S\(\), set, month, \{ categoryMaps: S\(\)\.categoryMaps \}\)/);
+  assert.match(app, /Spent \$\{peso\(sp\)\} \\u00b7 \$\{d >= 0 \? peso\(d\) \+ " left" : peso\(-d\) \+ " over"\}/);
+});

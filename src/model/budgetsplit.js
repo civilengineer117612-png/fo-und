@@ -20,6 +20,9 @@ import { netPerPayday } from "./income.js";
 import { payBase } from "./stablepay.js";
 import { median, paydayDays, nearestPayday } from "./suggest.js";
 import { ordinal } from "./planform.js";
+import { cutoffFor, dayIn } from "./plan.js";
+import { reportingCategory } from "./rules.js";
+import { heldIds } from "./held.js";
 import { bucketOf, BUCKET_LABELS } from "./buckets.js";
 import { UNLOGGED_CATEGORY_ID } from "./seed.js";
 
@@ -136,6 +139,30 @@ export function setPaydayAmounts(state, settings, line, incomes, amounts, { newI
 export function setPaydayAmount(state, settings, line, incomes, index, amount, ctx) {
   if (!whole(amount)) return { ok: false, message: "Amounts must be whole centavos." };
   return setPaydayAmounts(state, settings, line, incomes, paydayShares(settings, line, incomes).map((s, i) => (i === index ? amount : s)), ctx);
+}
+
+// ---------- cutoff progress and pay received (kept from the old Pay plan screen) ----------
+// For each payday of `month`: its cutoff (from that payday to the day before the next one; the last payday runs into next month's first), what was
+// VERIFIED-spent in each category inside it (a held count gap and the entry that cancels it are not spending), and the pay that really arrived in it
+// (verified income entries). Nothing is stored. The result is keyed by payday index; `spent` by category id.
+export function paydayProgress(state, settings, month, { categoryMaps = [] } = {}) {
+  const paydays = paydaysFor(settings);
+  if (!paydays.length) return [];
+  const [y, m] = month.split("-").map(Number), pseudo = { paydays: paydays.map((p) => ({ day: p.day })) };
+  const expense = new Set(state.categories.filter((c) => c.kind === "expense").map((c) => c.id)), income = new Set(state.categories.filter((c) => c.kind === "income").map((c) => c.id));
+  const txById = new Map(state.transactions.map((t) => [t.id, t])), held = heldIds(state);
+  return paydays.map((p) => {
+    const date = month + "-" + String(dayIn(p.day, y, m)).padStart(2, "0"), period = cutoffFor(pseudo, date), spent = {};
+    let received = 0;
+    for (const e of state.entries) {
+      if (e.category_id == null) continue;
+      const t = txById.get(e.transaction_id);
+      if (!t || t.status !== "verified" || held.has(t.id) || t.date < period.start || t.date > period.end) continue;
+      if (expense.has(e.category_id)) { const id = reportingCategory(categoryMaps, e.category_id, date); spent[id] = (spent[id] ?? 0) + e.amount; }
+      else if (income.has(e.category_id)) received -= e.amount;   // income is a credit, stored negative
+    }
+    return { ...p, start: period.start, end: period.end, spent, received };
+  });
 }
 
 // ---------- the Pay plan moves into Budget ----------
