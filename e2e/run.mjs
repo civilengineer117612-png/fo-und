@@ -2867,6 +2867,7 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   await menuGo(page, "Budget");
   var bt = (await text(page, "#screen")).replace(/\s+/g, " ");
   check(bt.includes("₱30,000.00") && bt.includes("Your own figure") && bt.includes("Left: ₱17,500, not assigned") && await page.locator('#screen button[aria-pressed="true"]:has-text("Month")').count() === 1, "Month: the one income with its source, what is left, and the Month button pressed");
+  check((await text(page, "#pay-line")).replace(/\s+/g, " ") === "Expected ₱30,000.00 · Received – · Difference –", "Month: Expected, Received and Difference, Received blank until pay is logged");
   check(await page.locator('#screen button.primary').count() === 1 && (await text(page, '#screen button.primary')).includes("Suggest a budget"), "Suggest a budget is a real button, and the only filled one");
   check(await page.locator('button.catrow:has-text("Food")').first().innerText().then((t) => t.includes("₱5,000.00")), "Food is 5,000.00 for the month");
   check(!(await page.locator("#screen").innerText()).includes("Upskill") && bt.includes("Hidden (1)"), "a hidden category has no line: only the Hidden list");
@@ -2875,7 +2876,7 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   var food = async () => (await page.locator('.catrow:has-text("Food")').first().innerText()).replace(/\s+/g, " ");
   check((await food()).includes("₱2,580.64"), "Per payday, the 15th: Food takes its share of the pay, 2,580.64 (never 5,000.00 on each)");
   check((await food()).includes("Spent ₱4,000.00") && (await food()).includes("₱1,419.36 over") && !(await food()).includes("4,999"), "the cutoff progress stays: spent so far (verified only, the draft is not counted) against the payday's share");
-  check(await page.locator('#screen button[data-action="open-income"]:has-text("Record pay received")').count() === 1 && (await text(page, "#screen")).includes("Pay received ₱0.00") && (await text(page, "#screen")).includes("Only verified spending counts"), "Record pay received stays, with what has arrived in this payday's dates");
+  check(await page.locator('#screen button[data-action="open-income"]:has-text("Record pay received")').count() === 1 && (await text(page, "#pay-line")).replace(/\s+/g, " ") === "Expected ₱15,483.87 · Received – · Difference –" && (await text(page, "#screen")).includes("Only verified spending counts"), "Record pay received stays; the payday header says Expected, with Received and Difference blank until pay is logged");
   await page.click('#screen button[data-action="open-income"]'); await page.waitForSelector("#f-amount"); check((await text(page, "#sheet")).includes("Pay received") || (await page.locator("#f-amount").count()) === 1, "it opens the pay form"); await page.click('#sheet button:has-text("Cancel")');
   await page.click('#screen button[data-action="bv-payday"][data-id="1"]');
   check((await food()).includes("₱2,419.36"), "the last day: 2,419.36, and the two add to exactly 5,000.00");
@@ -2908,8 +2909,12 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   check(ledgerNow.state.rules.length === rulesBefore + 1 && ledgerNow.state.rules.at(-1).amount === 600000 && ledgerNow.state.rules.at(-1).effective_from === "2026-10-01" && ledgerNow.state.rules.slice(0, rulesBefore).every((r, i) => r.amount === [500000, 600000, 150000, 200000][i]), "one new dated rule from this month; the old rules are untouched");
   check(errors.length === 0, "no script errors"); await ctx.close(); }
 { // a payday that is over offers to move an amount to the next payday: only when tapped
-  ({ ctx, page, errors } = await open({ blockSw: true, seed: budgetSeed([rule("r1", "cat-food", 1200000), rule("r2", "cat-rent", 600000), rule("r3", "cat-shopping", 1500000)], { payday_pins: { "cat-rent": 0 } }) }));
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: budgetSeed([rule("r1", "cat-food", 1200000), rule("r2", "cat-rent", 600000), rule("r3", "cat-shopping", 1500000)], { payday_pins: { "cat-rent": 0 } }, { transactions: [{ id: "pay1", date: "2026-10-15", payee: "Pay received", memo: "", status: "verified", source: "manual", created_at: "2026-10-15T09:00:00.000+08:00", verified_at: "2026-10-15T09:00:00.000+08:00" }], entries: [{ transaction_id: "pay1", account_id: "w", amount: 1200000 }, { transaction_id: "pay1", category_id: "cat-salary", amount: -1200000 }] }) }));
   await menuGo(page, "Budget"); await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
+  check((await text(page, "#pay-line")).replace(/\s+/g, " ") === "Expected ₱15,483.87 · Received ₱12,000.00 · Difference ₱3,483.87 less", "once pay is logged in the payday's dates: Expected, Received and the Difference in words");
+  await page.click('#screen button[data-action="bv-view"][data-id="month"]');
+  check((await text(page, "#pay-line")).replace(/\s+/g, " ") === "Expected ₱30,000.00 · Received ₱12,000.00 · Difference ₱18,000.00 less", "and the month says the same three");
+  await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
   var mv = (await text(page, '#screen button[data-action="bv-move-pick"]')).replace(/\s+/g, " ");
   check(/^Move ₱[\d,.]+ to the next payday\?$/.test(mv) && (await text(page, "#screen")).includes("Over by"), "an over payday offers: " + mv);
   var before = JSON.stringify(JSON.parse((await stored(page)).local).settings.budget_split ?? {});

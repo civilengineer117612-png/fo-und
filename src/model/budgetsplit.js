@@ -153,16 +153,36 @@ export function paydayProgress(state, settings, month, { categoryMaps = [] } = {
   const txById = new Map(state.transactions.map((t) => [t.id, t])), held = heldIds(state);
   return paydays.map((p) => {
     const date = month + "-" + String(dayIn(p.day, y, m)).padStart(2, "0"), period = cutoffFor(pseudo, date), spent = {};
-    let received = 0;
+    let received = 0, count = 0;
     for (const e of state.entries) {
       if (e.category_id == null) continue;
       const t = txById.get(e.transaction_id);
       if (!t || t.status !== "verified" || held.has(t.id) || t.date < period.start || t.date > period.end) continue;
       if (expense.has(e.category_id)) { const id = reportingCategory(categoryMaps, e.category_id, date); spent[id] = (spent[id] ?? 0) + e.amount; }
-      else if (income.has(e.category_id)) received -= e.amount;   // income is a credit, stored negative
+      else if (income.has(e.category_id)) { received -= e.amount; count++; }   // income is a credit, stored negative
     }
-    return { ...p, start: period.start, end: period.end, spent, received };
+    return { ...p, start: period.start, end: period.end, spent, received, count };
   });
+}
+
+// Expected, Received and Difference for a header (a payday or the month): `received` is null until pay has been logged in those dates, so the screen leaves it
+// blank; the difference is received less expected (positive: more came in than expected).
+export function payHeader(expected, received, count) {
+  if (!count) return { expected, received: null, difference: null };
+  return { expected, received, difference: received - expected };
+}
+
+// Pay that was really logged in a calendar month (verified income entries; a held gap is not pay): {received, count}.
+export function monthPay(state, month) {
+  const income = new Set(state.categories.filter((c) => c.kind === "income").map((c) => c.id)), txById = new Map(state.transactions.map((t) => [t.id, t])), held = heldIds(state);
+  let received = 0, count = 0;
+  for (const e of state.entries) {
+    if (e.category_id == null || !income.has(e.category_id)) continue;
+    const t = txById.get(e.transaction_id);
+    if (!t || t.status !== "verified" || held.has(t.id) || !t.date.startsWith(month + "-")) continue;
+    received -= e.amount; count++;
+  }
+  return { received, count };
 }
 
 // ---------- the Pay plan moves into Budget ----------

@@ -170,3 +170,24 @@ test("the screen keeps Record pay received and the spent-so-far line on every ca
   assert.match(app, /M\.paydayProgress\(S\(\), set, month, \{ categoryMaps: S\(\)\.categoryMaps \}\)/);
   assert.match(app, /Spent \$\{peso\(sp\)\} \\u00b7 \$\{d >= 0 \? peso\(d\) \+ " left" : peso\(-d\) \+ " over"\}/);
 });
+
+test("EXPECTED, RECEIVED, DIFFERENCE: each payday header and the month say what was expected and what pay was logged; Received stays blank until pay is logged", () => {
+  const s = ledger(), TSX = "2026-10-01T09:00:00.000+08:00";
+  assert.deepEqual(M.payHeader(1200000, 0, 0), { expected: 1200000, received: null, difference: null }, "no pay logged: Received and Difference are blank");
+  assert.deepEqual(M.payHeader(1200000, 1000000, 1), { expected: 1200000, received: 1000000, difference: -200000 }, "10,000.00 against 12,000.00 expected: 2,000.00 less");
+  assert.equal(M.payHeader(1200000, 1250000, 2).difference, 50000, "more than expected is a positive difference");
+  const pay = (id, date, amount, status = "verified") => { s.transactions.push({ id, date, payee: "", memo: "", status, source: "manual", created_at: TSX, ...(status === "verified" ? { verified_at: TSX } : {}) }); s.entries.push({ transaction_id: id, account_id: "chk", amount }, { transaction_id: id, category_id: "pay", amount: -amount }); };
+  assert.deepEqual(M.monthPay(s, MONTH), { received: 0, count: 0 });
+  pay("p1", "2026-10-15", 1000000);        // the first payday's pay
+  pay("p2", "2026-10-31", 1800000);        // the second payday's pay, on the last day
+  pay("p3", "2026-10-20", 500000, "draft");    // a draft is not pay yet
+  pay("p4", "2026-09-30", 777700);         // last month's pay
+  assert.deepEqual(M.monthPay(s, MONTH), { received: 2800000, count: 2 }, "the month's logged pay: 28,000.00 (the draft and September's pay are not in it)");
+  const prog = M.paydayProgress(s, SET, MONTH);
+  assert.deepEqual(prog.map((p) => [p.received, p.count]), [[1000000, 1], [1800000, 1]], "each payday's pay by its own dates (the last day's pay belongs to the second payday)");
+  const v = M.budgetPlan(s, SET, MONTH);
+  assert.deepEqual(M.payHeader(v.perPayday[0].income, prog[0].received, prog[0].count), { expected: 1200000, received: 1000000, difference: -200000 }, "the first payday: expected 12,000.00, received 10,000.00, 2,000.00 less");
+  assert.deepEqual(M.payHeader(v.monthView.income, 2800000, 2), { expected: 3000000, received: 2800000, difference: -200000 }, "the month: expected 30,000.00, received 28,000.00");
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8"), view = app.slice(app.indexOf("function viewBudget()"), app.indexOf("const rowWhy"));
+  assert.match(view, /Expected \$\{peso\(payHead\.expected\)\} \\u00b7 Received \$\{payHead\.received === null \? "\\u2013" : peso\(payHead\.received\)\} \\u00b7 Difference/);
+});
