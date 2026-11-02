@@ -176,6 +176,8 @@ P0 (loses data, blocks logging or blocks a backup)
 - P0-3 A safety copy before Restore: DONE (#270).
 - P0-4 Weekly check-in gaps: #271 cancel-once is merged; the new check-in is #272 (count all first, held gaps, proposed moves); the repair of past months is next (owner approved: both directions, per-month before and after, proposed moves from old pairs).
 
+- P0-6 Plan & Save in sync (owner, Nov 2): PR 1 DONE (#307: one income, hidden categories left out). PR 2 (one Budget with Month / Per payday / Per week, the Pay plan moves in with a safety copy) is open. Next, one per session: PR 3 pay schedule (every two weeks, weekly, monthly, from the payslip type), PR 4 roles incl. Fixed as its own part, savings split by monthly need, ONE Emergency target (typed wins, labelled "your figure"; the Goals tab and the split read the same), PR 5 labels and the buffer line (Suggest keeps "Change the split").
+
 P1
 - P1-7 DONE (Oct 31): Unlogged is now Uncategorized on every screen; Not yet explained stays for the held gaps only.
 - (earlier) None open. P1-2 (reader leftovers), P1-3 (every printed payslip line kept, data version 11) and P1-4 (a verified entry cannot be saved over, the repeated-id line in About) and P1-5 (the budget base income uses stable pay; Add the breakdown for an old payslip; payslips as clean cards) are done. P0-5 (accounting charter and audit): the charter and tests/audit.test.js are in; the audit's fixes follow in order, each its own PR: F5+F6 audit trail, F2 integrity report, F3+F1 suspense, F4+F7 refund and payslip month, F9 non-recurring, F10 presentation.

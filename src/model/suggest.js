@@ -47,7 +47,7 @@ export function paydayDays(paydays, month) {
 }
 
 // Which payday (0 or 1) a date's day-of-month is closest to; used to tell a payslip of the first payday from one of the second.
-function nearestPayday(paydays, date) {
+export function nearestPayday(paydays, date) {
   if (paydays.length === 1) return 0;
   const [y, m, d] = date.split("-").map(Number), ds = paydays.map((p) => dayIn(p.day, y, m));
   const dist = (a) => { const x = Math.abs(a - d); return Math.min(x, 31 - x); };

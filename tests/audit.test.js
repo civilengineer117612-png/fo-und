@@ -370,3 +370,18 @@ test("CONSISTENCY (P0-6): one income everywhere: Suggest and the Pay plan show t
   assert.ok(eng.ok, eng.message);
   assert.ok(eng.paydays.every((p) => p.lines.every((l) => l.name !== "Food")), "a hidden category gets no line");
 });
+
+test("CONSISTENCY (P0-6, one Budget): every view adds up: each line's payday shares add to its month, Month, Per payday and Per week all carry the same lines, and hidden categories are in none", () => {
+  let s = ledger();
+  s.payslips.push({ id: "pa", employer: "Co", period_from: "2026-09-16", period_to: "2026-09-30", pay_date: "2026-09-30", account_id: "chk", transaction_id: "xa", printed_gross: 1800000, printed_net: 1800000, deposit: 1800000 },
+    { id: "pb", employer: "Co", period_from: "2026-09-01", period_to: "2026-09-15", pay_date: "2026-09-15", account_id: "chk", transaction_id: "xb", printed_gross: 1400000, printed_net: 1400000, deposit: 1400000 });
+  s.payslipLines.push({ payslip_id: "pa", side: "earning", kind: "basic", amount: 1800000 }, { payslip_id: "pb", side: "earning", kind: "basic", amount: 1400000 });
+  for (const [c, a] of [["food", 333333], ["rent", 600001], ["fees", 77777]]) s = M.planBudgetChange(s, { id: nid("r"), category_id: c, amount: a, from_month: MONTH }, NOW).state;   // awkward centavos on purpose
+  const settings = { pay_schedule: { days: [15, "last"] }, hidden_categories: ["fees"], goal_monthly: {}, payday_pins: { rent: 1 } };
+  const v = M.budgetPlan(s, settings, MONTH);
+  for (const l of v.lines) assert.equal(v.perPayday.reduce((a, p) => a + p.rows.find((r) => r.key === l.key).amount, 0), l.amount, l.key + ": the payday shares add to the month to the centavo");
+  assert.deepEqual(v.perPayday[0].rows.map((r) => r.key), v.monthView.rows.map((r) => r.key)); assert.deepEqual(v.perWeek.rows.map((r) => r.key), v.monthView.rows.map((r) => r.key));
+  assert.equal(v.perPayday.reduce((a, p) => a + p.income, 0), v.income.amount, "the paydays' income adds to the one income");
+  for (const p of v.perPayday) assert.equal(p.placed + p.left, p.income);
+  assert.ok(![...v.lines].some((l) => l.key === "fees") && v.hidden.some((h) => h.id === "fees"), "a hidden category is in no view");
+});
