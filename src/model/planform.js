@@ -1,10 +1,10 @@
 // The Pay plan typed in by hand. The form is turned into the same plan text a plan file holds and then read by `parsePlan`, so one set of rules
 // (the day ranges, each payday's lines adding up to its pay, names not repeated) judges a typed plan and a loaded file alike.
 import { parsePesos } from "./money.js";
-import { suggestPlan, median } from "./suggest.js";
+import { suggestPlan, median, paydayDays } from "./suggest.js";
 import { netPerPayday } from "./income.js";
 import { suggestInputs } from "./schedules.js";
-import { engineSettings, toNearest50 } from "./budgetview.js";
+import { engineSettings, toNearest50, baseIncome, sharePerPayday } from "./budgetview.js";
 import { UNLOGGED_CATEGORY_ID } from "./seed.js";
 import { monthOf } from "./reports.js";
 
@@ -98,15 +98,19 @@ export function planFormSuggestion(state, f, { today, settings = {} }) {
   if (f.twice && !(d2 === "last" || (Number.isInteger(d2) && d2 > d1 && d2 <= 28))) return { ok: false, pay: null, message: "Type the 2nd payday as a day after the first, or last." };
   const paydays = [{ id: "first", label: f.twice ? "1st payday" : "Payday", day: d1 }, ...(f.twice ? [{ id: "second", label: "2nd payday", day: d2 }] : [])];
   const month = monthOf(today), scheduled = suggestInputs(state, today), { buckets, withTargets } = engineSettings(state, settings.suggest_settings, settings.bucket_overrides ?? {}, settings.bucket_targets);
-  const run = (income, rent = settings.starter_rent ?? undefined) => suggestPlan({ state, paydays, income, today, month, settings: withTargets, scheduled, rent, buckets, goalPins: settings.goal_monthly ?? {}, goalShares: settings.goal_shares ?? {} });
+  const run = (income, rent = settings.starter_rent ?? undefined) => suggestPlan({ state, paydays, income, today, month, settings: withTargets, scheduled, rent, buckets, goalPins: settings.goal_monthly ?? {}, goalShares: settings.goal_shares ?? {}, hidden: settings.hidden_categories ?? [] });
   const slips = run(undefined, 0);   // only to read what each payday has brought in: rent plays no part in that, so it never stops this step
   if (!slips.ok && slips.code !== "NO_PAYSLIPS") return { ok: false, pay: null, message: slips.message };
-  const pay = slips.ok ? slips.paydays.map((p) => p.income) : null;
+  // ONE income (P0-6): the owner's own monthly figure when typed, else the payslips: the same figure Suggest uses. A typed monthly figure is shared over the paydays
+  // by what each brings in (else by the days each covers), so the paydays add up to the month exactly.
+  const own = settings.income_base_pin, incomeSource = baseIncome(state, { pin: Number.isSafeInteger(own) && own > 0 ? own : null });
+  let pay = slips.ok ? slips.paydays.map((p) => p.income) : null;
+  if (incomeSource.source === "pinned") { const { days1, days2 } = paydayDays(paydays, month); pay = sharePerPayday(own, pay ?? (f.twice ? [days1, days2] : [1])); }
   const typed = [peso(f.p1), f.twice ? peso(f.p2) : 0].map((x) => (Number.isNaN(x) ? 0 : x));
   const income = paydays.map((_, i) => (typed[i] > 0 ? typed[i] : pay?.[i] ?? 0));
-  if (income.some((x) => !(x > 0))) return { ok: false, pay, message: "Add a payslip for each payday, or type what each one brings in, to see suggestions." };
+  if (income.some((x) => !(x > 0))) return { ok: false, pay, incomeSource, message: "Add a payslip for each payday, or type what each one brings in, to see suggestions." };
   const r = run(income);
-  if (!r.ok) return { ok: false, pay, ...(r.code === "NEEDS_RENT" ? { needsRent: true, message: "Suggestions need your monthly rent first. Type it once; it is kept for the Budget suggestion too." } : { message: r.message }) };
+  if (!r.ok) return { ok: false, pay, incomeSource, ...(r.code === "NEEDS_RENT" ? { needsRent: true, message: "Suggestions need your monthly rent first. Type it once; it is kept for the Budget suggestion too." } : { message: r.message }) };
   const forCategory = new Map(scheduled.map((x) => [lower(x.name), x.category_id])), names = new Map((state.categories ?? []).map((c) => [c.id, lower(c.name)]));
   const rows = {}, extras = [], listed = new Set(planFormLines(state).map((l) => lower(l.name)));
   // a payday's list leaves out the lines that come to nothing on it, so the two lists are matched by name, never by position
@@ -121,7 +125,7 @@ export function planFormSuggestion(state, f, { today, settings = {} }) {
     row.first += e.amounts[0]; row.second += e.amounts[1];
   }
   for (const row of Object.values(rows)) { row.first = toNearest50(row.first); row.second = toNearest50(row.second); }   // rounded to the nearest P50, like the Budget suggestion
-  return { ok: true, pay, income, rows, extras };
+  return { ok: true, pay, income, rows, extras, incomeSource };
 }
 
 // ---------- do the payslips agree with the paydays typed? ----------

@@ -76,12 +76,15 @@ test("overtime does not change the income basis, and the base is the median of t
   assert.equal(baseIncome(wobble).amount, 2500000);
 });
 
-test("the owner's figure wins, then a loaded plan's expected income (and says so), then payslips; with none, the prompt", () => {
+test("the owner's figure wins, then the payslips, then a loaded plan's expected income (and says so); with none, the prompt (P0-6: one income)", () => {
   const s = monthly();
-  assert.deepEqual(baseIncome(s, { pin: 3000000 }), { amount: 3000000, source: "pinned", text: "Your own figure" });
+  const pinned = baseIncome(s, { pin: 3000000 });
+  assert.deepEqual({ amount: pinned.amount, source: pinned.source, text: pinned.text }, { amount: 3000000, source: "pinned", text: "Your own figure" });
+  assert.equal(pinned.other.source, "payslips", "the payslips' figure is kept to be shown beside the typed one");
   const plan = parsePlan(JSON.stringify({ schema_version: 1, unit: "PHP_whole_pesos", effective_from: "2026-10-01", paydays: [{ day: 15, expected_income: 1000 }, { day: "last", expected_income: 2000 }],
     lines: [{ name: "Food", kind: "expense", first: 1000, second: 2000 }] })).plan;
-  const p = baseIncome(s, { plan });
+  assert.equal(baseIncome(s, { plan }).source, "payslips", "payslips beat a plan's expected income: one income everywhere");
+  const p = baseIncome(base(), { plan });
   assert.equal(p.amount, 300000); assert.equal(p.source, "plan"); assert.match(p.text, /pay plan/);
   assert.equal(baseIncome(s, { plan, pin: 3000000 }).source, "pinned");
   const none = baseIncome(base());

@@ -116,7 +116,8 @@ export function suggestPlan(input) {
   // 2. What history can teach: usable months, and each category's amount in each of them.
   const months = usableMonths(state, { month, today, settings: S });
   const learn = months.length >= 2;
-  const cats = state.categories.filter((c) => c.kind === "expense" && c.id !== UNLOGGED_CATEGORY_ID);
+  const hiddenIds = new Set(input.hidden ?? []);   // hidden categories get nothing: no suggestion, no line (P0-6)
+  const cats = state.categories.filter((c) => c.kind === "expense" && c.id !== UNLOGGED_CATEGORY_ID && !hiddenIds.has(c.id));
   const monthly = (id) => months.map((u) => Math.max(0, u.by.rows.filter((r) => r.category_id === id).reduce((n, r) => n + r.amount, 0)));
   const subs = state.subscriptions ?? [];
   const NEEDS = new Set(NEEDS_ROLES), typeOf = (c) => c.role ?? guessType(c.name);

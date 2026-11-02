@@ -11,7 +11,7 @@ export { SCREEN_NAMES, MENU_GROUPS, TERMS, menuHidden, HUBS, hubOf, menuRows, ST
 export { drawing, DRAWING_IDS, NOTE_ICONS } from "./helpart.js";
 export { suggestPlan, median, paydayDays, usableMonths, NO_PAYSLIP_MESSAGE } from "./suggest.js";
 export { budgetMonthFor, planBudgetRows, planBudgetMismatches, planWithBudgets } from "./planwrite.js";
-export { toNearest50, fitToIncome, savingsExplained, NO_INCOME_PROMPT, netsByKind, baseIncome, shares, tenths, showTenths, incomeChanged, savedRows, suggestBudgets, budgetChangesFromDraft } from "./budgetview.js";
+export { toNearest50, fitToIncome, savingsExplained, NO_INCOME_PROMPT, netsByKind, baseIncome, sharePerPayday, shares, tenths, showTenths, incomeChanged, savedRows, suggestBudgets, budgetChangesFromDraft } from "./budgetview.js";
 export { SUGGEST_DEFAULTS, resolveSettings } from "./suggest-settings.js";
 export { APP_BUILD, APP_BUILT_ON, isDevBuild } from "./version.js";
 export { overdrawOf, naturalBalance, cardOutstanding, reserveShortfalls, reserveCover, netPosition, countedEntries, earlyEntryChanges } from "./balances.js";
