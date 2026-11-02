@@ -2472,7 +2472,7 @@ function viewCheckin() {
 const bvNow = () => M.budgetPlan(S(), ledger.settings, M.monthOf(today()));
 const bvIncomes = (v) => v.perPayday.map((p) => p.income);
 const bvAmounts = (v, key) => { const line = v.lines.find((l) => l.key === key); return line ? M.paydayShares(ledger.settings, line, bvIncomes(v)).map(M.amountText) : []; };
-const BUDGET_GROUPS = ["Needs", "Wants", "Savings", "Other", "Buffer"];
+const BUDGET_GROUPS = ["Needs", "Savings", "Buffer", "Wants", "Other"];   // the order of funding: needs, savings, the buffer, then wants (Fixed comes first in PR 4)
 const incomeWords = (inc) => (inc.source === "pinned" ? "Your own figure" : inc.source === "payslips" ? "From your payslips" : inc.source === "plan" ? "From your Pay plan" : "");
 function viewBudget() {
   const month = M.monthOf(today()), set = ledger.settings, v = M.budgetPlan(S(), set, month), review = M.planMigrationReview(S(), set, month);

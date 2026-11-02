@@ -40,6 +40,10 @@ function monthly(extra) { const s = base(); for (const m of M6) { slip(s, m + "-
 function twice() { const s = base(); for (const m of M6) { slip(s, m + "-15", 1000000); slip(s, m + "-30", 2000000); logMonth(s, m); } return s; }
 const sug = (s, o = {}) => suggestBudgets({ state: s, today: TODAY, month: MONTH, ...o });
 
+test("Budget lists its parts in the order of funding", () => {
+  assert.match(app, /const BUDGET_GROUPS = \["Needs", "Savings", "Buffer", "Wants", "Other"\];/);
+});
+
 test("Budget is ONE screen: the three views, no old switch, no Setup page for it (a saved setting is left alone, never deleted)", () => {
   assert.match(app, /function viewBudget\(\) \{\n  const month = M\.monthOf\(today\(\)\), set = ledger\.settings, v = M\.budgetPlan\(S\(\), set, month\)/, "the Budget screen reads the one model");
   for (const w of ["Month", "Per payday", "Per week"]) assert.ok(app.includes(`"${w}"]`) || app.includes(`, "${w}"]`), w);
