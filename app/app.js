@@ -119,7 +119,8 @@ function planformBody(f) {
   if (view === "pay") {
     const pay = (ww) => `<label for="pf-d${ww + 1}">${f.twice ? (ww ? "2nd payday" : "1st payday") : "Payday"}: day of the month${ww ? ", or last" : " (1 to 28)"}${REQ}</label><input id="pf-d${ww + 1}" data-field="d${ww + 1}" inputmode="${ww ? "text" : "numeric"}" value="${esc(f["d" + (ww + 1)] ?? "")}" autocomplete="off" autocapitalize="off">
       <label for="pf-p${ww + 1}">Pay (₱)${REQ}</label><input id="pf-p${ww + 1}" data-field="p${ww + 1}" inputmode="decimal" value="${esc(f["p" + (ww + 1)] ?? "")}" autocomplete="off">${pfDayNotes()[ww] ? `<p class="note small">▲ ${esc(pfDayNotes()[ww])}</p>` : ""}`;
-    return `<h3>Payday</h3>
+    const inc = sug?.incomeSource, incNote = inc?.amount ? `<p class="note small">Income: ${peso(inc.amount)} a month, ${inc.source === "pinned" ? "your own figure" : inc.source === "payslips" ? "from your payslips" : "from your pay plan"}.${inc.other ? ` Your payslips say ${peso(inc.other.amount)}; your own figure is used.` : ""}</p>` : "";
+    return `<h3>Payday</h3>${incNote}
       <label for="pf-start">Starts on${REQ}</label><input id="pf-start" type="date" data-field="start" value="${esc(f.start ?? "")}">
       <div class="chips"><button class="chip" data-action="plan-once" aria-pressed="${!f.twice}">Paid once a month</button><button class="chip" data-action="plan-twice" aria-pressed="${f.twice}">Paid twice a month</button></div>
       ${pay(0)}${f.twice ? pay(1) : ""}
@@ -2480,7 +2481,7 @@ function viewBudgetList() {
 function viewBudget() { return viewBudgetList(); }
 
 const rowWhy = (x) => (x.source === "starter" && !x.pinned ? (/Lowered by .*$/.exec(x.reason)?.[0] ?? "") : x.reason);
-const runSuggest = () => { const set = ledger.settings; return M.suggestBudgets({ state: S(), plan: planOf(), pin: set.income_base_pin ?? null, today: today(), month: M.monthOf(today()), settings: set.suggest_settings, pins: set.budget_pins ?? {}, rent: set.starter_rent ?? undefined, goalPins: set.goal_monthly ?? {}, goalShares: set.goal_shares ?? {}, overrides: set.bucket_overrides ?? {}, targets: set.bucket_targets }); };
+const runSuggest = () => { const set = ledger.settings; return M.suggestBudgets({ state: S(), plan: planOf(), pin: set.income_base_pin ?? null, today: today(), month: M.monthOf(today()), settings: set.suggest_settings, pins: set.budget_pins ?? {}, rent: set.starter_rent ?? undefined, goalPins: set.goal_monthly ?? {}, goalShares: set.goal_shares ?? {}, overrides: set.bucket_overrides ?? {}, targets: set.bucket_targets, hidden: M.hiddenCategoryIds(set) }); };
 // What the "Yours" box shows: what was typed or taken from the suggestion, else the pinned figure, else the budget in force.
 const yoursOf = (x, f) => (f["y_" + x.category_id] !== undefined ? f["y_" + x.category_id] : ledger.settings.budget_pins?.[x.category_id] !== undefined ? (ledger.settings.budget_pins[x.category_id] / 100).toFixed(2) : x.current != null ? (x.current / 100).toFixed(2) : "");
 // The figures the owner has in the suggestion sheet, as {category_id: centavos}, plus which were TYPED (those become pins).
@@ -3037,6 +3038,7 @@ function renderSheet() {
       const bk = M.bucketRows({ categories: S().categories, overrides: ledger.settings.bucket_overrides ?? {}, targets: ledger.settings.bucket_targets, budgets, goals: goalsTotal, buffer: bufferAmt, income: r.income.amount });
       const top = barCard([
         { name: "Income", sub: esc(r.income.text), fig: `${peso(r.income.amount)} a month`, pct: null, action: "open-income-base", id: "x" },
+        ...(r.income.other ? [{ name: "Your payslips say", sub: "Not used: your own figure is", fig: `${peso(r.income.other.amount)} a month`, pct: null }] : []),
         ...bk.rows.map((b) => ({ name: esc(b.label), sub: b.target != null ? `target ${M.showTenths(b.target)}` : "", fig: `${peso(b.amount)} \u00b7 ${b.tenths == null ? "" : M.showTenths(b.tenths)}`, pct: b.tenths == null ? 0 : Math.min(100, b.tenths / 10), label: `${b.label}: ${b.tenths == null ? "" : M.showTenths(b.tenths)} of income` })),
       ]);
       const max = Math.max(1, ...r.rows.map((x) => sugAmt(x)));

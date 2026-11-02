@@ -95,7 +95,7 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 - **In the app.** Spending reads verified entries, leaves out held gaps and transfers, and groups categories the same way everywhere. Spent today and This
   month both show the verified figure, with what still waits in Verify apart ("+ P waiting in Verify"). The Unlogged gauge (weekly review, survey) reads
   verified entries only and leaves out a held gap and its cancelling entry. The home summary follows the same rule.
-- **Guarded by.** "CONSISTENCY" (twice), `tests/presentation.test.js`, `tests/daytotal.test.js`.
+- **Guarded by.** "CONSISTENCY" (three times: the third is P0-6's one income), `tests/presentation.test.js`, `tests/daytotal.test.js`, `tests/oneincome.test.js`.
 
 ### 11. Control totals
 - **Rule.** What is added up must equal what was printed or counted.

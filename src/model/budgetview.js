@@ -69,15 +69,16 @@ export function netsByKind(slips, field = "base") {
   return [slips.filter((r) => day(r) < cut).map((r) => r[field]), slips.filter((r) => day(r) >= cut).map((r) => r[field])];
 }
 
-// The income every share is measured against. The owner's own figure wins, then a loaded plan's expected income, then the payslips: STABLE pay (what
+// The ONE income every screen of Plan & Save measures against (P0-6): the owner's own monthly figure when one is typed, else the payslips: STABLE pay (what
 // arrived less every variable line: overtime, holiday and night pay, bonus, back pay), the median of the last 3 payslips of each kind of payday. A bi-weekly
-// employer's monthly base is 2 x the per-payday base; a third payday in a month is an extra payday, never in the base (stablepay.js).
-// {amount, source, text, ...}; amount is null with no income at all. For payslips it also says `perPayday`, `paydays` a month, `frequency` and the `extra` paydays.
-export function baseIncome(state, { plan = null, pin = null } = {}) {
-  if (whole(pin) && pin > 0) return { amount: pin, source: "pinned", text: "Your own figure" };
-  if (plan?.paydays?.length) return { amount: plan.paydays.reduce((n, p) => n + p.income, 0), source: "plan", text: "From your pay plan (its expected income)" };
+// employer's monthly base is 2 x the per-payday base; a third payday in a month is an extra payday, never in the base (stablepay.js). Only with neither does a
+// loaded plan's expected income stand in. Suggest, Pay plan and Buckets all read this one function, so they show the same figure.
+// {amount, source, text, other, ...}; amount is null with no income at all. `other` is the figure NOT used when both a typed figure and the payslips exist and
+// they differ ({amount, source: "payslips", text}), so a screen can show both and say which is used. For payslips it also says `perPayday`, `paydays` a month,
+// `frequency` and the `extra` paydays.
+function payslipIncome(state) {
   const all = netPerPayday(state);
-  if (!all.length) return { amount: null, source: "none", text: NO_INCOME_PROMPT };
+  if (!all.length) return null;
   const { frequency, rows, extra } = payBase(all), kinds = frequency?.kind === "biweekly" ? [rows.map((r) => r.stable)] : netsByKind(rows, "stable");
   const med = (list) => median(list.slice(-3), "low"), perPayday = kinds.length === 1 ? med(kinds[0]) : null;
   const amount = frequency?.kind === "biweekly" ? 2 * med(kinds[0]) : kinds.reduce((n, list) => n + med(list), 0);
@@ -85,6 +86,23 @@ export function baseIncome(state, { plan = null, pin = null } = {}) {
   const how = frequency ? ` ${PAYDAYS_A_MONTH[frequency.kind]} ${PAYDAYS_A_MONTH[frequency.kind] === 1 ? "payday" : "paydays"} a month, ${frequency.from === "period_type" ? `from "${frequency.label}"` : "worked out from your pay dates"}.` : "";
   return { amount, source: "payslips", perPayday, paydays: frequency ? PAYDAYS_A_MONTH[frequency.kind] : null, frequency, extra,
     text: `${used === 1 ? "Your last payslip" : `Last ${used} payslips`}, extra pay left out.${how}` };
+}
+export function baseIncome(state, { plan = null, pin = null } = {}) {
+  const slips = payslipIncome(state);
+  if (whole(pin) && pin > 0) return { amount: pin, source: "pinned", text: "Your own figure", other: slips && slips.amount !== pin ? { amount: slips.amount, source: "payslips", text: slips.text } : null };
+  if (slips) return { ...slips, other: null };
+  if (plan?.paydays?.length) return { amount: plan.paydays.reduce((n, p) => n + p.income, 0), source: "plan", text: "From your pay plan (its expected income)", other: null };
+  return { amount: null, source: "none", text: NO_INCOME_PROMPT, other: null };
+}
+
+// The one monthly income shared out over paydays, exactly: each payday takes its share by `weights` (what each brings in, else the days it covers), rounded
+// down, and the last one takes the rest, so the parts add back to the month to the centavo.
+export function sharePerPayday(amount, weights) {
+  if (weights.length === 1) return [amount];
+  const sum = weights.reduce((n, w) => n + w, 0);
+  if (!(sum > 0)) return [amount, ...weights.slice(1).map(() => 0)];
+  const first = Math.floor((amount * weights[0]) / sum);
+  return [first, amount - first];
 }
 
 // The summary of the month: Spending and Saved as a share of the income, each PLAINLY rounded to the nearest tenth of a percent (1000 = 100.0%), and
@@ -118,14 +136,14 @@ export function engineSettings(state, settings, overrides = {}, targets) {
 // A suggested budget for one month, built by the engine for ONE monthly payday on the base income. Lines are mapped by category id, never by name.
 // rent: the monthly rent the owner typed (centavos, 0 for none), needed only while there is too little history to learn it from: without it the answer is {ok: false, code: "NEEDS_RENT"}.
 // pins: {category_id: centavos} the owner typed; they come back as the owner's, and the engine's own figure is kept as the suggestion.
-export function suggestBudgets({ state, plan = null, pin = null, today, month, settings, pins = {}, scheduled = [], rent, overrides = {}, targets, goalPins = {}, goalShares = {} }) {
+export function suggestBudgets({ state, plan = null, pin = null, today, month, settings, pins = {}, scheduled = [], rent, overrides = {}, targets, goalPins = {}, goalShares = {}, hidden = [] }) {
   const income = baseIncome(state, { plan, pin });
   if (!income.amount) return { ok: false, code: "NO_INCOME", message: NO_INCOME_PROMPT };
-  const names = new Map(state.categories.filter((c) => c.kind === "expense" && c.id !== UNLOGGED_CATEGORY_ID).map((c) => [c.id, c.name]));
+  const names = new Map(state.categories.filter((c) => c.kind === "expense" && c.id !== UNLOGGED_CATEGORY_ID && !hidden.includes(c.id)).map((c) => [c.id, c.name]));   // a hidden category gets no suggestion and no line
   const pinned = Object.entries(pins).filter(([id, v]) => names.has(id) && whole(v)).map(([category_id, v]) => ({ category_id, name: names.get(category_id), first: v, second: 0 }));
   // The buckets (the owner's answers, else the role defaults) say which categories are needs; the bucket targets give the starter ratios, the buffer coming off the top of savings.
   const { buckets, withTargets } = engineSettings(state, settings, overrides, targets);
-  const r = suggestPlan({ state, paydays: [{ id: "month", label: "Month", day: 1 }], income: [income.amount], today, month, settings: withTargets, scheduled, pinned, rent, buckets, goalPins, goalShares });
+  const r = suggestPlan({ state, paydays: [{ id: "month", label: "Month", day: 1 }], income: [income.amount], today, month, settings: withTargets, scheduled, pinned, rent, buckets, goalPins, goalShares, hidden });
   if (!r.ok) return r;
   const lines = r.paydays[0].lines, diff = new Map(r.differences.filter((d) => d.category_id).map((d) => [d.category_id, d]));
   // every spending category gets a row (the engine drops a line that comes to nothing), so a figure can be typed for any of them

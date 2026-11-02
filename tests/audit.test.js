@@ -354,3 +354,19 @@ test("CUTOFF: pay counts in the month its deposit arrived, the period worked is 
   const gone = M.deletePayslip(r.state, "pz", NOW).state;
   assert.equal(M.incomeBySource(gone, { from: FROM, to: TO }).total, 0);
 });
+
+test("CONSISTENCY (P0-6): one income everywhere: Suggest and the Pay plan show the same monthly figure, a typed one wins and the other is kept to be shown; a hidden category gets no line", () => {
+  const s = ledger();
+  s.payslips.push({ id: "pa", employer: "Co", period_from: "2026-09-16", period_to: "2026-09-30", pay_date: "2026-09-30", account_id: "chk", transaction_id: "xa", printed_gross: 1800000, printed_net: 1800000, deposit: 1800000 },
+    { id: "pb", employer: "Co", period_from: "2026-09-01", period_to: "2026-09-15", pay_date: "2026-09-15", account_id: "chk", transaction_id: "xb", printed_gross: 1400000, printed_net: 1400000, deposit: 1400000 });
+  s.payslipLines.push({ payslip_id: "pa", side: "earning", kind: "basic", amount: 1800000 }, { payslip_id: "pb", side: "earning", kind: "basic", amount: 1400000 });
+  const settings = { starter_rent: 0 }, form = M.newPlanForm("2026-10-05");
+  const none = M.baseIncome(s), pf = M.planFormSuggestion(s, form, { today: "2026-10-05", settings });
+  assert.equal(pf.pay.reduce((a, c) => a + c, 0), none.amount, "the Pay plan's paydays add up to the income every other screen shows");
+  const typed = M.baseIncome(s, { pin: 3000000 }), pf2 = M.planFormSuggestion(s, form, { today: "2026-10-05", settings: { ...settings, income_base_pin: 3000000 } });
+  assert.equal(pf2.pay.reduce((a, c) => a + c, 0), typed.amount, "a typed figure is the month, shared over the paydays to the centavo");
+  assert.equal(typed.other.amount, none.amount, "the figure that is not used is kept, so a screen can show both");
+  const eng = M.suggestPlan({ state: s, paydays: [{ day: 15 }, { day: "last" }], income: [1400000, 1800000], today: "2026-10-05", month: MONTH, rent: 0, hidden: ["food"] });
+  assert.ok(eng.ok, eng.message);
+  assert.ok(eng.paydays.every((p) => p.lines.every((l) => l.name !== "Food")), "a hidden category gets no line");
+});
