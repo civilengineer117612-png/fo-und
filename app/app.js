@@ -1082,6 +1082,16 @@ async function importFile(file) {
 let pdfPasswordResolve = null;
 const askPdfPassword = (wrong) => new Promise((resolve) => { pdfPasswordResolve = resolve; ui.form = { askPassword: true, wrong }; renderSheet(); setTimeout(() => $("pdf-pw")?.focus(), 50); });
 // The lines an import adds: everything read, except money out that does not say what it was, until you choose Spending for it.
+// The ledger as it would be once this import is added (its drafts, rewards and move drafts), for the balance proof in the window. Ids are throw-away: nothing here is saved.
+function importPlanned(base, f, accountId) {
+  let n = 0; const id = () => "pv" + ++n;
+  const p = M.previewImport(base, importKept(f), f.order, ledger.settings.payee_book, { includeRepeats: f.repeatsIn === true, accountId });
+  let r = M.planImport(base, p.lines, { account_id: accountId, newId: id }); if (!r.ok) return null;
+  let next = r.state;
+  if (f.statement?.rewards?.length) { const rw = M.planRewards(next, f.statement.rewards, { account_id: accountId, newId: id }); if (!rw.ok) return null; next = rw.state; }
+  if (f.statement?.parsed && (f.statement.leftOut.cardCash || f.statement.leftOut.own)) { const pm = M.planStatementMoves(next, M.statementMoves(base, f.statement.parsed.lines, { account_id: accountId, bankId: f.statement.bankId, ownAccount: f.ownAccount }), { account_id: accountId, newId: id }); if (!pm.ok) return null; next = pm.state; }
+  return next;
+}
 const importKept = (f) => f.items.filter((x) => x.meaning !== "unsure" || f.choice?.[x.id] === "spending");
 const tableOrThrow = (rows) => { const t = M.parseTable(rows); if (!t.ok) throw new Error(t.message); return t; };
 const photoButtons = (mode, busy = false) => `<label class="filebtn" aria-disabled="${busy}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L8 6H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="12.5" r="3.5"/></svg>&nbsp;${busy ? "Reading..." : "Take a photo"}<input type="file" accept="image/*" capture="environment" data-scan="${mode}" hidden${busy ? " disabled" : ""}></label>
@@ -3190,12 +3200,18 @@ function renderSheet() {
       const mvAll = st?.parsed && (st.leftOut.cardCash || st.leftOut.own) ? M.statementMoves(S(), st.parsed.lines, { account_id: f.account_id, bankId: st.bankId, ownAccount: f.ownAccount }) : [], mvMake = mvAll.filter((m) => !m.match && m.to).length;
       const notIn = st?.parsed && f.account_id && f.account_id !== NEW_POCKET ? M.notOnStatement(S(), st.parsed.lines, { account_id: f.account_id, period: st.period }) : [];
       const notInBlock = notIn.length ? `<details id="stm-notin"><summary>In your ledger, not on this statement (${notIn.length})</summary><p class="note small">Entries on this account dated inside the statement's period that no line of it answers. Nothing is changed.</p>${notIn.slice(0, 20).map((x) => `<div class="mrow mline mimp"><span class="mn">${esc(listDate(x.date))} \u00b7 ${esc(x.payee || "Entry")}${x.status === "draft" ? `<small>draft</small>` : ""}</span><span class="mv">${x.amount < 0 ? "-" : "+"}${peso(Math.abs(x.amount))}</span></div>`).join("")}${notIn.length > 20 ? `<p class="note small">and ${notIn.length - 20} more</p>` : ""}</details>` : "";
+      const proofState = st?.parsed && f.order && f.account_id && f.account_id !== NEW_POCKET ? importPlanned(S(), f, f.account_id) : null;
+      const proof = proofState ? M.statementBalanceProof(proofState, { account_id: f.account_id, summary: st.parsed.summary, period: st.period, checkOk: st.check.ok }) : { ok: false };
+      const proofBig = proof.ok && proof.difference !== 0 && M.bigGap(proof.ledgerBalance, proof.ledgerBalance - proof.difference), keepGap = f.keepGap ?? !proofBig, proofAsset = acct?.class === "asset";
+      const proofBlock = proof.ok ? (proof.difference === 0 ? `<p class="note small" id="stm-proof">\u2713 Your ledger matches the statement's closing balance (${peso(Math.abs(proof.statementClosing))} on ${esc(yearDate(proof.asOf))}).</p>`
+        : `<div id="stm-proof"><p class="note small">The statement closes at ${peso(Math.abs(proof.statementClosing))} on ${esc(yearDate(proof.asOf))}; your ledger, with these drafts, would ${proof.card ? "owe" : "show"} ${peso(Math.abs(proof.ledgerBalance))}. It is ${peso(Math.abs(proof.difference))} ${proof.difference > 0 === !proof.card ? "higher" : "lower"} than the statement.</p>
+          ${proofAsset ? `<p><button class="chip wide" data-action="stm-gap" aria-pressed="${keepGap}">Keep the difference as not yet explained</button></p><p class="note small">${proofBig ? "This is most of the balance, so it is more likely a different starting balance than missing entries: choose it yourself. " : ""}It is not counted as spending. Log what explains it when you can. A copy of your data is kept first.</p>` : `<p class="note small">Count the card in the Weekly review to settle the difference.</p>`}</div>`) : "";
       const mv = mvAll.filter((m) => m.moveTo !== "own"), own = mvAll.filter((m) => m.moveTo === "own"), ownOpen = own.filter((m) => !m.match);
       const ownBlock = own.length ? `<p class="note small" id="stm-own">${own.length} ${own.length === 1 ? "transfer" : "transfers"} to or from your own name: moves, not spending or income.${own.length - ownOpen.length ? ` ${own.length - ownOpen.length} already in your ledger.` : ""}</p>${ownOpen.length ? `<label>Your other account for ${ownOpen.length === 1 ? "it" : `these ${ownOpen.length}`}</label>${accountPicker(accountsFor(null, true).filter((a) => a.id !== f.account_id), f.ownAccount ?? null, "stm-own-acct", "ownacct", "Leave out")}<p class="note small">${f.ownAccount ? `${ownOpen.length} ${ownOpen.length === 1 ? "move draft" : "move drafts"} will be added.` : "Choose it to add them as move drafts; until then they are left out."}</p>` : ""}` : "";
       const stBlock = st ? `<div class="card" style="border:0;padding:0"><dl><dt>Statement</dt><dd>${esc(st.bank ?? "Bank statement")}${st.pocket ? esc(" \u00b7 Go Save pocket ending " + st.pocket.last4) : ""}</dd>${st.period ? `<dt>Period</dt><dd>${esc(yearDate(st.period.from))} to ${esc(yearDate(st.period.to))}</dd>` : ""}<dt>Lines found</dt><dd>${st.lines}</dd><dt>Balance check</dt><dd id="stm-check">${st.check.ok ? "\u2713 " : ""}${esc(st.check.message)}${st.check.ok ? "" : " Look at each amount before you verify it."}</dd></dl>${st.check.bad?.length ? badLinesHtml(st, f) : ""}</div>
         ${st.rewards?.length ? `<p class="note small" id="stm-rewards">${st.rewards.length} cashback, interest or reward ${st.rewards.length === 1 ? "line" : "lines"} (${peso(st.rewards.reduce((n, x) => n + x.amount, 0))}) ${acct?.class === "liability" || st.style === "card" ? "will be added as credits on the card (what you owe goes down), as drafts." : "will be added as income drafts."}</p>` : ""}
         ${mv.length ? `<p class="note small" id="stm-cardcash">${mv.length} card ${mv.length === 1 ? "payment or cash withdrawal" : "payments and cash withdrawals"}: moves, not spending. ${[mv.length - mvMake - mv.filter((m) => !m.match && !m.to).length ? `${mv.length - mvMake - mv.filter((m) => !m.match && !m.to).length} already in your ledger` : "", mvMake ? `${mvMake} will be added as ${mvMake === 1 ? "a move draft" : "move drafts"}` : "", mv.some((m) => !m.match && !m.to) ? `${mv.filter((m) => !m.match && !m.to).length} left out: add a Cash account or one card, or log the move yourself` : ""].filter(Boolean).join("; ")}.</p>` : ""}
-        ${ownBlock}${notInBlock}${st.leftOut.moves + st.leftOut.moneyIn ? `<p class="note small" id="stm-left">${[st.leftOut.moves ? `${st.leftOut.moves} ${st.leftOut.moves === 1 ? "move" : "moves"} between your own accounts` : "", st.leftOut.moneyIn ? `${st.leftOut.moneyIn} money in` : ""].filter(Boolean).join(" and ")} left out: not spending.</p>` : ""}
+        ${ownBlock}${notInBlock}${proofBlock}${st.leftOut.moves + st.leftOut.moneyIn ? `<p class="note small" id="stm-left">${[st.leftOut.moves ? `${st.leftOut.moves} ${st.leftOut.moves === 1 ? "move" : "moves"} between your own accounts` : "", st.leftOut.moneyIn ? `${st.leftOut.moneyIn} money in` : ""].filter(Boolean).join(" and ")} left out: not spending.</p>` : ""}
         ${unsure.length ? `<label>Which is it?</label><p class="note small">Money out that does not say what it was, one row per person. Each waits until you choose.</p>${M.unsureByPerson(unsure).map((g) => { const all = (v) => g.ids.every((i) => f.choice?.[i] === v), n = g.ids.length;
           return `<div class="mrow mimp ask"><span class="mn">${esc(g.name)}<small>${n} ${n === 1 ? "line" : "lines"} \u00b7 ${peso(g.total)}</small></span><span class="chips"><button class="chip" data-action="stm-choose" data-id="${esc(g.key)}" data-pick="spending" aria-pressed="${all("spending")}">Spending</button><button class="chip" data-action="stm-choose" data-id="${esc(g.key)}" data-pick="not" aria-pressed="${all("not")}">Not spending</button></span>
           ${n > 1 ? `<button class="link small" data-action="stm-show" data-id="${esc(g.key)}">${f.open?.[g.key] ? "Hide the lines" : `Show the ${n} lines`}</button>${f.open?.[g.key] ? `<div class="stmlines">${g.lines.map((x) => `<div class="mrow mline mimp"><span class="mn">${esc(yearDate(x.dateRaw))}</span><span class="mv">${peso(x.amount)}</span></div>`).join("")}</div>` : ""}` : `<small class="hiddennote">${esc(yearDate(g.lines[0].dateRaw))}</small>`}</div>`; }).join("")}` : ""}` : "";
@@ -4855,6 +4871,7 @@ async function onClick(el) {
     case "pick-from": if (ui.sheet) ui.sheet.pick = null; form.from_id = id; renderSheet(); break;
     case "edit-kind": ui.form.kind = id; renderSheet(); break;
     case "pick-to": if (ui.sheet) ui.sheet.pick = null; form.to_id = id; renderSheet(); break;
+    case "stm-gap": form.keepGap = !(form.keepGap ?? true); renderSheet(); break;   // keep the statement's difference as not yet explained (default on unless it is most of the balance)
     case "stm-own-acct": if (ui.sheet) ui.sheet.pick = null; form.ownAccount = form.ownAccount === id ? null : id; renderSheet(); break;   // the other own account, asked once for all the transfers to your own name
     case "pdf-open": { const typed = $("pdf-pw")?.value ?? ""; const go = pdfPasswordResolve; pdfPasswordResolve = null; ui.form = { busy: "Opening the PDF..." }; renderSheet(); go?.(typed); break; }
     case "pdf-cancel": { const go = pdfPasswordResolve; pdfPasswordResolve = null; go?.(null); ui.sheet = null; renderSheet(); break; }
@@ -4886,13 +4903,30 @@ async function onClick(el) {
         if (!pm.ok) { showToast(pm.message); break; }
         next = pm.state; if (pm.count) moveNote = `${pm.count} ${pm.count === 1 ? "move draft" : "move drafts"} added.`;
       }
+      let gapNote = "", gapKept = false;
+      if (form.statement?.parsed) {   // balance proof (P1-8 fix 8): what the statement closes at against the ledger with these drafts; the difference may be kept as not yet explained
+        const proof = M.statementBalanceProof(next, { account_id: accountId, summary: form.statement.parsed.summary, period: form.statement.period, checkOk: form.statement.check.ok });
+        const big = proof.ok && proof.difference !== 0 && M.bigGap(proof.ledgerBalance, proof.ledgerBalance - proof.difference);
+        if (proof.ok && proof.difference !== 0 && (form.keepGap ?? !big)) {
+          const g = M.planStatementGap(next, proof, { account_id: accountId, newId: () => newId("tx"), unlogged_category_id: M.UNLOGGED_CATEGORY_ID });
+          if (!g.ok) { showToast(g.message); break; }
+          if (g.made) { next = g.state; gapKept = true; gapNote = `A difference of ${peso(Math.abs(proof.difference))} is kept as not yet explained.`; }
+        }
+      }
       if (form.statement && form.keep !== false && form.statement.parsed) {   // keep the statement as read, to prove the months with (Setup, Statements)
         const { record, lines } = M.recordFromParse(form.statement.parsed, { account_id: accountId, id: newId("stm") });
         if (M.alreadyKept(next, record, lines)) kept = "That statement was already kept.";
         else { next = { ...next, statementRecords: [...(next.statementRecords ?? []), record], statementLines: [...(next.statementLines ?? []), ...lines] }; kept = "Statement kept: see Setup, Statements."; }
       }
       ui.sheet = null; renderSheet();
-      if (await commit(next)) showToast([pocketNote, r.count ? `${r.count} ${r.count === 1 ? "draft is" : "drafts are"} waiting in Verify.` : "", rewardNote, moveNote, kept].filter(Boolean).join(" "));
+      const said = [pocketNote, r.count ? `${r.count} ${r.count === 1 ? "draft is" : "drafts are"} waiting in Verify.` : "", rewardNote, moveNote, gapNote, kept].filter(Boolean).join(" ");
+      if (gapKept) {   // the ledger changes beyond plain drafts: the app first keeps a copy by the pre-upgrade mechanism, reads it back, and stops if it cannot
+        const nl = M.nextLedger(ledger, next, ledger.settings);
+        const rr = await M.replaceWithCopy({ current: ledger, next: nl, io: { readCopies, writeCopies, writeLedger: (text) => writeBoth(text) }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });
+        if (!rr.ok) { ui.error = rr.message.replace("Your data was not replaced", "The statement was not added"); renderAll(); break; }
+        if (!M.saveOutcome(rr.written).ok) { ui.error = "The statement could not be saved. Nothing was changed, and the copy is kept."; renderAll(); break; }
+        ledger = nl; ui.copies = await readCopies(); renderAll(); showToast(said);
+      } else if (await commit(next)) showToast(said);
       break;
     }
     case "plan-cancel": ui.planDraft = null; ui.sheet = null; renderSheet(); break;
