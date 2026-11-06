@@ -204,8 +204,8 @@ export function onStatementIds(state) {
   for (const acc of new Set((state.statementRecords ?? []).map((r) => r.account_id))) {
     const used = new Set(), usedMoves = new Set();
     for (const l of accountLines(state, acc)) {
-      if (l.direction !== "out") continue;   // money out answers a spend or a move; money in is matched by its own rules
-      if (l.meaning === "move") { const mv = loggedMove(state, { date: l.date, amount: l.amount, accountId: acc, direction: "out" }, usedMoves); if (mv) { usedMoves.add(mv.id); ids.add(mv.id); } continue; }
+      if (l.direction !== "out" && l.meaning !== "move") continue;   // money out answers a spend or a move, money in only a move (other money in has its own rules)
+      if (l.meaning === "move") { const mv = loggedMove(state, { date: l.date, amount: l.amount, accountId: acc, direction: l.direction }, usedMoves); if (mv) { usedMoves.add(mv.id); ids.add(mv.id); } continue; }
       const m = loggedMatch(state, { date: l.date, name: l.payee || l.text, amount: l.amount, accountId: acc }, used, STATEMENT_MATCH_DAYS);
       if (m) { used.add(m.id); ids.add(m.id); }
     }
