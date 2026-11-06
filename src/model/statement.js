@@ -119,6 +119,17 @@ export function classifyLine({ text, type = "", direction }) {
   return { meaning: "unsure", payee: t };
 }
 
+// P1-8 fix 5 (owner's rule): a transfer OUT to another person (not your own name, not one of your own accounts: those are moves, decided first) is SPENDING,
+// made a draft like any other spending line, in the category your payee book gives that person, else Uncategorized; you check it in Verify. A transfer is known
+// by its kind ("Transfer", "Fund Transfer", "InstaPay", "PESONet") or its words ("Transfer to ...", "Sent GCash to ...", GCash "Transfer from A to B").
+// Money out that does not say it was a transfer stays unsure: it waits for your choice. Only when the statement prints its holder's name: without it your own
+// transfers cannot be told apart, so nothing is guessed (counting too much is the worse mistake).
+export function isTransferOut(l) {
+  if (l.direction !== "out") return false;
+  const t = String(l.text ?? ""), ty = String(l.type ?? "");
+  return /^(fund )?transfer$|^(instapay|pesonet)\b|\btransfer to\b/i.test(ty.trim()) || /^(transfer to|sent gcash to|transfer from\s+\d{6,}\s+to)\b|^(instapay|pesonet)\b/i.test(t.trim());
+}
+
 // ---------- your own name ----------
 // A transfer to or from the statement's own holder is money moving between your own accounts, not spending and not income. The holder's name is printed
 // near the top of the first page in capitals, on a line of its own (no digits, a few words). Two names are the same person when their first and last
@@ -199,6 +210,7 @@ export function parseStatement(pages, { ownLast4 = [] } = {}) {
     Object.assign(l, classifyLine(l));
     if ((l.meaning === "unsure" || l.meaning === "in") && isOwnName(l.payee || l.text, holders)) { l.meaning = "move"; l.own = true; }   // to or from yourself
     if ((l.meaning === "unsure" || l.meaning === "in") && l.last4 && ownLast4.includes(l.last4)) { l.meaning = "move"; l.own = true; }   // to or from your own bank account (its last four digits)
+    if (l.meaning === "unsure" && holders.length && isTransferOut(l)) { l.meaning = "spending"; l.person = true; }   // P1-8 fix 5: money sent to ANOTHER person is spending (a draft you check in Verify)
   }
   if (!header || !lines.length) return { ok: false, message: "No transactions were found in this PDF. It may not be a bank statement the app knows." };
   const top = allRows[0].slice(0, 25).map(textOf).join(" ").toLowerCase();   // the first lines of the first page: the bank's name is usually there
@@ -292,7 +304,7 @@ export function badLineDetails(lines, summary, bad) {
 // The lines the importer takes: what was spent (including what is unsure, which you can turn off one by one), as importer items.
 export function statementItems(lines) {
   return lines.map((l, i) => ({ l, i })).filter(({ l }) => l.direction === "out" && (l.meaning === "spending" || l.meaning === "fee" || l.meaning === "unsure"))
-    .map(({ l, i }) => ({ id: "s" + i, dateRaw: l.date, name: l.payee || l.text, amount: l.amount, meaning: l.meaning, label: l.meaning === "fee" ? null : undefined }));
+    .map(({ l, i }) => ({ id: "s" + i, dateRaw: l.date, name: l.payee || l.text, amount: l.amount, meaning: l.meaning, label: l.meaning === "fee" ? null : undefined, ...(l.person ? { person: true } : {}) }));
 }
 // Cashback, rewards and interest lines (money in, marked `reward`): offered as income drafts by an import. [{date, name, amount}]
 export const statementRewards = (lines) => lines.filter((l) => l.direction === "in" && l.meaning === "in" && l.reward).map((l) => ({ date: l.date, name: l.payee || l.text, amount: l.amount }));
