@@ -20,7 +20,7 @@ import { netPerPayday } from "./income.js";
 import { payBase } from "./stablepay.js";
 import { median, paydayDays, nearestPayday } from "./suggest.js";
 import { ordinal } from "./planform.js";
-import { cutoffFor, dayIn } from "./plan.js";
+import { dayIn } from "./plan.js";
 import { reportingCategory } from "./rules.js";
 import { heldIds } from "./held.js";
 import { bucketOf, BUCKET_LABELS } from "./buckets.js";
@@ -33,22 +33,78 @@ const sum = (list) => list.reduce((a, b) => a + b, 0);
 export const weekFigure = (centavos) => Math.floor((centavos * 12) / 52);
 
 // ---------- the paydays ----------
+// The owner's pay schedule (settings `pay_schedule`, P0-6 PR 3), one of:
+//   {kind: "twice", days: [d1, d2]}   any two days of the month (a day is 1 to 28 or "last")
+//   {kind: "monthly", days: [d]}      one day a month
+//   {kind: "biweekly", start: "YYYY-MM-DD"}   every two weeks from one known payday; a THIRD payday in a month is an EXTRA payday (stablepay.js): it shows,
+//                                     with its own pay, but no line is shared onto it and its pay is not in the month's income
+//   {kind: "weekly", weekday: 0-6}    every week on that weekday (0 is Sunday); a month has four or five
+// An older {days} (from the Pay plan move) is "twice" with two days and "monthly" with one. With no schedule the paydays of the newest saved Pay plan stand in.
 const newestPlan = (settings) => [...(settings.plans ?? [])].sort((a, b) => (a.effective_from < b.effective_from ? -1 : 1)).at(-1) ?? null;
-export function paydaysFor(settings) {
-  const days = settings.pay_schedule?.days ?? newestPlan(settings)?.paydays?.map((p) => p.day) ?? [];
-  const label = (d) => (d === "last" ? "Last day" : ordinal(Number(d)));
-  return days.slice(0, 2).map((day, i) => ({ id: i === 0 ? "first" : "second", day, label: days.length === 1 ? "Payday" : label(day) }));
+const DAY = 86400000, iso = (ms) => new Date(ms).toISOString().slice(0, 10), ms = (d) => Date.parse(d + "T00:00:00Z");
+const nextMonth = (month) => { const [y, m] = month.split("-").map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; };
+export function scheduleOf(settings) {
+  const s = settings.pay_schedule;
+  if (s?.kind === "biweekly" && /^\d{4}-\d{2}-\d{2}$/.test(s.start ?? "")) return { kind: "biweekly", start: s.start };
+  if (s?.kind === "weekly" && Number.isInteger(s.weekday) && s.weekday >= 0 && s.weekday <= 6) return { kind: "weekly", weekday: s.weekday };
+  const days = s?.days ?? newestPlan(settings)?.paydays?.map((p) => p.day) ?? [];
+  if (!days.length) return null;
+  return days.length === 1 ? { kind: "monthly", days: [days[0]] } : { kind: "twice", days: days.slice(0, 2) };
+}
+// Every payday of a month, oldest first: [{date, day}] ("day" is the schedule's own day for twice and monthly, the day of the month otherwise).
+export function payDatesIn(schedule, month) {
+  if (!schedule) return [];
+  const [y, m] = month.split("-").map(Number), first = `${month}-01`, last = `${month}-${String(dayIn("last", y, m)).padStart(2, "0")}`;
+  if (schedule.kind === "twice" || schedule.kind === "monthly") return schedule.days.map((d) => ({ date: `${month}-${String(dayIn(d, y, m)).padStart(2, "0")}`, day: d })).sort((a, b) => (a.date < b.date ? -1 : 1));
+  let t;
+  if (schedule.kind === "biweekly") { const k = Math.floor((ms(first) - ms(schedule.start)) / (14 * DAY)); t = ms(schedule.start) + k * 14 * DAY; while (t < ms(first)) t += 14 * DAY; }
+  else { t = ms(first); while (new Date(t).getUTCDay() !== schedule.weekday) t += DAY; }
+  const out = [];
+  for (; t <= ms(last); t += (schedule.kind === "biweekly" ? 14 : 7) * DAY) out.push({ date: iso(t), day: Number(iso(t).slice(8)) });
+  return out;
+}
+// The paydays of a month as the screen shows them: [{id, label, day, date, extra?}]. Two-a-month ones keep their labels ("15th", "Last day"); the others are
+// named by their day of the month; a third bi-weekly payday is marked extra.
+export function paydaysFor(settings, month) {
+  const sc = scheduleOf(settings);
+  if (!sc) return [];
+  if (!month) return (sc.days ?? []).map((day, i) => ({ id: i === 0 ? "first" : "second", day, label: sc.days.length === 1 ? "Payday" : day === "last" ? "Last day" : ordinal(Number(day)) }));
+  const dates = payDatesIn(sc, month);
+  return dates.map((d, i) => {
+    if (sc.kind === "twice" || sc.kind === "monthly") return { id: i === 0 ? "first" : "second", day: d.day, date: d.date, label: sc.kind === "monthly" ? "Payday" : d.day === "last" ? "Last day" : ordinal(Number(d.day)) };
+    const extra = sc.kind === "biweekly" && i >= 2;
+    return { id: "p" + i, day: d.day, date: d.date, label: ordinal(d.day) + (extra ? " (extra)" : ""), ...(extra ? { extra: true } : {}) };
+  });
+}
+// What the payslips suggest, to fill the Paydays window in: {schedule, label} or null. Bi-weekly starts from the newest payslip's pay date; semi-monthly
+// takes the days of the last two pay dates (a day after the 28th is "last"); monthly the day of the newest. `label` is the payslip's own words ("Bi-Week").
+export function scheduleFromPayslips(state) {
+  const rows = payBase(netPerPayday(state)).rows, f = payBase(netPerPayday(state)).frequency;
+  if (!f || !rows.length) return null;
+  const dates = rows.map((r) => r.date).sort(), newest = dates.at(-1), d = (x) => { const n = Number(x.slice(8)); return n > 28 ? "last" : n; };
+  if (f.kind === "biweekly") return { schedule: { kind: "biweekly", start: newest }, label: f.label ?? null };
+  if (f.kind === "monthly") return { schedule: { kind: "monthly", days: [d(newest)] }, label: f.label ?? null };
+  const two = [...new Set(dates.slice(-2).map(d))].sort((a, b) => (a === "last" ? 1 : b === "last" ? -1 : a - b));
+  return two.length === 2 ? { schedule: { kind: "twice", days: two }, label: f.label ?? null } : null;
 }
 
-// The one monthly income shared out over the paydays: by what each payday brings in from the payslips when every payday has one, else by the days each covers.
+// The one monthly income shared out over the REGULAR paydays: by what each brings in from the payslips when every payday has one (twice a month), else by the
+// days each covers (twice a month), else equally (every two weeks, every week, once a month). An extra payday is shown with its own pay (the per-payday
+// figure the payslips give, else the month shared by the regular paydays) and is NOT part of the month's income.
 export function paydayIncomes(state, settings, month) {
-  const paydays = paydaysFor(settings), income = baseIncome(state, { pin: Number.isSafeInteger(settings.income_base_pin) ? settings.income_base_pin : null });
-  if (!paydays.length || !income.amount) return { paydays, income, incomes: paydays.map(() => 0), total: income.amount ?? 0 };
-  const slips = payBase(netPerPayday(state)).rows, nets = paydays.map(() => []);
-  for (const r of slips) nets[nearestPayday(paydays, r.date)].push(r.stable);
-  const days = paydayDays(paydays, month), byDays = paydays.length === 1 ? [1] : [days.days1, days.days2];
-  const weights = nets.every((l) => l.length) ? nets.map((l) => median(l.slice(-3), "low")) : byDays;
-  return { paydays, income, incomes: sharePerPayday(income.amount, weights), total: income.amount };
+  const paydays = paydaysFor(settings, month), sc = scheduleOf(settings), income = baseIncome(state, { pin: Number.isSafeInteger(settings.income_base_pin) ? settings.income_base_pin : null });
+  const regular = paydays.filter((p) => !p.extra);
+  if (!paydays.length || !income.amount) return { paydays, income, incomes: paydays.map(() => 0), regularIncomes: regular.map(() => 0), total: income.amount ?? 0 };
+  let weights = regular.map(() => 1);
+  if (sc.kind === "twice") {
+    const slips = payBase(netPerPayday(state)).rows, nets = regular.map(() => []);
+    for (const r of slips) nets[nearestPayday(regular, r.date)].push(r.stable);
+    const days = paydayDays(regular, month);
+    weights = nets.every((l) => l.length) ? nets.map((l) => median(l.slice(-3), "low")) : [days.days1, days.days2];
+  }
+  const regularIncomes = sharePerPayday(income.amount, weights), each = income.perPayday ?? Math.floor(income.amount / regular.length);
+  let r = 0;
+  return { paydays, income, incomes: paydays.map((p) => (p.extra ? each : regularIncomes[r++])), regularIncomes, total: income.amount };
 }
 
 // ---------- the lines of a month ----------
@@ -82,17 +138,19 @@ export function paydayShares(settings, line, incomes) {
 
 // The whole Budget of a month in its three views.
 export function budgetPlan(state, settings, month) {
-  const { lines, hidden } = budgetLines(state, settings, month), { paydays, income, incomes, total } = paydayIncomes(state, settings, month);
-  const placed = sum(lines.map((l) => l.amount));
+  const { lines, hidden } = budgetLines(state, settings, month), { paydays, income, incomes, regularIncomes, total } = paydayIncomes(state, settings, month);
+  const placed = sum(lines.map((l) => l.amount)), shares = new Map(lines.map((l) => [l.key, paydayShares(settings, l, regularIncomes)]));
+  let reg = 0;
   const perPayday = paydays.map((p, i) => {
-    const rows = lines.map((l) => ({ ...l, amount: paydayShares(settings, l, incomes)[i] })), p_ = sum(rows.map((r) => r.amount));
-    return { ...p, income: incomes[i], rows, placed: p_, left: incomes[i] - p_ };
+    const at = p.extra ? null : reg++;   // an extra payday takes no share of any line
+    const rows = lines.map((l) => ({ ...l, amount: at === null ? 0 : shares.get(l.key)[at] })), p_ = sum(rows.map((r) => r.amount));
+    return { ...p, reg: at, income: incomes[i], rows, placed: p_, left: incomes[i] - p_ };
   });
   const weeks = lines.map((l) => ({ ...l, amount: weekFigure(l.amount) })), weekPlaced = sum(weeks.map((r) => r.amount));
   const weekIncome = weekFigure(total);
   // what rounding down leaves out of the guide, per month: (monthly - weekly x 52 / 12), in whole centavos rounded down
   const roundedAway = Math.floor((placed * 12 - sum(weeks.map((r) => r.amount)) * 52) / 12);
-  return { month, income, lines, hidden, paydays,
+  return { month, income, lines, hidden, paydays, regularIncomes,
     monthView: { income: total, rows: lines, placed, left: total - placed },
     perPayday,
     perWeek: { income: weekIncome, rows: weeks, placed: weekPlaced, left: weekIncome - weekPlaced, roundedAway } };
@@ -146,22 +204,22 @@ export function setPaydayAmount(state, settings, line, incomes, index, amount, c
 // VERIFIED-spent in each category inside it (a held count gap and the entry that cancels it are not spending), and the pay that really arrived in it
 // (verified income entries). Nothing is stored. The result is keyed by payday index; `spent` by category id.
 export function paydayProgress(state, settings, month, { categoryMaps = [] } = {}) {
-  const paydays = paydaysFor(settings);
+  const paydays = paydaysFor(settings, month);
   if (!paydays.length) return [];
-  const [y, m] = month.split("-").map(Number), pseudo = { paydays: paydays.map((p) => ({ day: p.day })) };
+  const after = payDatesIn(scheduleOf(settings), nextMonth(month))[0]?.date ?? null;
   const expense = new Set(state.categories.filter((c) => c.kind === "expense").map((c) => c.id)), income = new Set(state.categories.filter((c) => c.kind === "income").map((c) => c.id));
   const txById = new Map(state.transactions.map((t) => [t.id, t])), held = heldIds(state);
-  return paydays.map((p) => {
-    const date = month + "-" + String(dayIn(p.day, y, m)).padStart(2, "0"), period = cutoffFor(pseudo, date), spent = {};
+  return paydays.map((p, i) => {
+    const nextDate = paydays[i + 1]?.date ?? after, start = p.date, end = nextDate ? iso(ms(nextDate) - DAY) : `${month}-${String(dayIn("last", ...month.split("-").map((x) => Number(x)))).padStart(2, "0")}`, spent = {};
     let received = 0, count = 0;
     for (const e of state.entries) {
       if (e.category_id == null) continue;
       const t = txById.get(e.transaction_id);
-      if (!t || t.status !== "verified" || held.has(t.id) || t.date < period.start || t.date > period.end) continue;
-      if (expense.has(e.category_id)) { const id = reportingCategory(categoryMaps, e.category_id, date); spent[id] = (spent[id] ?? 0) + e.amount; }
+      if (!t || t.status !== "verified" || held.has(t.id) || t.date < start || t.date > end) continue;
+      if (expense.has(e.category_id)) { const id = reportingCategory(categoryMaps, e.category_id, p.date); spent[id] = (spent[id] ?? 0) + e.amount; }
       else if (income.has(e.category_id)) { received -= e.amount; count++; }   // income is a credit, stored negative
     }
-    return { ...p, start: period.start, end: period.end, spent, received, count };
+    return { ...p, start, end, spent, received, count };
   });
 }
 
@@ -232,7 +290,7 @@ export function applyPlanMigration(state, settings, choices, { newId, now = new 
   }
   if (review.goals.length) set.goal_monthly = { ...(set.goal_monthly ?? {}), ...Object.fromEntries(review.goals.map((g) => [g.goal_id, g.amount])) };
   if (review.buffer) set.buffer_monthly = review.buffer;
-  if (!set.pay_schedule) set.pay_schedule = { days: plan.paydays.map((p) => p.day) };
+  if (!set.pay_schedule) set.pay_schedule = plan.paydays.length === 1 ? { kind: "monthly", days: [plan.paydays[0].day] } : { kind: "twice", days: plan.paydays.map((p) => p.day) };
   set.plan_moved = month;
   return { ok: true, state: st, settings: set, changes };
 }
