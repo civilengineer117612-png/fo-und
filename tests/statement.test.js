@@ -167,7 +167,7 @@ test("statement follow-ups: unsure lines wait for your choice, a failed check ho
   assert.match(app, /data-action="stm-choose" data-id="\$\{esc\(g\.key\)\}" data-pick="spending" aria-pressed="\$\{all\("spending"\)\}"/, "neither choice is pressed at first: one row per person");
   assert.match(app, /lines need"\} your choice<\/b>: left out until you choose/);
   assert.match(app, /held = !!f\.statement && !f\.statement\.check\.ok && !f\.looked;/);
-  assert.match(app, /\(p\.lines\.length \+ mvMake \|\| \(f\.statement && f\.keep !== false\)\) && acct && !held \? "" : " disabled"/, "Add stays off while held (and with nothing to add and nothing to keep)");
+  assert.match(app, /\(p\.lines\.length \+ mvMake \|\| \(f\.statement && f\.keep !== false\)\) && acct && !held && !gapAsk \? "" : " disabled"/, "Add stays off while held (and with nothing to add and nothing to keep)");
   assert.match(app, /if \(form\.statement && !form\.statement\.check\.ok && !form\.looked\) break;/, "and saving is refused too, not just greyed");
   assert.match(app, /data-action="stm-looked" aria-pressed="\$\{!!f\.looked\}">I looked at the amounts</);
   assert.match(app, /activeAccounts\(\)\.filter\(\(a\) => a\.class === \(statement\.style === "card" \? "liability" : "asset"\) && !M\.isPocket\(a\) && a\.bank === statement\.bankId\)/, "the ordinary accounts linked to the statement's bank (pockets of that bank do not count); a card statement looks among the bank's cards");

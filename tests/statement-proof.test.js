@@ -96,3 +96,27 @@ test("the screen: the gap is kept only through the copy, and the window offers t
   assert.match(app, /data-action="stm-gap" aria-pressed="\$\{keepGap\}">Keep the difference as not yet explained/);
   assert.match(app, /case "stm-gap": form\.keepGap = !\(form\.keepGap \?\? true\)/);
 });
+
+test("GUARD: a gap of more than half the balance is asked first: two plain choices, and Add waits for one", () => {
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  assert.match(app, /gapAsk = proofAsset && proofBig && f\.keepGap === undefined/);
+  assert.match(app, /&& acct && !held && !gapAsk \? "" : " disabled"/, "Add is off until the owner chooses");
+  assert.match(app, /data-action="stm-gap-set" data-id="\$\{v\}" aria-pressed="\$\{f\.keepGap === v\}">/);
+  assert.match(app, /case "stm-gap-set": form\.keepGap = id === "true"/);
+  assert.match(app, /if \(big && base\.accounts\.find\(\(a\) => a\.id === accountId\)\?\.class === "asset" && form\.keepGap === undefined\) \{ showToast\(/, "and a save without the choice is refused");
+  assert.match(app, /The difference is more than half of the balance/);
+});
+test("GUARD: the line between 'half' and not: more than half asks, exactly half or less is kept by default", async () => {
+  const { bigGap } = await import("../src/model/index.js");
+  assert.equal(bigGap(1000000, 400000), true, "the bank says 4,000 against 10,000: 60% is out");
+  assert.equal(bigGap(1000000, 500000), false, "exactly half");
+  assert.equal(bigGap(1000000, 950000), false);
+  assert.equal(bigGap(1000000, 0), true, "a closing of 0 against any balance");
+});
+test("GUARD: a card statement SHOWS its proof result and makes no held entry", () => {
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  assert.match(app, /Count the card in the Weekly review to settle the difference\./);
+  assert.match(app, /proof\.card \? "owe" : "show"/, "the card result is worded as what is owed");
+  const c = spend(base(), "c1", "2026-10-10", 4000, "card"), pr = statementBalanceProof(c, { account_id: "card", summary: { closing: 3000 }, period: P });
+  assert.equal(pr.ok, true); assert.equal(planStatementGap(c, pr, { account_id: "card", newId: id, unlogged_category_id: UNLOGGED_CATEGORY_ID, now: NOW }).state, c);
+});
