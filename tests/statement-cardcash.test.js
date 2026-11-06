@@ -47,6 +47,7 @@ test("no Cash account, or more than one card that could be meant: nothing is gue
   assert.equal(moveTarget(s, "card", "maribank"), null);
   assert.equal(moveTarget({ ...s, accounts: [...s.accounts.slice(0, 2), a("c2", "Card Two", { class: "liability", bank: "maribank" })] }, "card", "maribank"), "c2", "the statement's bank picks its card");
   const mv = statementMoves(s, [L("2026-10-12", "ATM Cash Withdrawal", 100000)], { account_id: "sav" });
+  assert.deepEqual([mv[0].needs, mv[0].to], [true, null], "the line is never silent: it says it needs an account");
   const r = planStatementMoves(s, mv, { account_id: "sav", newId: () => "x", now: NOW });
   assert.equal(r.count, 0); assert.equal(r.noTarget, 1); assert.equal(r.state, s);
 });
@@ -71,4 +72,37 @@ test("two Cash accounts: which one is not guessed; a spend of the same amount is
   const s0 = { ...base(), categories: [{ id: "cat-food", name: "Food", kind: "expense", role: "food" }] };
   const r = planExpense(s0, { transaction_id: "e1", date: "2026-10-12", payee: "Shop", category_id: "cat-food", amount: 100000, account_id: "sav", source: "manual" }, NOW);
   assert.equal(loggedMove(applyDrafts(s0, r.drafts), { date: "2026-10-12", amount: 100000, accountId: "sav", direction: "out" }), null);
+});
+
+test("NOT IMPORTED: CHOOSE THE ACCOUNT: with no obvious target the line waits for one pick, then imports like any line", () => {
+  const two = { ...base(), accounts: [a("sav", "Sample Savings"), a("cashA", "Cash wallet", { opening_balance: 0 }), a("cashB", "Cash envelope", { opening_balance: 0 }), a("c1", "Card One", { class: "liability", opening_balance: 0 }), a("c2", "Card Two", { class: "liability", opening_balance: 0 })] };
+  const lines = [L("2026-10-10", "Credit Card Bill Repayment", 200000), L("2026-10-12", "ATM Cash Withdrawal", 100000)];
+  const none = statementMoves(two, lines, { account_id: "sav" });
+  assert.deepEqual(none.map((m) => [m.moveTo, m.needs, m.to]), [["card", true, null], ["cash", true, null]], "both wait for an account");
+  const picked = statementMoves(two, lines, { account_id: "sav", chosen: { cash: "cashB", card: "c2" } });
+  assert.deepEqual(picked.map((m) => [m.needs, m.to]), [[false, "c2"], [false, "cashB"]]);
+  let n = 0; const r = planStatementMoves(two, picked, { account_id: "sav", newId: () => "d" + ++n, now: NOW });
+  assert.ok(r.ok, r.message); assert.equal(r.count, 2); assert.equal(r.noTarget, 0);
+  const legs = (id) => r.state.entries.filter((e) => e.transaction_id === id).map((e) => [e.account_id, e.amount]).sort();
+  assert.deepEqual(legs("d1"), [["c2", 200000], ["sav", -200000]]); assert.deepEqual(legs("d2"), [["cashB", 100000], ["sav", -100000]]);
+  assert.deepEqual(validateState(r.state), []);
+});
+
+test("a pick that is not a real, open account of the right kind, or is the statement's own account, does not count", () => {
+  const two = { ...base(), accounts: [a("sav", "Sample Savings"), a("cashA", "Cash wallet", { opening_balance: 0 }), a("cashB", "Cash envelope", { opening_balance: 0, archived: true }), a("cashC", "Cash drawer", { opening_balance: 0 }), a("c1", "Card One", { class: "liability", opening_balance: 0 }), a("c2", "Card Two", { class: "liability", opening_balance: 0 })] };
+  const atm = [L("2026-10-12", "ATM Cash Withdrawal", 100000)], card = [L("2026-10-10", "Credit Card Bill Repayment", 200000)];
+  for (const pick of ["gone", "sav", "cashB", "c1"]) assert.equal(statementMoves(two, atm, { account_id: "sav", chosen: { cash: pick } })[0].needs, true, "cash: " + pick);
+  for (const pick of ["gone", "sav", "cashA"]) assert.equal(statementMoves(two, card, { account_id: "sav", chosen: { card: pick } })[0].needs, true, "card: " + pick);
+  assert.equal(statementMoves(two, atm, { account_id: "sav", chosen: { cash: "cashA" } })[0].to, "cashA");
+});
+
+test("a line already in the ledger never needs an account; the window lists the rest under its own heading and takes the pick", () => {
+  const two = { ...base(), accounts: [a("sav", "Sample Savings"), a("cashA", "Cash wallet", { opening_balance: 0 }), a("cashB", "Cash envelope", { opening_balance: 0 })] };
+  const s = move(two, "m1", "2026-10-12", "sav", "cashA", 100000);
+  assert.equal(statementMoves(s, [L("2026-10-12", "ATM Cash Withdrawal", 100000)], { account_id: "sav" })[0].needs, false);
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  assert.match(app, /Not imported: choose the account/);
+  assert.match(app, /"stm-acct-" \+ k, "mvacct-" \+ k/);
+  assert.match(app, /case "stm-acct-cash": case "stm-acct-card":/);
+  assert.match(app, /chosen: form\.moveChosen \}\), pm = M\.planStatementMoves/);
 });

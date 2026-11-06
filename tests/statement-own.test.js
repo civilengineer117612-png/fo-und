@@ -24,30 +24,31 @@ test("with no account chosen nothing is made; with one, each open transfer is on
   const s = move(base(), "m1", "2026-10-06", "wal", "sav", 300000);
   const none = planStatementMoves(s, statementMoves(s, LINES, { account_id: "sav" }), { account_id: "sav", newId: () => "x", now: NOW });
   assert.equal(none.count, 0); assert.equal(none.noTarget, 2); assert.equal(none.state, s);
-  let n = 0; const r = planStatementMoves(s, statementMoves(s, LINES, { account_id: "sav", ownAccount: "pk" }), { account_id: "sav", newId: () => "d" + ++n, now: NOW });
+  let n = 0; const r = planStatementMoves(s, statementMoves(s, LINES, { account_id: "sav", chosen: { own: "pk" } }), { account_id: "sav", newId: () => "d" + ++n, now: NOW });
   assert.ok(r.ok, r.message); assert.equal(r.count, 2);
   const legs = (id) => r.state.entries.filter((e) => e.transaction_id === id).map((e) => [e.account_id, e.amount]).sort();
   assert.deepEqual(legs("d1"), [["pk", -500000], ["sav", 500000]], "money in came from the pocket");
   assert.deepEqual(legs("d2"), [["pk", 400000], ["sav", -400000]], "money out went to the pocket");
   assert.deepEqual(r.state.transactions.filter((t) => t.id.startsWith("d")).map((t) => [t.payee, t.status, t.source]), [["Transfer from my account", "draft", "statement"], ["Transfer to my account", "draft", "statement"]]);
   assert.deepEqual(validateState(r.state), []);
-  assert.equal(statementMoves(r.state, LINES, { account_id: "sav", ownAccount: "pk" }).filter((m) => !m.match).length, 0, "a second import adds nothing");
+  assert.equal(statementMoves(r.state, LINES, { account_id: "sav", chosen: { own: "pk" } }).filter((m) => !m.match).length, 0, "a second import adds nothing");
 });
 
 test("the statement's own account, or an account that does not exist, is never the other account", () => {
-  assert.equal(statementMoves(base(), LINES, { account_id: "sav", ownAccount: "sav" })[0].to, null);
-  assert.equal(statementMoves(base(), LINES, { account_id: "sav", ownAccount: "gone" })[0].to, null);
+  assert.equal(statementMoves(base(), LINES, { account_id: "sav", chosen: { own: "sav" } })[0].to, null);
+  assert.equal(statementMoves(base(), LINES, { account_id: "sav", chosen: { own: "gone" } })[0].to, null);
 });
 
 test("never income and never spending: the money counts once, as a move", () => {
-  let n = 0; const r = planStatementMoves(base(), statementMoves(base(), LINES, { account_id: "sav", ownAccount: "wal" }), { account_id: "sav", newId: () => "d" + ++n, now: NOW });
+  let n = 0; const r = planStatementMoves(base(), statementMoves(base(), LINES, { account_id: "sav", chosen: { own: "wal" } }), { account_id: "sav", newId: () => "d" + ++n, now: NOW });
   assert.ok(r.state.entries.every((e) => !e.category_id), "no income or spending line");
 });
 
-test("the import window asks once, and Add passes the choice", () => {
+test("the import window lists them under Not imported: choose the account, asks once, and Add passes the choice", () => {
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
-  assert.match(app, /accountPicker\(accountsFor\(null, true\)\.filter\(\(a\) => a\.id !== f\.account_id\), f\.ownAccount \?\? null, "stm-own-acct"/);
-  assert.match(app, /ownAccount: form\.ownAccount \}\), pm = M\.planStatementMoves/);
+  assert.match(app, /"stm-acct-" \+ k, "mvacct-" \+ k/);
+  assert.match(app, /case "stm-acct-cash": case "stm-acct-card": case "stm-acct-own":/);
+  assert.match(app, /chosen: form\.moveChosen \}\), pm = M\.planStatementMoves/);
 });
 
 test("a kept statement marks the logged move of a transfer in from your own name on statement", () => {
@@ -55,4 +56,12 @@ test("a kept statement marks the logged move of a transfer in from your own name
   const { record, lines } = recordFromParse({ ok: true, style: "out-in", bank: "Sample Bank", period: { from: "2026-10-01", to: "2026-10-31" }, summary: {}, lines: [LINES[0]], check: { ok: true } }, { account_id: "sav", id: "rec1", now: NOW });
   s = { ...s, statementRecords: [record], statementLines: lines };
   assert.deepEqual([...onStatementIds(s)], ["m1"]);
+});
+
+test("NOT IMPORTED: with no account chosen the transfers need one, and are listed, never silent", () => {
+  const mv = statementMoves(base(), LINES, { account_id: "sav" });
+  assert.deepEqual(mv.map((m) => m.needs), [true, true, true]);
+  assert.equal(statementMoves(move(base(), "m1", "2026-10-06", "wal", "sav", 300000), LINES, { account_id: "sav" })[0].needs, false, "one already logged needs nothing");
+  for (const pick of ["sav", "gone"]) assert.equal(statementMoves(base(), LINES, { account_id: "sav", chosen: { own: pick } })[0].needs, true, pick);
+  assert.equal(statementMoves(base(), LINES, { account_id: "sav", chosen: { own: "wal" } })[0].needs, false);
 });
