@@ -3187,8 +3187,10 @@ function renderSheet() {
       const orderLine = sample ? `<p class="note" id="imp-order">${f.order ? `Dates read as <b>${f.order === "dmy" ? "day/month" : "month/day"}</b>: ${esc(sample)} is <b>${esc(longDate(M.previewImport(S(), [{ dateRaw: sample, name: "x", amount: 1 }], f.order).lines[0]?.date ?? today()))}</b>.` : `<b>Which comes first in ${esc(sample)}?</b>`}</p>
         <div class="seg" role="group" aria-label="Date order">${[["dmy", "Day / month"], ["mdy", "Month / day"]].map(([o, t]) => `<button data-action="import-order" data-id="${o}" aria-pressed="${f.order === o}">${t}</button>`).join("")}</div>` : "";
       const st = f.statement, unsure = st ? f.items.filter((x) => x.meaning === "unsure") : [];
+      const mv = st?.parsed && st.leftOut.cardCash ? M.statementMoves(S(), st.parsed.lines, { account_id: f.account_id, bankId: st.bankId }) : [], mvMake = mv.filter((m) => !m.match && m.to).length;
       const stBlock = st ? `<div class="card" style="border:0;padding:0"><dl><dt>Statement</dt><dd>${esc(st.bank ?? "Bank statement")}${st.pocket ? esc(" \u00b7 Go Save pocket ending " + st.pocket.last4) : ""}</dd>${st.period ? `<dt>Period</dt><dd>${esc(yearDate(st.period.from))} to ${esc(yearDate(st.period.to))}</dd>` : ""}<dt>Lines found</dt><dd>${st.lines}</dd><dt>Balance check</dt><dd id="stm-check">${st.check.ok ? "\u2713 " : ""}${esc(st.check.message)}${st.check.ok ? "" : " Look at each amount before you verify it."}</dd></dl>${st.check.bad?.length ? badLinesHtml(st, f) : ""}</div>
         ${st.rewards?.length ? `<p class="note small" id="stm-rewards">${st.rewards.length} cashback, interest or reward ${st.rewards.length === 1 ? "line" : "lines"} (${peso(st.rewards.reduce((n, x) => n + x.amount, 0))}) ${acct?.class === "liability" || st.style === "card" ? "left out: a card cannot receive money. Count the card in the Weekly review to include it." : "will be added as income drafts."}</p>` : ""}
+        ${mv.length ? `<p class="note small" id="stm-cardcash">${mv.length} card ${mv.length === 1 ? "payment or cash withdrawal" : "payments and cash withdrawals"}: moves, not spending. ${[mv.length - mvMake - mv.filter((m) => !m.match && !m.to).length ? `${mv.length - mvMake - mv.filter((m) => !m.match && !m.to).length} already in your ledger` : "", mvMake ? `${mvMake} will be added as ${mvMake === 1 ? "a move draft" : "move drafts"}` : "", mv.some((m) => !m.match && !m.to) ? `${mv.filter((m) => !m.match && !m.to).length} left out: add a Cash account or one card, or log the move yourself` : ""].filter(Boolean).join("; ")}.</p>` : ""}
         ${st.leftOut.moves + st.leftOut.own + st.leftOut.moneyIn ? `<p class="note small" id="stm-left">${[st.leftOut.moves ? `${st.leftOut.moves} ${st.leftOut.moves === 1 ? "move" : "moves"} between your own accounts` : "", st.leftOut.own ? `${st.leftOut.own} ${st.leftOut.own === 1 ? "transfer" : "transfers"} to your own name` : "", st.leftOut.moneyIn ? `${st.leftOut.moneyIn} money in` : ""].filter(Boolean).join(" and ")} left out: not spending.</p>` : ""}
         ${unsure.length ? `<label>Which is it?</label><p class="note small">Money out that does not say what it was, one row per person. Each waits until you choose.</p>${M.unsureByPerson(unsure).map((g) => { const all = (v) => g.ids.every((i) => f.choice?.[i] === v), n = g.ids.length;
           return `<div class="mrow mimp ask"><span class="mn">${esc(g.name)}<small>${n} ${n === 1 ? "line" : "lines"} \u00b7 ${peso(g.total)}</small></span><span class="chips"><button class="chip" data-action="stm-choose" data-id="${esc(g.key)}" data-pick="spending" aria-pressed="${all("spending")}">Spending</button><button class="chip" data-action="stm-choose" data-id="${esc(g.key)}" data-pick="not" aria-pressed="${all("not")}">Not spending</button></span>
@@ -3201,7 +3203,7 @@ function renderSheet() {
           ${f.notRead.length ? `<details><summary>Not read (${f.notRead.length})</summary>${f.notRead.slice(0, 20).map((l) => `<p class="note">${esc(l)}</p>`).join("")}</details>` : ""}
           ${acct && acct.id !== NEW_POCKET ? `<p class="note">Lines dated before you added ${esc(acct.name)} are history only: they do not change its balance.</p>` : ""}
           ${f.statement && !f.statement.check.ok ? `<p><button class="chip wide" data-action="stm-looked" aria-pressed="${!!f.looked}">I looked at the amounts</button></p>` : ""}
-          <p><button class="primary" id="f-save" data-action="save-import"${(p.lines.length || (f.statement && f.keep !== false)) && acct && !held ? "" : " disabled"}>${p.lines.length ? `Add ${p.lines.length} ${p.lines.length === 1 ? "draft" : "drafts"} to Verify` : "Keep the statement"}</button></p>` : ""}`;
+          <p><button class="primary" id="f-save" data-action="save-import"${(p.lines.length + mvMake || (f.statement && f.keep !== false)) && acct && !held ? "" : " disabled"}>${p.lines.length + mvMake ? `Add ${p.lines.length + mvMake} ${p.lines.length + mvMake === 1 ? "draft" : "drafts"} to Verify` : "Keep the statement"}</button></p>` : ""}`;
     }
   } else if (sh.type === "addlineschoice") {
     const p = S().payslips.find((x) => x.id === sh.forId);
@@ -4873,13 +4875,19 @@ async function onClick(el) {
         if (!rw.ok) { showToast(rw.message); break; }
         next = rw.state; if (rw.count) rewardNote = `${rw.count} cashback, interest or reward ${rw.count === 1 ? "line" : "lines"} added as income drafts.`;
       }
+      let moveNote = "";
+      if (form.statement?.parsed && form.statement.leftOut.cardCash) {   // card repayments and ATM withdrawals: move drafts, unless already logged as moves
+        const mvs = M.statementMoves(base, form.statement.parsed.lines, { account_id: accountId, bankId: form.statement.bankId }), pm = M.planStatementMoves(next, mvs, { account_id: accountId, newId: () => newId("tx") });
+        if (!pm.ok) { showToast(pm.message); break; }
+        next = pm.state; if (pm.count) moveNote = `${pm.count} ${pm.count === 1 ? "move draft" : "move drafts"} added.`;
+      }
       if (form.statement && form.keep !== false && form.statement.parsed) {   // keep the statement as read, to prove the months with (Setup, Statements)
         const { record, lines } = M.recordFromParse(form.statement.parsed, { account_id: accountId, id: newId("stm") });
         if (M.alreadyKept(next, record, lines)) kept = "That statement was already kept.";
         else { next = { ...next, statementRecords: [...(next.statementRecords ?? []), record], statementLines: [...(next.statementLines ?? []), ...lines] }; kept = "Statement kept: see Setup, Statements."; }
       }
       ui.sheet = null; renderSheet();
-      if (await commit(next)) showToast([pocketNote, r.count ? `${r.count} ${r.count === 1 ? "draft is" : "drafts are"} waiting in Verify.` : "", rewardNote, kept].filter(Boolean).join(" "));
+      if (await commit(next)) showToast([pocketNote, r.count ? `${r.count} ${r.count === 1 ? "draft is" : "drafts are"} waiting in Verify.` : "", rewardNote, moveNote, kept].filter(Boolean).join(" "));
       break;
     }
     case "plan-cancel": ui.planDraft = null; ui.sheet = null; renderSheet(); break;

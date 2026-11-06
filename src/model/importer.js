@@ -199,7 +199,14 @@ function ledgerIndex(state) {
     if (t.reverses || cancelled.has(t.id) || !spent.has(t.id)) continue;
     const a = spent.get(t.id); let list = byAmount.get(a); if (!list) byAmount.set(a, (list = [])); list.push(t);
   }
-  hit = { tx: state.transactions, nt: state.transactions.length, ne: state.entries.length, accounts, byAmount };
+  // moves: a transaction that touches two or more accounts, by the account and the signed amount it put on it (money out of an account is negative)
+  const byTx = new Map(state.transactions.map((t) => [t.id, t])), legs = new Map();
+  for (const e of state.entries) {
+    const t = byTx.get(e.transaction_id);
+    if (!e.account_id || !t || t.reverses || cancelled.has(t.id) || (accounts.get(t.id)?.size ?? 0) < 2) continue;
+    const k = e.account_id + "|" + e.amount; let list = legs.get(k); if (!list) legs.set(k, (list = [])); if (!list.includes(t)) list.push(t);
+  }
+  hit = { tx: state.transactions, nt: state.transactions.length, ne: state.entries.length, accounts, byAmount, legs };
   indexes.set(state.entries, hit);
   return hit;
 }
@@ -213,6 +220,15 @@ export function loggedMatch(state, { date, name, amount, accountId = null, sourc
 // A bank statement line is the same as a logged entry only on the SAME account, the exact amount, dated within 3 days (owner, P1-8: a card posts days after the purchase,
 // and a spend from the wallet of the same amount is a different spend). Notes, CSV and spreadsheet lines keep the older rule (2 days, any account): they name no account.
 export const STATEMENT_MATCH_DAYS = 3;
+
+// A statement line that is a MOVE (a card repayment, a cash withdrawal, a transfer to your own account): is it already logged as a move? The same account, the
+// exact amount out of it (or into it), within 3 days; each move answers one line; the closest date first. Returns the transaction or null.
+export function loggedMove(state, { date, amount, accountId, direction }, used = new Set(), days = STATEMENT_MATCH_DAYS) {
+  const ix = ledgerIndex(state), signed = direction === "in" ? amount : -amount;
+  const hits = (ix.legs.get(accountId + "|" + signed) ?? []).filter((t) => !used.has(t.id) && dayGap(t.date, date) <= days);
+  hits.sort((x, y) => dayGap(x.date, date) - dayGap(y.date, date));
+  return hits[0] ?? null;
+}
 
 // The plan for a list of read lines: dated, categorised, already-logged ones left out, and a line repeated inside the same list left out unless `includeRepeats`.
 // order: "dmy" | "mdy". `accountId`: the account the lines are from (a statement's lines then match only that account). Returns {lines, duplicates, undated, repeats};

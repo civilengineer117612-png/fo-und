@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-06-card-cash-moves", date: "2026-11-06", text: "In a statement, a credit card repayment and an ATM cash withdrawal are moves, not spending: one you already logged is matched, and one you did not becomes a move draft in Verify." },
   { id: "2026-11-06-statement-match", date: "2026-11-06", text: "A statement line now counts as already logged only on the same account (within three days), and an entry a kept statement shows says on statement in the account's history." },
   { id: "2026-11-02-one-budget", date: "2026-11-02", text: "Plan & Save has one Budget you can see by month, by payday or by week, and your old Pay plan moves into it once, after you look it over." },
   { id: "2026-11-02-one-income", date: "2026-11-02", text: "Suggest a budget and the Pay plan now use the same income (your own figure if you typed one, else your payslips), and a hidden category gets no suggestion." },

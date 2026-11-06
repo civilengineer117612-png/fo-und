@@ -3,7 +3,7 @@
 // fee lines of a proved month into VERIFIED entries (source "statement"). Moves, money in and unsure lines are not turned into entries here
 // (the next phase matches those); they are counted. Pure logic: the app reads files and saves; every amount is in centavos.
 import { applyDrafts, planExpense, verifyDraft } from "./drafts.js";
-import { categoryFor, loggedMatch, STATEMENT_MATCH_DAYS } from "./importer.js";
+import { categoryFor, loggedMatch, loggedMove, STATEMENT_MATCH_DAYS } from "./importer.js";
 import { phTimestamp } from "./util.js";
 
 const key = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -202,9 +202,10 @@ export function onStatementIds(state) {
   if (hit && hit.tx === state.transactions && hit.en === state.entries && hit.rec === state.statementRecords && hit.n === key.length + ":" + state.transactions.length + ":" + state.entries.length) return hit.ids;
   const ids = new Set();
   for (const acc of new Set((state.statementRecords ?? []).map((r) => r.account_id))) {
-    const used = new Set();
+    const used = new Set(), usedMoves = new Set();
     for (const l of accountLines(state, acc)) {
-      if (l.direction !== "out") continue;   // money out answers a spend; moves and money in are matched by their own rules
+      if (l.direction !== "out") continue;   // money out answers a spend or a move; money in is matched by its own rules
+      if (l.meaning === "move") { const mv = loggedMove(state, { date: l.date, amount: l.amount, accountId: acc, direction: "out" }, usedMoves); if (mv) { usedMoves.add(mv.id); ids.add(mv.id); } continue; }
       const m = loggedMatch(state, { date: l.date, name: l.payee || l.text, amount: l.amount, accountId: acc }, used, STATEMENT_MATCH_DAYS);
       if (m) { used.add(m.id); ids.add(m.id); }
     }
