@@ -2932,6 +2932,7 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   await seen(page, "#toast", "Paydays saved.");
   check(JSON.stringify(JSON.parse((await stored(page)).local).settings.pay_schedule) === JSON.stringify({ kind: "biweekly", start: "2026-10-02" }), "every two weeks is saved from one payday");
   await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
+  await page.waitForFunction(() => document.querySelectorAll('#screen button[data-action="bv-payday"]').length === 3, null, { timeout: 5000 }).catch(() => {});
   var tabs = await page.locator('#screen button[data-action="bv-payday"]').allInnerTexts();
   check(JSON.stringify(tabs) === JSON.stringify(["2nd", "16th", "30th (extra)"]), "October has three paydays, the third is extra: " + JSON.stringify(tabs));
   await page.click('#screen button[data-action="bv-payday"][data-id="2"]');
@@ -2941,6 +2942,7 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   await page.click('#screen button[data-action="bv-paydays"]'); await page.waitForSelector('#sheet button[data-action="bv-kind"][data-id="weekly"]');
   await page.click('#sheet button[data-action="bv-kind"][data-id="weekly"]'); await page.click('#sheet button[data-action="bv-wd"][data-id="5"]'); await page.click("#bv-save");
   await seen(page, "#toast", "Paydays saved.");
+  await page.waitForFunction(() => document.querySelectorAll('#screen button[data-action="bv-payday"]').length === 5, null, { timeout: 5000 }).catch(() => {});   // the screen redraws a moment after the toast: wait for the state, then check it
   check(await page.locator('#screen button[data-action="bv-payday"]').count() === 5, "every Friday: five paydays in October 2026");
   check(errors.length === 0, "no script errors"); await ctx.close(); }
 { // an old Pay plan moves into Budget: look it over, one choice, a copy first
