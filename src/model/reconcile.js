@@ -182,13 +182,17 @@ export function moveTarget(state, moveTo, bankId = null) {
   const cards = state.accounts.filter((a) => a.class === "liability" && !a.archived), mine = bankId ? cards.filter((a) => a.bank === bankId) : [];
   return mine.length === 1 ? mine[0].id : cards.length === 1 ? cards[0].id : null;
 }
-export function statementMoves(state, lines, { account_id, bankId = null }) {
+// `chosen` ({cash, card}): the account the owner picked for lines that have no obvious target ("Not imported: choose the account"); it is used only when it is a real,
+// open account of the right kind (Cash: a bank, wallet or cash account; card: a credit card) other than the statement's own. A row with no match and no target says
+// `needs: true`: the window lists it under that heading and it imports like any line once an account is picked. Nothing is ever silently dropped.
+const chosenFor = (state, kind, id, account_id) => { const a = id ? state.accounts.find((x) => x.id === id) : null; return a && !a.archived && a.id !== account_id && a.class === (kind === "card" ? "liability" : "asset") ? a.id : null; };
+export function statementMoves(state, lines, { account_id, bankId = null, chosen = {} }) {
   const used = new Set();
   return lines.filter((l) => l.moveTo && l.direction === "out").map((l) => {
     const m = account_id ? loggedMove(state, { date: l.date, amount: l.amount, accountId: account_id, direction: "out" }, used) : null;
     if (m) used.add(m.id);
-    const to = moveTarget(state, l.moveTo, bankId);
-    return { date: l.date, name: l.payee || l.text, amount: l.amount, moveTo: l.moveTo, match: m?.id ?? null, to: to === account_id ? null : to };
+    const auto = moveTarget(state, l.moveTo, bankId), to = (auto && auto !== account_id ? auto : null) ?? chosenFor(state, l.moveTo, chosen[l.moveTo], account_id);
+    return { date: l.date, name: l.payee || l.text, amount: l.amount, moveTo: l.moveTo, match: m?.id ?? null, to, needs: !m && !to };
   });
 }
 // The drafts for the moves `statementMoves` found not logged. All or nothing. Returns {ok, state, count, noTarget} or {ok:false, message}.
