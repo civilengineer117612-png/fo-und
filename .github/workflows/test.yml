@@ -1,7 +1,9 @@
 name: Tests
 
+# One run per commit (owner, Nov 7): a pull request runs on pull_request only, main runs on push; a branch push alone never runs (it would repeat the pull request's run).
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_call:
 
