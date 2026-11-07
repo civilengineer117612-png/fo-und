@@ -181,6 +181,27 @@ export function planRewards(state, rewards, { account_id, newId, now = new Date(
   return { ok: true, state: next, count, skipped };
 }
 
+// P1-8 fix 7: "NOT ON THIS STATEMENT". The entries in the ledger on the statement's account, dated inside the statement's period, that no statement line answers:
+// the same account, the same signed amount (money out negative; a card purchase is negative too), within 3 days, one line per entry, the closest first. Cancelled
+// entries and the entries that cancel them, and counts with their held gaps (source "reconciliation" or "correction": not bank events) are not listed. Drafts count (they are the owner's own
+// entries). Read-only: nothing is changed or made. Returns [{id, date, payee, amount (signed centavos), status}], oldest first.
+export function notOnStatement(state, lines, { account_id, period = null }) {
+  if (!account_id || !lines.length) return [];
+  const dates = lines.map((l) => l.date).sort(), from = period?.from ?? dates[0], to = period?.to ?? dates[dates.length - 1];
+  const cancelled = new Set(state.transactions.filter((t) => t.reverses).map((t) => t.reverses));
+  const per = new Map();
+  for (const e of countedEntries(state)) if (e.account_id === account_id) per.set(e.transaction_id, (per.get(e.transaction_id) ?? 0) + e.amount);
+  const txs = state.transactions.filter((t) => per.has(t.id) && per.get(t.id) !== 0 && t.date >= from && t.date <= to && !t.reverses && !cancelled.has(t.id) && t.source !== "reconciliation" && t.source !== "correction")
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  const free = lines.map((l) => ({ date: l.date, signed: l.direction === "in" ? l.amount : -l.amount, used: false }));
+  const out = [];
+  for (const t of txs) {
+    const hit = free.filter((l) => !l.used && l.signed === per.get(t.id) && gap(l.date, t.date) <= 3).sort((a, b) => gap(a.date, t.date) - gap(b.date, t.date))[0];
+    if (hit) hit.used = true; else out.push({ id: t.id, date: t.date, payee: t.payee, amount: per.get(t.id), status: t.status });
+  }
+  return out;
+}
+
 // P1-8 fix 3: a statement's card repayments and ATM cash withdrawals (`moveTo` "card" or "cash" on the line) are moves. Each is matched against the moves already
 // logged (`loggedMove`: the statement's account, the exact amount out, within 3 days, one each). One not logged becomes ONE draft move (source "statement") to
 // the Cash account (an asset whose bank is Cash or whose name starts with "Cash"), or to the credit card (the card of the statement's bank, else the only card);
