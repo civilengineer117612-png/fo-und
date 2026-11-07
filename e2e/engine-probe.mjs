@@ -25,4 +25,12 @@ await asked("the stronger photo reader (PaddleOCR on ONNX Runtime) runs", `async
   const boxes = await Promise.race([readBoxes(blob), new Promise((_, no) => setTimeout(() => no(new Error("no answer in 120 s")), 120000))]);
   return "yes, read: " + boxes.map((b) => b.text).join(" / ");
 } catch (e) { return "no: " + (e && e.message ? e.message : String(e)).slice(0, 200); } }`);
+// The SAME picture bytes (an invented payslip drawn once, in Chromium, and kept as e2e/fixtures/sample-payslip-photo.png) read by the stronger reader in this engine.
+// Chromium reads every line exactly; if this engine reads them differently from the same bytes, the difference is in how this engine prepares the picture or runs the reader, not in how the test page was drawn.
+await asked("the invented payslip picture (fixed bytes) read by the stronger reader", `async () => { try {
+  const bytes = await (await fetch(location.origin + "/e2e/fixtures/sample-payslip-photo.png")).blob();
+  const { readBoxes } = await import(location.origin + "/app/paddle.js");
+  const boxes = await Promise.race([readBoxes(bytes), new Promise((_, no) => setTimeout(() => no(new Error("no answer in 150 s")), 150000))]);
+  return boxes.length + " lines: " + boxes.map((b) => b.text).join(" / ");
+} catch (e) { return "no: " + (e && e.message ? e.message : String(e)).slice(0, 200); } }`);
 await browser.close();
