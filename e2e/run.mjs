@@ -1057,6 +1057,8 @@ var bt2 = await text(page, "#screen");
 check(bt2.includes("everyday allowance in GCash is empty") && /Upskill[\s\S]*₱100\.00/.test(bt2) && bt2.includes("₱500.00"), "the draw is listed by category, and the empty allowance is said in words");
 await shot(page, "29-buffer");
 await page.click('#nav button:has-text("Verify")');
+// P0-7: the two "Set aside" entries made by the setup now wait in Verify too, in no fixed order with the spend (same second): check them first, one at a time
+for (let guard = 0; guard < 4 && !(await text(page, "#screen")).includes("Upskill"); guard++) { await page.click('button:has-text("Correct")'); await page.waitForTimeout(400); }
 check((await text(page, "#screen")).includes("Upskill"), "a draft that took from two envelopes still shows its category when verifying");
 await page.click('button:has-text("Correct")'); await seen(page, "#screen", "of");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
