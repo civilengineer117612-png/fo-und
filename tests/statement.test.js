@@ -203,10 +203,10 @@ test("a transfer to or from your own name is a move between your accounts: never
   const page = outInPage({ rows: [["03 MAY", "Sample P. Dela Cruz, Jr.", "Transfer", 0, 100000], ["04 MAY", "Sample P. Dela Cruz, Jr.", "Transfer", 50000, 0], ["05 MAY", "Sample Friend", "Transfer", 20000, 0], ["06 MAY", "Sample Cafe", "Payment", 10000, 0]],
     summary: { opening: 500000, outgoing: 80000, incoming: 100000, closing: 520000 } });
   const r = parseStatement([[t(40, 723, "SAMPLE PEDRO DELA CRUZ JR"), ...page]]);
-  assert.deepEqual(r.lines.map((l) => l.meaning), ["move", "move", "unsure", "spending"]);
-  assert.ok(r.lines[0].own && r.lines[1].own);
+  assert.deepEqual(r.lines.map((l) => l.meaning), ["move", "move", "spending", "spending"], "the friend is spending (P1-8 fix 5): a transfer to another person");
+  assert.ok(r.lines[0].own && r.lines[1].own); assert.ok(r.lines[2].person);
   assert.deepEqual(statementLeftOut(r.lines), { moves: 0, cardCash: 0, own: 2, moneyIn: 0, rewards: 0 }, "said as transfers to your own name");
-  assert.equal(statementItems(r.lines).filter((i) => i.meaning === "unsure").length, 1, "only the friend is asked about");
+  assert.equal(statementItems(r.lines).filter((i) => i.meaning === "unsure").length, 0, "nobody is asked about");
   const noName = parseStatement([page]);
   assert.deepEqual(noName.lines.map((l) => l.meaning), ["in", "unsure", "unsure", "spending"], "with no name at the top, nothing is guessed");
 });

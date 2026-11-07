@@ -170,7 +170,7 @@ export function categoryFor(state, item, book = null) {
   if (tile) return { category_id: tile.category_id, how: "your quick tile" };
   const past = categoryFromHistory(state, item.name);   // the category you gave this same name most often in your own verified entries
   if (past && cats.some((c) => c.id === past)) return { category_id: past, how: "your past entries" };
-  const kind = guessType(item.name) ?? (item.label ? guessType(item.label) : null), byKind = kind ? categoriesOfKind(cats, kind)[0] : null;
+  const kind = item.person ? null : guessType(item.name) ?? (item.label ? guessType(item.label) : null), byKind = kind ? categoriesOfKind(cats, kind)[0] : null;
   if (byKind) return { category_id: byKind.id, how: "the name" };
   return { category_id: UNLOGGED_CATEGORY_ID, how: "not known: choose it in Verify" };
 }
