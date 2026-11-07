@@ -1,0 +1,25 @@
+name: WebKit probe (temporary, probe branch only)
+on:
+  push:
+    branches: [claude/p18-rs-probe]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ENGINE: webkit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright and WebKit
+        run: |
+          npm install -g playwright@1.64.1
+          npx playwright install --with-deps webkit
+      - name: Serve the repository
+        run: |
+          python3 -m http.server 8124 >/dev/null 2>&1 &
+          for i in $(seq 1 20); do curl -fs http://localhost:8124/app/index.html >/dev/null && exit 0; sleep 1; done; exit 1
+      - name: Probe
+        run: node e2e/engine-probe.mjs 2>&1 | tee probe.log
