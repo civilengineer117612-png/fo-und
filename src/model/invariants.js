@@ -2,6 +2,7 @@
 // a list of violations ({code, severity, message}); none of them touch storage.
 import { deepEqual } from "./util.js";
 import { reserveShortfalls } from "./balances.js";
+import { isEvidence } from "./entryrule.js";
 
 const err = (code, message, extra = {}) => ({ code, severity: "error", message, ...extra });
 const warn = (code, message, extra = {}) => ({ code, severity: "warning", message, ...extra });
@@ -89,6 +90,14 @@ export function checkDuplicate(state, transaction, entries) {
 export function checkEntryFinal(state, transaction) {
   const old = state.transactions.find((t) => t.id === transaction.id);
   return old && old.status === "verified" ? [err("ENTRY_FINAL", "this entry is already verified and cannot be saved again (" + transaction.id + ")")] : [];
+}
+
+// 4b2. ONE RULE FOR EVERY ENTRY PATH (owner, Nov 7, P0-7): a NEW entry is saved as a draft unless it carries evidence (`verified_by`: a payslip check, a count, a statement,
+// or the correction it is). So no screen can make a verified entry by typing. An entry already in the ledger is never judged here (past entries are not changed), and the
+// owner's confirming tap (Verify) turns an existing draft into a verified one without going through a new save.
+export function checkNewVerified(state, transaction) {
+  if (transaction.status !== "verified" || state.transactions.some((t) => t.id === transaction.id)) return [];
+  return isEvidence(transaction.verified_by) ? [] : [err("ENTRY_NO_EVIDENCE", "a new entry waits in Verify unless it carries evidence (" + transaction.id + ")")];
 }
 
 // 4c. A correction (a transaction with `reverses`) is a REVERSING ENTRY (docs/ACCOUNTING.md, principle 7): it names ONE verified entry that exists, that entry is

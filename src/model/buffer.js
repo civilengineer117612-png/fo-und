@@ -154,7 +154,7 @@ export function planEnvelopeSetup(state, input, now = new Date()) {
   const stamp = phTimestamp(now);
   for (const [i, amount, name] of [[0, input.allowance_amount, "Allowance"], [1, input.buffer_amount, "Overrun Buffer"]]) {
     if (amount === 0) continue;
-    const transaction = { id: input.transaction_ids[i], date: input.date, payee: "Set aside: " + name, memo: "", status: "verified", source: "manual", created_at: stamp, verified_at: stamp };
+    const transaction = { id: input.transaction_ids[i], date: input.date, payee: "Set aside: " + name, memo: "", status: "draft", source: "manual", created_at: stamp };
     const entries = [
       { transaction_id: transaction.id, account_id: account.id, envelope_id: ids[i], amount },
       { transaction_id: transaction.id, account_id: account.id, amount: -amount },
@@ -173,7 +173,7 @@ export function planBufferFunding(state, input, now = new Date()) {
   if (input.from_account_id === input.gcash_account_id) return failv("SAME_ACCOUNT", "choose a different account to take the money from");
   if (!state.accounts.some((a) => a.id === input.from_account_id)) return failv("UNKNOWN_ACCOUNT", "no account " + input.from_account_id);
   const stamp = phTimestamp(now);
-  const transaction = { id: input.transaction_id, date: input.date, payee: "To Overrun Buffer", memo: "", status: "verified", source: "manual", created_at: stamp, verified_at: stamp };
+  const transaction = { id: input.transaction_id, date: input.date, payee: "To Overrun Buffer", memo: "", status: "draft", source: "manual", created_at: stamp };
   const entries = [
     { transaction_id: transaction.id, account_id: input.gcash_account_id, envelope_id: input.buffer_envelope_id, amount: input.amount },
     { transaction_id: transaction.id, account_id: input.from_account_id, amount: -input.amount },

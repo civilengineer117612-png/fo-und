@@ -72,7 +72,7 @@ export function verifyDraft(state, id, now = new Date(), opts = {}) {
   if (!main.ok) return { ok: false, violations: main.violations, state };
   const swap = new Map([[id, main.transaction]]);
   for (const partner of state.transactions.filter((x) => partnerIds(id).includes(x.id) && x.status === "draft")) {
-    const p = verifyTransaction(state, partner.id, now);
+    const p = verifyTransaction(state, partner.id, now, opts.evidence ? { evidence: opts.evidence } : {});
     if (p.ok) swap.set(partner.id, p.transaction);
   }
   return { ok: true, violations: [], state: { ...state, transactions: state.transactions.map((t) => swap.get(t.id) ?? t) } };

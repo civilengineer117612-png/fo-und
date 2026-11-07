@@ -5,6 +5,7 @@
 import { applyDrafts, planExpense, verifyDraft } from "./drafts.js";
 import { categoryFor, loggedMatch, loggedMove, STATEMENT_MATCH_DAYS } from "./importer.js";
 import { phTimestamp } from "./util.js";
+import { EVIDENCE } from "./entryrule.js";
 
 const key = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 // A card statement prints what is OWED: a purchase raises the figure and a payment lowers it, the other way round from an account that holds money.
@@ -135,13 +136,13 @@ export function acceptMonth(state, accountId, month, { newId, now = new Date() }
     const same = loggedMatch(next, { date: l.date, name, amount: l.amount, accountId }, used, STATEMENT_MATCH_DAYS);
     if (same) {
       used.add(same.id);
-      if (same.status === "draft") { const v = verifyDraft(next, same.id, now); if (!v.ok) return { ok: false, message: `${name} (${l.date}): ${v.violations[0].message}` }; next = v.state; verified++; } else alreadyLogged++;
+      if (same.status === "draft") { const v = verifyDraft(next, same.id, now, { evidence: EVIDENCE.statement }); if (!v.ok) return { ok: false, message: `${name} (${l.date}): ${v.violations[0].message}` }; next = v.state; verified++; } else alreadyLogged++;
       continue;
     }
     const id = newId(), r = planExpense(next, { transaction_id: id, date: l.date, payee: name, category_id: categoryFor(next, item).category_id, amount: l.amount, account_id: accountId, source: "statement" }, now);
     if (!r.ok) return { ok: false, message: `${name} (${l.date}): ${r.violations[0].message}` };
     next = applyDrafts(next, r.drafts);
-    const v = verifyDraft(next, id, now);
+    const v = verifyDraft(next, id, now, { evidence: EVIDENCE.statement });   // a line of a month the statement proves is verified by that statement
     if (!v.ok) return { ok: false, message: `${name} (${l.date}): ${v.violations[0].message}` };
     next = v.state; used.add(id); made++;
   }

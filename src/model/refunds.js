@@ -8,6 +8,7 @@ import { spendingByCategory, monthOf } from "./reports.js";
 import { incomeBySource } from "./income.js";
 import { phTimestamp, isPhDate } from "./util.js";
 import { payeeKey } from "./payees.js";
+import { settle, correctionOf } from "./entryrule.js";
 
 export const REFUND_CATEGORY_ID = "cat-refund";
 const fail = (code, message) => ({ ok: false, violations: [{ code, severity: "error", message }], state: undefined });
@@ -22,7 +23,7 @@ export function planRefund(state, input, now = new Date()) {
   if (!cat || cat.kind !== "expense") return fail("UNKNOWN_CATEGORY", "choose the spending this refund is for");
   if (!isPhDate(input.date)) return fail("BAD_DATE", "date must be like 2026-10-15");
   const stamp = phTimestamp(now);
-  const transaction = { id: input.transaction_id, date: input.date, payee: input.payee || "Refund", memo: input.memo ?? "", status: "verified", source: "manual", created_at: stamp, verified_at: stamp };
+  const transaction = { id: input.transaction_id, date: input.date, payee: input.payee || "Refund", memo: input.memo ?? "", status: "draft", source: "manual", created_at: stamp };
   const entries = [{ transaction_id: transaction.id, account_id: account.id, amount: input.amount }, { transaction_id: transaction.id, category_id: cat.id, amount: -input.amount }];
   const result = checkTransactionSave(state, { transaction, entries });
   return { ...result, transaction, entries, state: result.ok ? { ...state, transactions: [...state.transactions, transaction], entries: [...state.entries, ...entries] } : state };
@@ -68,8 +69,8 @@ export function planRefundRepair(state, choices, { now = new Date() } = {}) {
     const cat = state.categories.find((c) => c.id === choices[r.transaction_id]);
     if (!cat || cat.kind !== "expense") return { ok: false, violations: [{ code: "UNKNOWN_CATEGORY", severity: "error", message: "choose the spending each refund was for" }], transactions: [], entries: [], count: 0, months: [] };
     const orig = state.transactions.find((t) => t.id === r.transaction_id);
-    const rev = { id: "rev:" + orig.id, date: orig.date, payee: orig.payee, memo: "Correction of " + (orig.payee || "an entry") + (orig.memo ? " (" + orig.memo + ")" : ""), status: "verified", source: "correction", reverses: orig.id, created_at: stamp, verified_at: stamp };
-    const fixed = { id: "refund:" + orig.id, date: orig.date, payee: orig.payee || "Refund", memo: "Refund counted against " + cat.name, status: "verified", source: "correction", corrects: orig.id, created_at: stamp, verified_at: stamp };
+    const rev = settle({ id: "rev:" + orig.id, date: orig.date, payee: orig.payee, memo: "Correction of " + (orig.payee || "an entry") + (orig.memo ? " (" + orig.memo + ")" : ""), source: "correction", reverses: orig.id, created_at: stamp }, correctionOf(orig.payee), stamp);
+    const fixed = settle({ id: "refund:" + orig.id, date: orig.date, payee: orig.payee || "Refund", memo: "Refund counted against " + cat.name, source: "correction", corrects: orig.id, created_at: stamp }, correctionOf(orig.payee), stamp);
     const revEntries = state.entries.filter((e) => e.transaction_id === orig.id).map(({ transaction_id, ...e }) => ({ ...e, transaction_id: rev.id, amount: -e.amount }));
     const newEntries = [{ transaction_id: fixed.id, account_id: r.account_id, amount: r.amount }, { transaction_id: fixed.id, category_id: cat.id, amount: -r.amount }];
     for (const [t, es] of [[rev, revEntries], [fixed, newEntries]]) {

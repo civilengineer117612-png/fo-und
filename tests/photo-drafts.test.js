@@ -70,8 +70,9 @@ test("a scanned payslip becomes an income DRAFT with its own name, and the amoun
   assert.equal(fixed.state.transactions[0].edited_before_verify, true);
   assert.equal(fixed.state.entries.find((e) => e.account_id === "chk").amount, 1100000);
 });
-test("typed pay is unchanged: verified at once, called Pay received", () => {
+test("typed pay waits in Verify (P0-7: typing alone makes a draft), called Pay received", () => {
   const p = planPayReceived(makeState(), { transaction_id: "tx3", date: "2026-10-15", amount: 100000, account_id: "chk" }, NOW);
-  assert.equal(p.transaction.status, "verified");
+  assert.equal(p.transaction.status, "draft");
+  assert.equal(p.transaction.verified_by, undefined);
   assert.equal(p.transaction.payee, "Pay received");
 });

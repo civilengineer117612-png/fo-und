@@ -26,7 +26,7 @@ const received = (s, id, amount) => { const t = { id, date: "2026-10-09", payee:
 // ---------- the save check enforces reversals ----------
 const orig = (s) => { const t = { id: "o1", date: "2026-10-01", payee: "", memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS }, es = [{ transaction_id: "o1", category_id: "food", amount: 100 }, { transaction_id: "o1", account_id: "chk", amount: -100 }];
   return { ...s, transactions: [...s.transactions, t], entries: [...s.entries, ...es] }; };
-const rev = (id, target, amount = -100, o = {}) => ({ transaction: { id, date: "2026-10-01", payee: "", memo: "", status: "verified", source: "correction", reverses: target, created_at: TS, verified_at: TS, ...o },
+const rev = (id, target, amount = -100, o = {}) => ({ transaction: { id, date: "2026-10-01", payee: "", memo: "", status: "verified", source: "correction", reverses: target, created_at: TS, verified_at: TS, verified_by: "correction of an entry", ...o },
   entries: [{ transaction_id: id, category_id: "food", amount }, { transaction_id: id, account_id: "chk", amount: -amount }] });
 test("a reversal must name a verified entry that exists", () => {
   const s = orig(base());

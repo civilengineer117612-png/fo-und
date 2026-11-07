@@ -4,6 +4,7 @@
 import { isPocket } from "./banks.js";
 import { planTransfer } from "./transfers.js";
 import { planCheckIn } from "./checkin.js";
+import { EVIDENCE } from "./entryrule.js";
 
 // gaps: [{account_id, gap}] with gap = counted - ledger for banks, wallets, cash and pockets (negative: money missing, positive: more than the ledger says).
 // Returns [{from_id, to_id, amount}]: the money LEFT `from_id` (the short one) and ARRIVED in `to_id` (the one that is over). Each account is used once.
@@ -30,7 +31,7 @@ export function proposeMoves(gaps, accounts) {
 // counts: [{input}, {input}] the two planCheckIn inputs (one per account of the move); ids: {move_id}. Returns {ok, violations, state, checkIns, move_id}.
 export function planProposedMove(state, { move, counts, move_id }, now = new Date()) {
   const moved = planTransfer(state, { transaction_id: move_id, date: counts[0].input.date, from_account_id: move.from_id, to_account_id: move.to_id, amount: move.amount,
-    payee: "Moved (found at count)", source: "manual" }, now);
+    payee: "Moved (found at count)", source: "manual", evidence: EVIDENCE.count }, now);
   if (!moved.ok) return { ok: false, violations: moved.violations };
   let next = moved.state; const checkIns = [];
   for (const { input } of counts) {

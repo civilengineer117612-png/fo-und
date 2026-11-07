@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parsePlan, addPlan, planInEffect, planTotals, planEmergencyTarget, cutoffFor, planProgress, planIncome, planPayReceived } from "../src/model/index.js";
+import { parsePlan, addPlan, planInEffect, planTotals, planEmergencyTarget, cutoffFor, planProgress, planIncome, planPayReceived, verifyDraft } from "../src/model/index.js";
 import { makeState, account, tx, entry, commit } from "./fixtures.js";
 
 // Invented numbers only, in whole pesos. Each payday's lines add up to its expected income exactly.
@@ -111,7 +111,7 @@ test("income variance compares the plan's planning income with the true pay rece
   s.categories.push({ id: "sal", name: "Salary", kind: "income" });
   s.accounts.push(account({ id: "bank", name: "Test Bank", class: "asset" }));
   const plan = parsePlan(file()).plan;   // first payday planning income: 100000 centavos
-  const rec = (id, date, amount) => planPayReceived(s, { transaction_id: id, date, amount, account_id: "bank" });
+  const rec = (id, date, amount) => { const r = planPayReceived(s, { transaction_id: id, date, amount, account_id: "bank" }); return r.ok ? { ...r, state: verifyDraft(r.state, id).state } : r; };   // typed pay waits in Verify (P0-7); the owner verifies it, then it counts
   let r = rec("p1", "2026-10-15", 99998);       // true pay 2 centavos short of the plan
   assert.equal(r.ok, true);
   Object.assign(s, r.state);
@@ -123,12 +123,12 @@ test("income variance compares the plan's planning income with the true pay rece
   assert.deepEqual([next.planned, next.actual, next.variance], [240000, 0, -240000], "a payday not yet received shows the whole plan as short");
   assert.equal(plan.paydays[0].income, 100000, "the plan is untouched");
 });
-test("pay received is refused when it makes no sense, and is saved verified when it does", () => {
+test("pay received is refused when it makes no sense, and is saved as a draft (waiting in Verify) when it does", () => {
   const s = makeState();
   s.categories.push({ id: "sal", name: "Salary", kind: "income" });
   s.accounts.push(account({ id: "bank", name: "Test Bank", class: "asset" }));
   const ok = planPayReceived(s, { transaction_id: "p", date: "2026-10-15", amount: 977698, account_id: "bank" });
-  assert.deepEqual([ok.ok, ok.transaction.status, ok.entries.map((e) => e.amount)], [true, "verified", [977698, -977698]]);
+  assert.deepEqual([ok.ok, ok.transaction.status, ok.entries.map((e) => e.amount)], [true, "draft", [977698, -977698]]);
   for (const [o, code] of [[{ amount: 0 }, "BAD_AMOUNT"], [{ amount: 1.5 }, "BAD_AMOUNT"], [{ account_id: "card" }, "UNKNOWN_ACCOUNT"], [{ category_id: "food" }, "UNKNOWN_CATEGORY"], [{ date: "10/15" }, "BAD_DATE"]]) {
     assert.equal(planPayReceived(s, { transaction_id: "p", date: "2026-10-15", amount: 100, account_id: "bank", ...o }).violations[0].code, code);
   }

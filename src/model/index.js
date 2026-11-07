@@ -1,7 +1,7 @@
 // Entry points. A "save" is validated against the state as it WOULD be after the save;
 // nothing is written here. The caller persists only if result.ok is true.
 import { validateShape } from "./schema.js";
-import { checkEntriesBalance, checkReferences, checkReserve, checkDuplicate, checkEntryFinal, checkReversal, checkRestore, checkRulesAppendOnly } from "./invariants.js";
+import { checkEntriesBalance, checkReferences, checkReserve, checkDuplicate, checkEntryFinal, checkNewVerified, checkReversal, checkRestore, checkRulesAppendOnly } from "./invariants.js";
 import { countedEntries } from "./balances.js";
 
 export { SCHEMAS, validateShape } from "./schema.js";
@@ -42,6 +42,7 @@ export function checkTransactionSave(state, { transaction, entries }) {
     ...checkReserve(state.accounts, countedEntries(state), countedEntries(after)),
     ...checkDuplicate(state, transaction, entries),
     ...checkEntryFinal(state, transaction),
+    ...checkNewVerified(state, transaction),
     ...checkReversal(state, transaction, entries),
     ...checkRestore(state, transaction, entries),
   ]);
@@ -114,7 +115,7 @@ export { SINKING_LABEL, SINKING_NOTE, SINKING_HELP, sinkingStart, sinkingBalance
 export { MAX_INTRO_SHOWS, INTROS, introFor, shouldShowIntro, markIntro, introDrawing } from "./intros.js";
 
 export { recordFromParse, accountLines, proveMonths, acceptMonth, monthSummary, failingLines, alreadyKept, removeStatement, onStatementIds } from "./proof.js";
-export { pairMoves, moveLogged, planPairedMove, matchPayslips, statementDifference, planMissingDraft, planRewards, startFromStatement, planPocketFromStatement, moveTarget, statementMoves, planStatementMoves, notOnStatement, statementBalanceProof, planStatementGap } from "./reconcile.js";
+export { pairMoves, moveLogged, planPairedMove, matchPayslips, statementDifference, planMissingDraft, planRewards, startFromStatement, planPocketFromStatement, moveTarget, statementMoves, planStatementVerify, planStatementMoves, notOnStatement, statementBalanceProof, planStatementGap } from "./reconcile.js";
 export { payeeKey, payeeLabel, withPayeeBook, spendingByPayee, payeeMonths, payeeCount, namePayee, categoryFromBook } from "./payees.js";
 export { RANGES, dailySpending, firstSpendingDate, rangeFor, stepFor, seriesFor, measureSpan, zoomWindow, addDays, daysBetween } from "./spendline.js";
 export { payerFor, nextDue, lastStatementDate, cardStatement, setCardDetails, planCardPayment, makeCardDueDrafts, DUE_CATCH_UP_DAYS } from "./cardpay.js";
@@ -122,3 +123,4 @@ export { payerFor, nextDue, lastStatementDate, cardStatement, setCardDetails, pl
 export { arranged, orderFrom } from "./order.js";
 export { PIN_LENGTH, AWAY_MS, FREE_TRIES, FIRST_WAIT, LONGEST_WAIT, validPin, lockOn, newSalt, hashPin, makeRecord, checkPin, waitSeconds, secondsLeft, afterWrong, afterRight, shouldLock } from "./applock.js";
 export { KNOWN_WORDS, maskText, maskedLayout, layoutReport } from "./layoutreport.js";
+export { EVIDENCE, correctionOf, isEvidence, settle } from "./entryrule.js";

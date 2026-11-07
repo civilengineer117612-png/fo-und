@@ -25,7 +25,7 @@ test("CASE 1 forgotten move: A 10,000.00 counted 7,000.00, B 2,000.00 counted 5,
   assert.equal(spendingByCategory(r.state, { month: "2026-10" }).total, 0, "spending +0.00");
   assert.deepEqual(unexplainedGaps(r.state), [], "nothing is left unexplained");
   const mv = r.state.transactions.find((t) => t.id === "mv1");
-  assert.equal(mv.status, "draft", "the move waits in Verify");
+  assert.equal(mv.status, "verified", "P0-7: a move confirmed by tap inside the check-in is verified by count"); assert.equal(mv.verified_by, "verified by count");
   assert.deepEqual(r.state.entries.filter((e) => e.transaction_id === "mv1").map((e) => [e.account_id, e.amount]).sort(), [["A", -300000], ["B", 300000]]);
   assert.equal(r.checkIns.length, 2); assert.ok(r.checkIns.every((c) => c.difference === 0), "both counts match once the move is made");
   assert.ok(!r.state.entries.some((e) => e.category_id === "unl"), "no gap entry at all");

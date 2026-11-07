@@ -149,7 +149,7 @@ test("setting up splits the wallet into two envelopes without changing what the 
   assert.deepEqual([envelopeBalance(r.state.entries, "allow"), envelopeBalance(r.state.entries, "buf")], [15731, 50000]);
   const wallet = r.state.accounts.find((a) => a.id === "wallet");
   assert.equal(naturalBalance(wallet, r.state.entries), 65731, "the wallet total is unchanged");
-  assert.ok(r.state.transactions.every((t) => t.status === "verified"));
+  assert.ok(r.state.transactions.every((t) => t.status === "draft"), "P0-7: typed set-aside entries wait in Verify");
   assert.equal(s.envelopes.length, 1, "the input state is untouched");
 });
 test("setup refuses envelopes bigger than the wallet, bad amounts, a non-asset account, and doing it twice", () => {
