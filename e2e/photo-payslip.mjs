@@ -4,7 +4,8 @@
 import assert from "node:assert/strict";
 import { launchBrowser } from "./engine.mjs";
 import { emptyLedger, CHANGES } from "../src/model/index.js";
-import { photoRows, PHOTO_EARNINGS, PHOTO_DEDUCTIONS } from "./payslip-photo.mjs";
+import { readFileSync } from "node:fs";
+import { PHOTO_EARNINGS, PHOTO_DEDUCTIONS } from "./payslip-photo.mjs";
 const browser = await launchBrowser();
 const base = process.env.BASE ?? "http://127.0.0.1:8124/app/index.html";
 const errors = [], TS = "2026-01-20T03:00:00Z", READ = 240000;
@@ -28,25 +29,19 @@ async function open() {
   await page.reload(); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 });
   return { ctx, page };
 }
-// The invented page drawn as a screenshot would show it: white, black letters, the app's own bundled font so every engine draws the same letters.
-const draw = (page, rows) => page.evaluate(async (rows) => {
-  const face = new FontFace("Slip", "url(fonts/ibm-plex-sans-latin-600-normal.woff2)"); await face.load(); document.fonts.add(face);
-  const k = 1.5, c = document.createElement("canvas"); c.width = 1500; c.height = 1320;
-  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.fillStyle = "#000"; x.font = "600 21px Slip"; x.textBaseline = "middle";
-  for (const r of rows) { x.textAlign = r.a === "r" ? "right" : "left"; x.fillText(r.t, r.x * k, r.y * k); }
-  return c.toDataURL("image/png").split(",")[1];
-}, rows);
-async function scan(page, rows) {
-  const png = await draw(page, rows);
+// The invented page as a screenshot would show it, kept as FIXED bytes (e2e/fixtures, made by e2e/make-fixtures.mjs from e2e/payslip-photo.mjs): drawn in the test, each
+// engine drew different letters, so a reading difference could not be told from a drawing difference. Now both engines read the same picture.
+const picture = (name) => readFileSync(new URL("./fixtures/" + name, import.meta.url));
+async function scan(page, file) {
   await page.click("#menuBtn"); await page.click('#menu .item:has-text("Scan")'); await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
-  await page.setInputFiles("input[data-scan]:not([capture])", { name: "payslip.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
+  await page.setInputFiles("input[data-scan]:not([capture])", { name: "payslip.png", mimeType: "image/png", buffer: picture(file) });
   await page.locator("#sheet h3", { hasText: "Add a payslip" }).waitFor({ timeout: READ });
 }
 const rows = (page, key) => page.evaluate((k) => [...document.querySelectorAll(`#sheet details.tot[data-keep="${k}"] .pl`)].map((r) => r.querySelector(".pl-label").textContent + " " + r.querySelector(".pl-amt").textContent), key);
 const peso = (s) => "₱" + s;
 try {
   { const { ctx, page } = await open();
-    await scan(page, photoRows());
+    await scan(page, "sample-payslip-table.png");
     const earn = await rows(page, "e"), ded = await rows(page, "d");
     // Every line, in print order, with its exact AMOUNT (never its hours). A label may carry one misread letter (a real run read HDMF as HDME):
     // the owner checks the words against the page; the money must be exact.
@@ -62,7 +57,7 @@ try {
     assert.equal(await page.locator("#f-save").innerText(), "Save payslip");
     await ctx.close(); console.log("ok: a payroll table read from a picture keeps every line with its amount (not its hours), the Summary's totals and the dates"); }
   { const { ctx, page } = await open();
-    await scan(page, photoRows({ summary: false, distribution: false }));
+    await scan(page, "sample-payslip-table-nosummary.png");
     assert.equal(await page.locator("#p-unchecked").innerText(), NOT_CHECKED, "no printed totals on the page: the payslip says it was not checked");
     assert.deepEqual([await page.inputValue("#p-gross"), await page.inputValue("#p-net")], ["", ""], "gross and net stay empty: never what the lines add to");
     assert.equal(await page.locator("#f-save").innerText(), "Save as a draft");
