@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 
 const read = path => readFileSync(new URL("../" + path, import.meta.url), "utf8").replace(/\r\n/g, "\n");
-const pages = read(".github/workflows/pages.yml"), checks = read(".github/workflows/test.yml");
+const pages = read(".github/workflows/pages.yml"), checks = read(".github/workflows/test.yml"), webkit = read(".github/workflows/webkit.yml");
 // Extract only job-level blocks; assertions inspect the committed workflow, not a
 // separate policy implementation that could disagree with what GitHub executes.
 const job = (yaml, id) => yaml.match(new RegExp(`^  ${id}:\\n([\\s\\S]*?)(?=^  [\\w-]+:|$(?![\\s\\S]))`, "m"))?.[1] ?? "";
@@ -28,7 +28,8 @@ test("the release gate runs unit tests and every browser suite without swallowin
 
 test("push and manual releases check out the triggering commit for both checks and publishing", () => {
   assert.match(pages, /^  push:\n    branches: \[main\]\n  workflow_dispatch:/m);
-  assert.match(checks, /^  push:\n  pull_request:\n  workflow_call:/m);
+  assert.match(checks, /^  push:\n    branches: \[main\]\n  pull_request:\n  workflow_call:/m, "one run per commit: a branch push alone does not run; a pull request runs on pull_request, main on push");
+  assert.match(webkit, /^on:\n  push:\n    branches: \[main\]\n  pull_request:\n\n/m, "WebKit runs once per commit the same way");
   for (const section of [job(checks, "test"), job(checks, "e2e"), deploy]) {
     assert.match(section, /uses: actions\/checkout@v4/);
     assert.doesNotMatch(section, /^\s+ref:|git (?:pull|switch|checkout)|workflow_run|head_sha/m, "default checkout stays on this invocation's commit");
