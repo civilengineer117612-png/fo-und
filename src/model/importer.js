@@ -210,9 +210,14 @@ export function loggedMatch(state, { date, name, amount, accountId = null, sourc
   return hits[0] ?? null;
 }
 
+// A bank statement line is the same as a logged entry only on the SAME account, the exact amount, dated within 3 days (owner, P1-8: a card posts days after the purchase,
+// and a spend from the wallet of the same amount is a different spend). Notes, CSV and spreadsheet lines keep the older rule (2 days, any account): they name no account.
+export const STATEMENT_MATCH_DAYS = 3;
+
 // The plan for a list of read lines: dated, categorised, already-logged ones left out, and a line repeated inside the same list left out unless `includeRepeats`.
-// order: "dmy" | "mdy". Returns {lines, duplicates, undated, repeats}.
-export function previewImport(state, items, order, book = null, { includeRepeats = false } = {}) {
+// order: "dmy" | "mdy". `accountId`: the account the lines are from (a statement's lines then match only that account). Returns {lines, duplicates, undated, repeats};
+// each duplicate carries `match_id`, the logged transaction it is.
+export function previewImport(state, items, order, book = null, { includeRepeats = false, accountId = null } = {}) {
   const used = new Set(), lines = [], duplicates = [], undated = [], repeats = [], seen = new Set();
   for (const it of items) {
     const p = readDate(it.dateRaw), date = p ? isoOf(p, order) : null;
@@ -223,8 +228,9 @@ export function previewImport(state, items, order, book = null, { includeRepeats
     const key = date + "|" + loose(it.name) + "|" + it.amount, isRepeat = it.meaning === undefined && seen.has(key);
     seen.add(key);
     if (isRepeat) { repeats.push(line); if (!includeRepeats) continue; }
-    const logged = loggedMatch(state, { date, name: it.name, amount: it.amount }, used);
-    if (logged) { used.add(logged.id); duplicates.push(line); } else lines.push(line);
+    const stmt = it.meaning !== undefined;   // a bank statement's line: the account and 3 days decide
+    const logged = stmt ? loggedMatch(state, { date, name: it.name, amount: it.amount, accountId: accountId ?? "-" }, used, STATEMENT_MATCH_DAYS) : loggedMatch(state, { date, name: it.name, amount: it.amount }, used);
+    if (logged) { used.add(logged.id); duplicates.push({ ...line, match_id: logged.id }); } else lines.push(line);
   }
   return { lines, duplicates, undated, repeats };
 }
