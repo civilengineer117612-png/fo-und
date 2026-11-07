@@ -53,6 +53,17 @@ function headerOf(row) {
 }
 const nearest = (cols, edge) => cols.reduce((best, c) => (Math.abs(c.right - edge) < Math.abs(best.right - edge) ? c : best), cols[0]);
 
+// P1-8 fix 2: a statement may print ANOTHER table after the transactions, such as the interest earned and the tax withheld for each period. Its rows have dates and
+// amounts but are not transactions (the interest already arrived as its own line), so they were read as money in and the balance check failed. The table is known
+// by its TITLE ("Interest and tax details", "Tax summary") or by its column titles (gross interest beside withholding tax), never by a figure; a row with a date or an
+// amount is never such a title, so a transaction whose kind reads "Withholding Tax" stays a transaction.
+const OTHER_TABLE_TITLE = /^(interest|tax|interest and tax|interest & tax|withholding tax)\s+(details|summary|computation|breakdown|information)$/i;
+function isOtherTable(row) {
+  if (row.items.some((i) => AMOUNT.test(i.str.trim()) || FULL_DATE.test(i.str.trim()) || DAY_MONTH.test(i.str.trim()))) return false;
+  const t = textOf(row);
+  return OTHER_TABLE_TITLE.test(t) || (/\bgross interest\b|\binterest earned\b/i.test(t) && /\b(withholding|tax withheld|tax)\b/i.test(t));
+}
+
 // ---------- the period and the summary ----------
 function readPeriod(rows) {
   for (const r of rows) {
@@ -156,16 +167,17 @@ export function isOwnName(text, holders) {
 export function parseStatement(pages, { ownLast4 = [] } = {}) {
   const allRows = pages.map(groupRows), flat = allRows.flat();
   const period = readPeriod(flat), summary = readSummary(flat);
-  let header = null;
+  let header = null, otherTable = false;
   const lines = [], gcash = { page: gcashPage };
   for (const rows of allRows) {
     const here = rows.map(headerOf).find(Boolean);
-    if (here) header = here;
-    if (!header) continue;
+    if (here) { header = here; otherTable = false; }
+    if (!header || (otherTable && !here)) continue;   // after another table's title, nothing is a transaction until the transaction titles come again
     const startAt = here ? rows.findIndex((r) => r.y === here.y) + 1 : 0;
     if (header.style === "gcash") { gcash.page(rows.slice(startAt), header, lines, gcash); continue; }
     let pendingText = null, awaitType = null;
     for (const row of rows.slice(startAt)) {
+      if (isOtherTable(row)) { otherTable = true; break; }
       if (header.style === "card") {
         const dates = row.items.filter((i) => DAY_MONTH.test(i.str.trim()) || FULL_DATE.test(i.str.trim())), amt = row.items.find((i) => SIGNED.test(i.str.trim()) || AMOUNT.test(i.str.trim()));
         if (dates.length && amt) {
