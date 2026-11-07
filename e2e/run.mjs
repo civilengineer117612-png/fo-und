@@ -1057,6 +1057,8 @@ var bt2 = await text(page, "#screen");
 check(bt2.includes("everyday allowance in GCash is empty") && /Upskill[\s\S]*₱100\.00/.test(bt2) && bt2.includes("₱500.00"), "the draw is listed by category, and the empty allowance is said in words");
 await shot(page, "29-buffer");
 await page.click('#nav button:has-text("Verify")');
+// P0-7: the two "Set aside" entries made by the setup now wait in Verify too, in no fixed order with the spend (same second): check them first, one at a time
+for (let guard = 0; guard < 4 && !(await text(page, "#screen")).includes("Upskill"); guard++) { await page.click('button:has-text("Correct")'); await page.waitForTimeout(400); }
 check((await text(page, "#screen")).includes("Upskill"), "a draft that took from two envelopes still shows its category when verifying");
 await page.click('button:has-text("Correct")'); await seen(page, "#screen", "of");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
@@ -1746,6 +1748,9 @@ await page.click('button[data-action="income-view"][data-view="overview"]');
 // income added without a payslip (a payslip photo once saved as plain pay received) is listed and can be removed
 await page.click('button:has-text("Add income")'); await page.click('#sheet button:has-text("Other income")');
 await page.fill("#f-amount", "777"); await page.fill("#f-date", "2026-10-01"); await page.click('#sheet .chip:has-text("Salary")'); await page.click('#sheet .chip:has-text("Wallet")'); await page.click("#f-save");
+check(await seen(page, "#toast", "Waiting in Verify"), "P0-7: typed money received says it is saved and waiting in Verify");
+check(!/without one/.test(await text(page, 'button.choice[data-action="open-payslips"]')), "and while it waits it is in no Income figure (the Payslips row does not count it yet)");
+await verifyAll(); await menuGo(page, "Income"); await page.click('button[data-action="income-view"][data-view="overview"]');   // the owner's tap: now it counts
 await seen(page, 'button.choice[data-action="open-payslips"]', "without one");
 check(/without one/.test(await text(page, 'button.choice[data-action="open-payslips"]')), "an income entry with no payslip behind it shows on the Payslips row (+ 1 without one)");
 await page.click('button.choice[data-action="open-payslips"]');
@@ -4514,10 +4519,10 @@ console.log("\n-- Count with a gap --");
   check(/looks like a move/i.test(t) && t.includes("₱3,800.00 left Test Bank and arrived in Cash.") && !/what happened\?/i.test(t), "an exactly equal short and extra become ONE proposed move");
   check(await page.locator('#screen button.primary[data-action="gap-move-confirm"]').count() === 1 && await page.locator('#screen button[data-action="gap-decide"]').count() === 0, "its button is the filled one; no other choice is offered for those two");
   await shot(page, "p04-proposed-move");
-  await page.click('button[data-action="gap-move-confirm"]'); await seen(page, "#toast", "waits in Verify"); await page.waitForTimeout(500);
+  await page.click('button[data-action="gap-move-confirm"]'); await seen(page, "#toast", "verified by count"); await page.waitForTimeout(500);
   d = JSON.parse((await stored(page)).local);
   const mv = d.state.transactions.find((x) => x.payee === "Moved (found at count)"), es = d.state.entries.filter((e) => e.transaction_id === mv?.id);
-  check(mv && mv.status === "draft" && es.some((e) => e.account_id === "b" && e.amount === -380000) && es.some((e) => e.account_id === "cash" && e.amount === 380000), "one draft move of 3,800.00 from the bank to Cash");
+  check(mv && mv.status === "verified" && mv.verified_by === "verified by count" && es.some((e) => e.account_id === "b" && e.amount === -380000) && es.some((e) => e.account_id === "cash" && e.amount === 380000), "one move of 3,800.00 from the bank to Cash, verified by count (the owner's tap inside the check-in)");
   check(d.state.checkIns.length === 2 && d.state.checkIns.every((c) => c.difference === 0) && !d.state.transactions.some((x) => x.source === "reconciliation") && !d.settings.checkin_pending?.b && !d.settings.checkin_pending?.cash, "both counts match: no gap entry, nothing left waiting");
   // 3. an unmatched gap: I'll explain later keeps it apart
   await save(page, "b", "900.00");   // the ledger is 1,400.00 after the move: 500.00 missing
@@ -4641,7 +4646,7 @@ console.log("\n-- Refunds --");
   await page.click('#sheet [data-action="pick-toggle"][data-key="rcat"]'); await page.click('#sheet [data-action="pick-rcat"][data-id="cat-food"]');
   await page.click('#sheet [data-action="pick-acct"]:has-text("Test Bank")');
   check(!(await page.locator("#f-save").isDisabled()), "then it can be saved");
-  await page.click("#f-save"); await seen(page, "#toast", "Recorded"); await page.waitForTimeout(500);
+  await page.click("#f-save"); await seen(page, "#toast", "Waiting in Verify"); await page.waitForTimeout(500);
   d = JSON.parse((await stored(page)).local);
   check(d.state.entries.filter((e) => e.category_id === "cat-food").reduce((n, e) => n + e.amount, 0) === 5000 && d.state.entries.filter((e) => e.category_id === "cat-refund").reduce((n, e) => n + e.amount, 0) === 0, "the new refund took 100.00 off Food and is not income");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
@@ -4847,10 +4852,10 @@ console.log("\n-- Repair of past counts --");
   check(!(await seen(page, "#screen", "Past counts booked", 600)), "the repair card is gone");
   check(/past gaps that look like a move/i.test(await page.innerText("#screen")) && (await page.innerText("#screen")).includes("\u20B13,000.00"), "the 3,000.00 short and 3,000.00 extra are offered as one move");
   await page.click('button[data-action="past-move"]');
-  check(await seen(page, "#toast", "waits in Verify"), "the move waits in Verify");
+  check(await seen(page, "#toast", "verified by count"), "the move is verified by count (the owner's tap)");
   const L2 = await read();
-  const mv = L2.state.transactions.filter((t) => t.status === "draft");
-  check(mv.length === 1 && JSON.stringify(L2.state.entries.filter((e) => e.transaction_id === mv[0].id).map((e) => [e.account_id, e.amount]).sort()) === JSON.stringify([["X", -300000], ["Y", 300000]]), "it is ONE draft move from X to Y");
+  const mv = L2.state.transactions.filter((t) => t.payee === "Moved (found at count)" && t.status === "verified" && t.verified_by === "verified by count");
+  check(mv.length === 1 && JSON.stringify(L2.state.entries.filter((e) => e.transaction_id === mv[0].id).map((e) => [e.account_id, e.amount]).sort()) === JSON.stringify([["X", -300000], ["Y", 300000]]), "it is ONE move from X to Y, verified by count");
   check(JSON.stringify(balances(L2)) === JSON.stringify(bal0) && sep(L2) === 200000, "balances still as they were, and no spending");
   check(!/past gaps that look like a move/i.test(await page.innerText("#screen")), "the offer is gone");
 

@@ -10,6 +10,7 @@ import { SECTIONS_UNCLEAR } from "./headings.js";
 import { monthOf } from "./reports.js";
 import { stableOf, recurringLabels, RECURRENCE_WINDOW } from "./stablepay.js";
 import { storedItems, checkItems, linesFromItems, itemsOf, categoryOf, categoryName, FALLBACK, EARNING_CATEGORIES, DEDUCTION_CATEGORIES } from "./payslipitems.js";
+import { settle, correctionOf, EVIDENCE } from "./entryrule.js";
 
 export const EARNINGS = [["basic", "Basic salary"], ["rice", "Rice subsidy"], ["skills", "Skills allowance"], ["clothing", "Clothing allowance"],
   ["transport", "Transportation allowance"], ["overtime", "Overtime"], ["thirteenth", "13th month"], ["bonus", "Bonus"], ["other", "Other earnings"]];
@@ -38,7 +39,7 @@ export const liveSlips = (state) => {
 // Returns {ok, transaction, entries} or {ok: false, message}.
 function reversalOf(state, orig, now) {
   const stamp = phTimestamp(now), id = "rev:" + orig.id;
-  const transaction = { id, date: orig.date, payee: orig.payee, memo: "Correction of " + (orig.payee || "an entry") + (orig.memo ? " (" + orig.memo + ")" : ""), status: "verified", source: "correction", reverses: orig.id, created_at: stamp, verified_at: stamp };
+  const transaction = settle({ id, date: orig.date, payee: orig.payee, memo: "Correction of " + (orig.payee || "an entry") + (orig.memo ? " (" + orig.memo + ")" : ""), source: "correction", reverses: orig.id, created_at: stamp }, correctionOf(orig.payee), stamp);
   const entries = state.entries.filter((e) => e.transaction_id === orig.id).map(({ transaction_id, ...e }) => ({ ...e, transaction_id: id, amount: -e.amount }));
   const check = checkTransactionSave(state, { transaction, entries });
   return check.ok ? { ok: true, transaction, entries } : { ok: false, message: check.violations.find((v) => v.severity === "error")?.message ?? "that entry cannot be cancelled" };
@@ -136,7 +137,7 @@ export function planPayslip(state, input, now = new Date()) {
   const overtime = Math.min(t.overtime, input.deposit);
   // Verified only when asked: a payslip whose checks fail is kept as a DRAFT (input.status "draft"), which waits in Verify and counts as no income yet.
   const draft = input.status === "draft" || input.totals_unchecked === true || input.sections_unclear === true;   // totals not found on the page: never verified income when saved
-  const transaction = { id: input.transaction_id, date: input.pay_date, payee: employer, memo: "Payslip " + input.period_from + " to " + input.period_to, status: draft ? "draft" : "verified", source: "manual", created_at: stamp, ...(draft ? {} : { verified_at: stamp }) };
+  const transaction = settle({ id: input.transaction_id, date: input.pay_date, payee: employer, memo: "Payslip " + input.period_from + " to " + input.period_to, source: "manual", created_at: stamp }, draft ? null : EVIDENCE.payslip, stamp);   // verified at entry only when its printed lines match its printed totals
   const entries = [
     { transaction_id: transaction.id, account_id: account.id, amount: input.deposit },
     ...(overtime > 0 ? [{ transaction_id: transaction.id, category_id: "cat-overtime", amount: -overtime }] : []),

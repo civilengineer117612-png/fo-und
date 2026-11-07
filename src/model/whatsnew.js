@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-07-one-rule", date: "2026-11-07", text: "Everything you type now waits in Verify until you check it, money received and refunds included; only what a document proves, like a payslip or a statement that matches, is checked at once." },
   { id: "2026-11-07-unclear-headings", date: "2026-11-07", text: "When a payslip's Earnings or Deductions heading cannot be read, the form says so and Save makes a draft to check, instead of putting a line under the wrong heading." },
   { id: "2026-11-07-reader-iphone", date: "2026-11-07", text: "Photos of payslips and receipts are read more accurately on iPhone: the reader now resizes the picture the same way everywhere." },
   { id: "2026-11-06-statement-proof", date: "2026-11-06", text: "Importing a statement checks its closing balance against your ledger, and a difference can be kept as not yet explained (it is not counted as spending); a copy of your data is kept first." },

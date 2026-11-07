@@ -52,6 +52,7 @@ export const SCHEMAS = {
     trip_out: optional(id),      // ADDED (version 4): taken off this trip by hand although its date falls inside the trip
     created_at: timestamp, verified_at: optional(timestamp),
     edited_before_verify: optional(bool),   // ADDED (addendum 3): photo/voice drafts only, feeds survey Q4
+    verified_by: optional(text),   // ADDED (owner, Nov 7, P0-7, no version change): the evidence an entry was verified at entry with ("verified by count", "verified by statement", "verified by payslip check", "correction of <entry>"); absent on an entry the owner verified by a tap and on every older entry
     adjustment: optional(bool),   // ADDED (owner, Oct 20, no version change): a count that found MORE money and was matched with no explanation; spending reports skip it
   },
   Entry: {

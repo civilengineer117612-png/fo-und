@@ -163,3 +163,14 @@ test("SAFETY COPY: the screen's repair goes only through the copy, with the pre-
   assert.match(app, /c\.kind === "repair"/, "Setup names the copy from before the repair");
   assert.equal(LEDGER_VERSION, 11, "the repair adds entries only: it raises no data version of its own (11 is the payslip lines' step)");
 });
+
+test("P0-7: the move is verified by count ONLY when the owner's confirming tap made it; made without a tap it stays a draft", () => {
+  const s = applyGapRepair(ledger(), planGapRepair(ledger(), { now: NOW })), m = matchHeldGaps(s)[0];
+  const noTap = planGapMove(s, m, { move_id: "mvA", now: NOW }); assert.ok(noTap.ok);
+  const a = noTap.state.transactions.find((t) => t.id === "mvA");
+  assert.deepEqual([a.status, a.verified_by ?? null], ["draft", null], "no tap: a draft that waits in Verify");
+  const tapped = planGapMove(s, m, { move_id: "mvB", now: NOW, tap: true }); assert.ok(tapped.ok);
+  const b = tapped.state.transactions.find((t) => t.id === "mvB");
+  assert.deepEqual([b.status, b.verified_by], ["verified", "verified by count"], "the owner's tap: verified by count");
+  assert.deepEqual(naturalBalance(tapped.state.accounts[0], countedEntries(tapped.state)), naturalBalance(noTap.state.accounts[0], countedEntries(noTap.state)), "the same balances either way");
+});

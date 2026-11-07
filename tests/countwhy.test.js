@@ -51,12 +51,12 @@ test("the old word \"match\" means the same as \"later\"", () => {
   assert.equal(count(s, 70000, "match").transaction.adjustment, true);
 });
 
-test("a gap explained as a move makes a move DRAFT and the count then matches: no gap entry, no spending change", () => {
+test("a gap explained as a move makes a move, verified by count (a confirming tap inside the check-in), and the count then matches: no gap entry, no spending change", () => {
   const s = ledger();
   const r = planCheckInWithMove(s, { id: "c1", transaction_id: "cnt", date: "2026-10-09", account_id: "chk", counted_balance: 100000, unlogged_category_id: "unl" }, { account_id: "res", move_id: "mv1" }, NOW);
   assert.ok(r.ok, JSON.stringify(r.violations)); assert.equal(r.plan.checkIn.difference, 0); assert.equal(r.plan.transaction, null);
   const mv = r.state.transactions.find((t) => t.id === "mv1"), es = r.state.entries.filter((e) => e.transaction_id === "mv1");
-  assert.equal(mv.status, "draft");
+  assert.equal(mv.status, "verified"); assert.equal(mv.verified_by, "verified by count", "P0-7: a move confirmed inside the check-in is verified by count");
   assert.deepEqual(es.map((e) => [e.account_id, e.amount]).sort(), [["chk", 12000], ["res", -12000]], "120.00 moved in from the other account");
   assert.equal(spent(r.state), 12000, "spending is untouched");
   const out = planCheckInWithMove(s, { id: "c2", transaction_id: "cnt2", date: "2026-10-09", account_id: "chk", counted_balance: 70000, unlogged_category_id: "unl" }, { account_id: "res", move_id: "mv2" }, NOW);
