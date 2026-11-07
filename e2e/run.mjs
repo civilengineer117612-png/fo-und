@@ -2923,6 +2923,28 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   ledgerNow = JSON.parse((await stored(page)).local); var sp = ledgerNow.settings.budget_split["cat-shopping"];
   check(sp && sp.amounts[0] + sp.amounts[1] === 1500000 && sp.for === 1500000 && JSON.stringify(ledgerNow.settings.budget_split ?? {}) !== before, "the amount moved, and Shopping still adds up to its month: " + JSON.stringify(sp));
   check(errors.length === 0, "no script errors"); await ctx.close(); }
+{ // the pay schedule: four kinds; every two weeks shows a third payday as extra, with no share of any line
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: budgetSeed([rule("r1", "cat-food", 600000), rule("r2", "cat-rent", 900000)]) }));
+  await menuGo(page, "Budget"); await page.click('#screen button[data-action="bv-paydays"]'); await page.waitForSelector("#sheet #bv-d1");
+  var sw = (await text(page, "#sheet")).replace(/\s+/g, " ");
+  check(["Twice a month", "Every two weeks", "Once a month", "Every week"].every((t) => sw.includes(t)) && await page.inputValue("#bv-d1") === "15" && await page.inputValue("#bv-d2") === "last", "the Paydays window offers the four kinds, filled with the saved days");
+  await page.click('#sheet button[data-action="bv-kind"][data-id="biweekly"]'); await page.fill("#bv-start", "2026-10-02"); await page.click("#bv-save");
+  await seen(page, "#toast", "Paydays saved.");
+  check(JSON.stringify(JSON.parse((await stored(page)).local).settings.pay_schedule) === JSON.stringify({ kind: "biweekly", start: "2026-10-02" }), "every two weeks is saved from one payday");
+  await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
+  await page.waitForFunction(() => document.querySelectorAll('#screen button[data-action="bv-payday"]').length === 3, null, { timeout: 5000 }).catch(() => {});
+  var tabs = await page.locator('#screen button[data-action="bv-payday"]').allInnerTexts();
+  check(JSON.stringify(tabs) === JSON.stringify(["2nd", "16th", "30th (extra)"]), "October has three paydays, the third is extra: " + JSON.stringify(tabs));
+  await page.click('#screen button[data-action="bv-payday"][data-id="2"]');
+  check((await text(page, '.catrow:has-text("Food")')).includes("₱0.00") && (await text(page, "#screen")).includes("Left: ₱15,000, not assigned"), "the extra payday takes no share of any line: its pay is all left");
+  await page.click('#screen button[data-action="bv-payday"][data-id="0"]');
+  check((await text(page, '.catrow:has-text("Food")')).includes("₱3,000.00"), "the two regular paydays share Food 6,000.00");
+  await page.click('#screen button[data-action="bv-paydays"]'); await page.waitForSelector('#sheet button[data-action="bv-kind"][data-id="weekly"]');
+  await page.click('#sheet button[data-action="bv-kind"][data-id="weekly"]'); await page.click('#sheet button[data-action="bv-wd"][data-id="5"]'); await page.click("#bv-save");
+  await seen(page, "#toast", "Paydays saved.");
+  await page.waitForFunction(() => document.querySelectorAll('#screen button[data-action="bv-payday"]').length === 5, null, { timeout: 5000 }).catch(() => {});   // the screen redraws a moment after the toast: wait for the state, then check it
+  check(await page.locator('#screen button[data-action="bv-payday"]').count() === 5, "every Friday: five paydays in October 2026");
+  check(errors.length === 0, "no script errors"); await ctx.close(); }
 { // an old Pay plan moves into Budget: look it over, one choice, a copy first
   const planObj = parsePlan(JSON.stringify({ schema_version: 1, unit: "PHP_whole_pesos", effective_from: "2026-10-01", paydays: [{ id: "first", day: 15, expected_income: 5100 }, { id: "second", day: "last", expected_income: 7100 }],
     lines: [{ name: "Food", first: 3000, second: 3000 }, { name: "Shopping", first: 1000, second: 1000 }, { name: "Rent", first: 0, second: 2000 }, { name: "Apartment", kind: "goal", first: 1000, second: 1000 }, { name: "Buffer", kind: "buffer", first: 100, second: 100 }] })).plan;

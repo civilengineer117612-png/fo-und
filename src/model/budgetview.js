@@ -96,13 +96,13 @@ export function baseIncome(state, { plan = null, pin = null } = {}) {
 }
 
 // The one monthly income shared out over paydays, exactly: each payday takes its share by `weights` (what each brings in, else the days it covers), rounded
-// down, and the last one takes the rest, so the parts add back to the month to the centavo.
+// down, and the last one takes the rest (two paydays, or four or five weekly ones), so the parts add back to the month to the centavo.
 export function sharePerPayday(amount, weights) {
   if (weights.length === 1) return [amount];
   const sum = weights.reduce((n, w) => n + w, 0);
   if (!(sum > 0)) return [amount, ...weights.slice(1).map(() => 0)];
-  const first = Math.floor((amount * weights[0]) / sum);
-  return [first, amount - first];
+  const out = weights.slice(0, -1).map((w) => Math.floor((amount * w) / sum));
+  return [...out, amount - out.reduce((n, x) => n + x, 0)];   // any number of paydays: each rounded down, the last takes the rest
 }
 
 // The summary of the month: Spending and Saved as a share of the income, each PLAINLY rounded to the nearest tenth of a percent (1000 = 100.0%), and
