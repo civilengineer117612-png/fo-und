@@ -4928,7 +4928,7 @@ async function onClick(el) {
         next = pm.state; if (pm.count) moveNote = `${pm.count} ${pm.count === 1 ? "move draft" : "move drafts"} added.`;
       }
       let gapNote = "", gapKept = false;
-      if (form.statement?.parsed) {   // balance proof (P1-8 fix 8): what the statement closes at against the ledger with these drafts; the difference may be kept as not yet explained
+      if (form.statement?.parsed && accountId === form.account_id) {   // balance proof (P1-8 fix 8): what the statement closes at against the ledger with these drafts; the difference may be kept as not yet explained. Not for a pocket this very import made: it starts at 0 and the window never offered the choice (its opening is Start from statement's job)
         const proof = M.statementBalanceProof(next, { account_id: accountId, summary: form.statement.parsed.summary, period: form.statement.period, checkOk: form.statement.check.ok });
         const big = proof.ok && proof.difference !== 0 && M.bigGap(proof.ledgerBalance, proof.ledgerBalance - proof.difference);
         if (big && base.accounts.find((a) => a.id === accountId)?.class === "asset" && form.keepGap === undefined) { showToast("The difference is more than half of the balance: choose what to do with it first."); break; }
