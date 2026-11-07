@@ -5,6 +5,7 @@ import { checkTransactionSave } from "./index.js";
 import { planExpense, applyDrafts } from "./drafts.js";
 import { isFeeId, planTransfer, feeOf } from "./transfers.js";
 import { phTimestamp } from "./util.js";
+import { settle, correctionOf } from "./entryrule.js";
 
 export const CORRECTION_DAYS = 14;   // an entry verified in the last 14 days (this week and the one before) can be corrected
 const NOT_CORRECTABLE = ["correction", "template"];   // a correction itself, and scheduled payments (they have their own "new amount")
@@ -46,10 +47,10 @@ export function planCorrection(state, input, now = new Date()) {
   let probe = state;
   const transactions = [], entries = [];
   for (const t of group) {
-    const rev = {
+    const rev = settle({
       id: "rev:" + t.id, date: t.date, payee: t.payee, memo: "Correction of " + (t.payee || "an entry") + (t.memo ? " (" + t.memo + ")" : ""),
-      status: "verified", source: "correction", reverses: t.id, created_at: stamp, verified_at: stamp,
-    };
+      source: "correction", reverses: t.id, created_at: stamp,
+    }, correctionOf(t.payee), stamp);
     const es = state.entries.filter((e) => e.transaction_id === t.id).map(({ transaction_id, ...e }) => ({ ...e, transaction_id: rev.id, amount: -e.amount }));
     const check = checkTransactionSave(probe, { transaction: rev, entries: es });
     if (!check.ok) return { ok: false, violations: check.violations, transactions: [], entries: [], redo: null };

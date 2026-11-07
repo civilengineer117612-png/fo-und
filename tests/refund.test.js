@@ -19,7 +19,7 @@ const bal = (s) => M.naturalBalance(s.accounts[0], M.countedEntries(s));
 const trial = (s) => s.entries.reduce((a, e) => a + e.amount, 0);
 const spend = (s, date, cat, amount, payee = "Shop") => { const p = M.planExpense(s, { transaction_id: "e" + ++n, date, category_id: cat, amount, account_id: "chk", payee }, NOW); assert.ok(p.ok); return M.verifyDraft(M.applyDrafts(s, p.drafts), p.drafts[0].transaction.id, NOW).state; };
 // the OLD refund flow: money received under the income category Refund
-const oldRefund = (s, date, amount, payee = "Shop refund") => { const r = M.planPayReceived(s, { transaction_id: "rf" + ++n, date, amount, account_id: "chk", category_id: "cat-refund", payee }, NOW); assert.ok(r.ok); return r.state; };
+const oldRefund = (s, date, amount, payee = "Shop refund") => { const r = M.planPayReceived(s, { transaction_id: "rf" + ++n, date, amount, account_id: "chk", category_id: "cat-refund", payee }, NOW); assert.ok(r.ok); return M.verifyDraft(r.state, r.transaction.id, NOW).state; };   // a past refund, verified long ago (typing now makes a draft, P0-7)
 const month = (s, m) => M.spendingByCategory(s, { month: m }).total;
 const inc = (s, m) => M.incomeBySource(s, { from: m + "-01", to: m + "-31" }).total;
 
@@ -27,12 +27,15 @@ test("a refund reduces spending in its category, never income, and the money is 
   let s = spend(base(), "2026-10-05", "food", 100000);
   const r = M.planRefund(s, { transaction_id: "r1", date: "2026-10-09", amount: 30000, account_id: "chk", category_id: "food", payee: "Shop" }, NOW);
   assert.ok(r.ok, JSON.stringify(r.violations)); s = r.state;
+  assert.equal(r.transaction.status, "draft", "P0-7: a typed refund waits in Verify");
+  assert.equal(month(s, "2026-10"), 100000, "waiting in Verify, it is in no figure yet");
+  s = M.verifyDraft(s, "r1", NOW).state;   // once verified it counts, exactly once
   assert.equal(month(s, "2026-10"), 70000, "Food spending is 1,000.00 less 300.00");
   assert.deepEqual(M.spendingByCategory(s, { month: "2026-10" }).rows.map((x) => [x.name, x.amount]), [["Food", 70000]]);
   assert.equal(inc(s, "2026-10"), 0, "it is not income");
   assert.equal(bal(s), 1000000 - 100000 + 30000); assert.equal(trial(s), 0);
   assert.equal(s.transactions.find((t) => t.id === "r1").status, "verified");
-  const full = M.planRefund(s, { transaction_id: "r2", date: "2026-10-10", amount: 70000, account_id: "chk", category_id: "food" }, NOW).state;
+  const full = M.verifyDraft(M.planRefund(s, { transaction_id: "r2", date: "2026-10-10", amount: 70000, account_id: "chk", category_id: "food" }, NOW).state, "r2", NOW).state;
   assert.equal(month(full, "2026-10"), 0, "a full refund takes the spending back to nothing");
 });
 test("a refund needs an amount, an account that holds money, a day and a spending category", () => {
@@ -47,7 +50,7 @@ test("a refund needs an amount, an account that holds money, a day and a spendin
 test("past refunds saved as income are found, with a guess from the purchase they came from; interest and pay are not refunds", () => {
   let s = spend(base(), "2026-09-20", "shop", 50000, "Sample Store"); s = spend(s, "2026-09-25", "food", 30000, "Corner Bakery");
   s = oldRefund(s, "2026-10-03", 20000, "Sample Store"); s = oldRefund(s, "2026-10-04", 30000, "Unknown shop");
-  const interest = M.planPayReceived(s, { transaction_id: "int1", date: "2026-10-05", amount: 500, account_id: "chk", category_id: "cat-interest" }, NOW).state;
+  const interest = M.verifyDraft(M.planPayReceived(s, { transaction_id: "int1", date: "2026-10-05", amount: 500, account_id: "chk", category_id: "cat-interest" }, NOW).state, "int1", NOW).state;
   const rows = M.pastRefunds(interest);
   assert.equal(rows.length, 2);
   assert.deepEqual(rows.map((r) => [r.amount, r.guess]), [[20000, "shop"], [30000, "food"]], "by the same payee, else by the same amount on that account");

@@ -10,6 +10,7 @@ import { checkTransactionSave } from "./index.js";
 import { phTimestamp } from "./util.js";
 import { planTransfer } from "./transfers.js";
 import { heldIds } from "./held.js";
+import { settle, EVIDENCE } from "./entryrule.js";
 
 const fail = (code, message) => ({ ok: false, violations: [{ code, severity: "error", message }] });
 
@@ -57,7 +58,7 @@ export function planCheckIn(state, input, now = new Date()) {
     const pend = pendingPurchases(state, account).filter((p) => ticked.includes(p.transaction_id));
     if (pend.length) {
       const stamp0 = phTimestamp(now), id = input.posting_transaction_id ?? input.transaction_id + "-posted";
-      const t = { id, date: input.date, payee: "Posted by the bank", memo: POSTED_MEMO + pend.map((p) => p.transaction_id).join(" "), status: "verified", source: "reconciliation", created_at: stamp0, verified_at: stamp0 };
+      const t = settle({ id, date: input.date, payee: "Posted by the bank", memo: POSTED_MEMO + pend.map((p) => p.transaction_id).join(" "), source: "reconciliation", created_at: stamp0 }, input.evidence ?? EVIDENCE.count, stamp0);
       const sum = pend.reduce((a, p) => a + p.amount, 0);
       const es = [{ transaction_id: id, account_id: account.id, amount: sum, card_state: "pending" }, { transaction_id: id, account_id: account.id, amount: -sum, card_state: "posted" }];
       posting = { transaction: t, entries: es };
@@ -84,13 +85,13 @@ export function planCheckIn(state, input, now = new Date()) {
   // Unlogged: positive = unexplained spending, negative = unexplained gain.
   const accountLeg = account.class === "asset" ? difference : -difference;
   const stamp = phTimestamp(now);
-  const transaction = {
+  const transaction = settle({
     id: input.transaction_id, date: input.date, payee: "Weekly check-in",
     memo: "Reconciliation: counted " + input.counted_balance + ", ledger " + ledger,
-    // Counting the money is the owner's deliberate look (spec 8.2), so it is verified.
-    status: "verified", source: "reconciliation", created_at: stamp, verified_at: stamp,
+    // Counting the money is the owner's deliberate look (spec 8.2): the count is its own evidence ("verified by count"; a kept statement difference says "verified by statement").
+    source: "reconciliation", created_at: stamp,
     ...(matched ? { adjustment: true } : {}),
-  };
+  }, input.evidence ?? EVIDENCE.count, stamp);
   const entries = [
     { transaction_id: transaction.id, account_id: account.id, amount: accountLeg,
       ...(account.class === "liability" ? { card_state: "posted" } : {}) },
@@ -121,7 +122,7 @@ export function planCheckInWithMove(state, input, other, now = new Date()) {
   const gap = input.counted_balance - ledgerBalanceFor(account, countedEntries(state));
   if (gap === 0) return fail("NO_GAP", "the count already matches");
   const moved = planTransfer(state, { transaction_id: other.move_id, date: input.date, from_account_id: gap > 0 ? from.id : account.id, to_account_id: gap > 0 ? account.id : from.id,
-    amount: Math.abs(gap), payee: gap > 0 ? "Moved in (found at count)" : "Moved out (found at count)", source: "manual" }, now);
+    amount: Math.abs(gap), payee: gap > 0 ? "Moved in (found at count)" : "Moved out (found at count)", source: "manual", evidence: EVIDENCE.count }, now);
   if (!moved.ok) return { ok: false, violations: moved.violations };
   const plan = planCheckIn(moved.state, { ...input, why: "move" }, now);
   return { ok: plan.ok, violations: plan.violations, state: moved.state, plan, move_id: other.move_id };

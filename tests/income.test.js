@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { planPayslip, payslipChecks, payslipTotals, linesOf, overtimeDraft, overtimeFreeDraft, incomeBySource, incomeByMonth, netPerPayday, raiseHistory, deductionsByMonth, employerHistory, incomeMonths, slipDate, deletePayslip, updatePayslip, payslipNotes, incomeBreakdown, missingPayPeriods, samePeriodPayslips, markPayslipChecked, revisionChanges, revisionsOf, PAYSLIP_VERSION, planAttachment, incomeWithoutPayslip, removeIncomeEntry, planPayReceived,
   ensureIncomeCategories, validateState, applyDrafts } from "../src/model/index.js";
-import { liveSlips } from "../src/model/index.js";
+import { liveSlips, verifyDraft } from "../src/model/index.js";
 import { makeState, account } from "./fixtures.js";
 
 const NOW = new Date("2026-10-16T04:00:00Z");   // every figure below is invented
@@ -257,7 +257,8 @@ test("editing a payslip may keep its own period and net pay, but may not copy an
 function withStray() {
   let s = planPayslip(ledger(), base(), NOW).state;
   const p = planPayReceived(s, { transaction_id: "tx-stray", date: "2026-10-15", amount: 880000, account_id: "chk", category_id: "cat-salary", payee: "Pay received" }, NOW);
-  return { s: p.state, before: p.state };
+  const v = verifyDraft(p.state, "tx-stray", NOW).state;   // typed pay waits in Verify (P0-7); here the owner has verified it
+  return { s: v, before: v };
 }
 
 test("income without a payslip is listed, and it is what makes a month count twice", () => {
@@ -433,12 +434,12 @@ test("income breakdown names each kind of earning, the deductions and what arriv
 test("income breakdown: pay added without a payslip shows as not from the payslip lines; interest is other income; both still add up", () => {
   let s = saved();
   const loose = planPayReceived(s, { transaction_id: "tx-loose", date: "2026-10-20", account_id: "chk", amount: 50000, payee: "Sample", category_id: "cat-salary" }, NOW);
-  assert.ok(loose.ok, JSON.stringify(loose.violations)); s = loose.state;
+  assert.ok(loose.ok, JSON.stringify(loose.violations)); s = verifyDraft(loose.state, "tx-loose", NOW).state;
   const int = planPayReceived(s, { transaction_id: "tx-int", date: "2026-10-21", account_id: "chk", amount: 700, payee: "Bank", category_id: "cat-interest" }, NOW);
-  assert.ok(int.ok, JSON.stringify(int.violations)); s = int.state;
+  assert.ok(int.ok, JSON.stringify(int.violations)); s = verifyDraft(int.state, "tx-int", NOW).state;
   s = { ...s, categories: [...s.categories, { id: "cat-gift", name: "Gift", kind: "income" }] };
   const gift = planPayReceived(s, { transaction_id: "tx-gift", date: "2026-10-22", account_id: "chk", amount: 300, payee: "Friend", category_id: "cat-gift" }, NOW);
-  assert.ok(gift.ok, JSON.stringify(gift.violations)); s = gift.state;
+  assert.ok(gift.ok, JSON.stringify(gift.violations)); s = verifyDraft(gift.state, "tx-gift", NOW).state;
   const b = incomeBreakdown(s, { from: "2026-10-01", to: "2026-10-31" });
   assert.equal(b.other, 1000, "interest and a gift (a category that is not pay) are other income"); assert.equal(b.unmatched, 50000);
   assert.equal(b.lines.reduce((n, l) => n + l.amount, 0) + b.other - b.deductions + b.unmatched, b.total);

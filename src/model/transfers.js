@@ -12,6 +12,7 @@ import { amountsIn } from "./scan.js";
 import { checkTransactionSave } from "./index.js";
 import { phTimestamp } from "./util.js";
 import { discardDraft } from "./drafts.js";
+import { settle } from "./entryrule.js";
 
 export const FEE_PREFIX = "fee:";
 export const BANK_FEES_ROLE = "bank_fees";
@@ -165,7 +166,7 @@ export function ensureBankFees(state) {
 // Returns {ok, violations, state}: the transfer draft (source "photo"), its fee draft when there is a fee, and the foreign amount when there is one.
 // The caller attaches the photo to the transfer.
 export function planTransfer(state, input, now = new Date()) {
-  const { transaction_id: id, date, from_account_id: from, to_account_id: to, amount, fee = 0, payee = "", reference_no = "", shot_time = "", foreign = null, trip_id = null, source = "photo" } = input;
+  const { transaction_id: id, date, from_account_id: from, to_account_id: to, amount, fee = 0, payee = "", reference_no = "", shot_time = "", foreign = null, trip_id = null, source = "photo", evidence = null } = input;   // evidence: only a move confirmed inside the weekly check-in (P0-7) is verified at entry
   if (source !== "photo" && source !== "manual" && source !== "statement") return fail("BAD_SOURCE", "unsupported source " + source);
   const captured = source === "photo";   // only a photo draft records whether it was fixed before verifying (survey Q4)
   if (trip_id != null && !(state.tags ?? []).some((t) => t.id === trip_id)) return fail("UNKNOWN_TAG", "no trip " + trip_id);
@@ -173,8 +174,8 @@ export function planTransfer(state, input, now = new Date()) {
   if (!Number.isSafeInteger(fee) || fee < 0) return fail("BAD_FEE", "the fee cannot be negative");
   if (from === to) return fail("SAME_ACCOUNT", "choose two different accounts");
   if (!state.accounts.some((a) => a.id === from) || !state.accounts.some((a) => a.id === to)) return fail("UNKNOWN_ACCOUNT", "choose both accounts");
-  const transaction = { id, date, payee, memo: "", status: "draft", source, ...(captured ? { edited_before_verify: false } : {}), created_at: phTimestamp(now),
-    ...(reference_no ? { reference_no } : {}), ...(shot_time ? { shot_time } : {}), ...(trip_id != null ? { trip_add: trip_id } : {}) };
+  const stampT = phTimestamp(now), transaction = settle({ id, date, payee, memo: "", source, ...(captured ? { edited_before_verify: false } : {}), created_at: stampT,
+    ...(reference_no ? { reference_no } : {}), ...(shot_time ? { shot_time } : {}), ...(trip_id != null ? { trip_add: trip_id } : {}) }, evidence, stampT);
   const cardState = (accountId) => (state.accounts.find((a) => a.id === accountId)?.class === "liability" ? { card_state: "posted" } : {});   // a card entry must say pending or posted: a payment to (or from) a card is posted
   const entries = [{ transaction_id: id, account_id: to, amount, ...cardState(to) }, { transaction_id: id, account_id: from, amount: -amount, ...cardState(from) }];
   const check = checkTransactionSave(state, { transaction, entries });
@@ -182,7 +183,7 @@ export function planTransfer(state, input, now = new Date()) {
   let next = { ...state, transactions: [...state.transactions.filter((t) => t.id !== id), transaction], entries: [...state.entries.filter((e) => e.transaction_id !== id), ...entries] };
   if (fee > 0) {
     const made = ensureBankFees(next); next = made.state;
-    const fid = feeIdOf(id), ft = { id: fid, date, payee: "Fee", memo: "", status: "draft", source, ...(captured ? { edited_before_verify: false } : {}), created_at: phTimestamp(now), ...(trip_id != null ? { trip_add: trip_id } : {}) };
+    const fid = feeIdOf(id), ft = settle({ id: fid, date, payee: "Fee", memo: "", source, ...(captured ? { edited_before_verify: false } : {}), created_at: stampT, ...(trip_id != null ? { trip_add: trip_id } : {}) }, evidence, stampT);
     const fes = [{ transaction_id: fid, category_id: made.category_id, amount: fee }, { transaction_id: fid, account_id: from, amount: -fee, ...cardState(from) }];
     const fc = checkTransactionSave(next, { transaction: ft, entries: fes });
     if (!fc.ok) return { ok: false, violations: fc.violations, state };

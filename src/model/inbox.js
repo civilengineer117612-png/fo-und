@@ -4,6 +4,7 @@ import { validateShape } from "./schema.js";
 import { phTimestamp, deepEqual } from "./util.js";
 import { checkTransactionSave } from "./index.js";
 import { payslipDraftBlock } from "./income.js";
+import { isEvidence } from "./entryrule.js";
 
 // Drafts dated on or before `throughDate`, oldest first (older drafts never fall off the list).
 // Within a day they come in the order they were captured, so verifying follows the day as it happened.
@@ -15,14 +16,16 @@ export function pendingDrafts(state, throughDate) {
 }
 
 // Returns {ok, violations, transaction}. The caller saves `transaction` only if ok.
-export function verifyTransaction(state, transactionId, now = new Date(), { acceptPaperGap = false } = {}) {
+// `evidence`: when what the entry rests on is a document (a matched statement), it is written on the entry ("verified by statement"); a plain confirming tap needs none.
+export function verifyTransaction(state, transactionId, now = new Date(), { acceptPaperGap = false, evidence = null } = {}) {
   const t = state.transactions.find((x) => x.id === transactionId);
   const fail = (code, message) => ({ ok: false, violations: [{ code, severity: "error", message }], transaction: null });
   if (!t) return fail("UNKNOWN_TRANSACTION", "no transaction " + transactionId);
   if (t.status === "verified") return fail("ALREADY_VERIFIED", transactionId + " is already verified");
   const block = payslipDraftBlock(state, transactionId);   // a payslip kept as a draft becomes income only when its figures add up
   if (block && !acceptPaperGap) return fail("PAYSLIP_DOES_NOT_ADD_UP", block.message);   // only after the owner has said "Verify anyway"
-  const verified = { ...t, status: "verified", verified_at: phTimestamp(now) };
+  if (evidence != null && !isEvidence(evidence)) return fail("BAD_EVIDENCE", "not a kind of evidence: " + evidence);
+  const verified = { ...t, status: "verified", verified_at: phTimestamp(now), ...(evidence ? { verified_by: evidence } : {}) };
   const shape = validateShape("Transaction", verified);
   return shape.length ? { ok: false, violations: shape, transaction: null } : { ok: true, violations: [], transaction: verified };
 }
