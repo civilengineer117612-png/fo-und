@@ -2412,7 +2412,7 @@ function pastMovesHtml() {
   const list = M.matchHeldGaps(S());
   if (!list.length) return "";
   return `<h2 class="today">Past gaps that look like a move</h2>` + list.map((m, i) => `<div class="card"><p><b>${peso(m.amount)}</b> left ${esc(accountName(m.short.account_id))} and arrived in ${esc(accountName(m.extra.account_id))}.</p>
-    <p class="note small">Counted ${esc(listDate(m.short.date))}. Both gaps are cancelled and one move waits in Verify. Balances stay as they are.</p>
+    <p class="note small">Counted ${esc(listDate(m.short.date))}. Both gaps are cancelled and one move is made, verified by your tap. Balances stay as they are.</p>
     <p><button${i === 0 && !M.repairableGaps(S()).length ? ' class="primary"' : ""} data-action="past-move" data-id="${i}" style="width:100%">Moved to another account of mine</button></p></div>`).join("");
 }
 
@@ -2436,7 +2436,7 @@ function reviewGapsHtml(accts, pend) {
   const items = accts.filter((a) => pend[a.id]).map((a) => ({ a, gap: pendingGap(a, pend[a.id]).difference })).filter((i) => i.gap !== 0);
   if (!items.length) return "";
   const moves = proposedMoves(), inMove = new Set(moves.flatMap((m) => [m.from_id, m.to_id]));
-  const moveCards = moves.map((m, i) => `<div class="card"><p><b>${peso(m.amount)}</b> left ${esc(accountName(m.from_id))} and arrived in ${esc(accountName(m.to_id))}.</p><p class="note small">One move between your own accounts. It waits in Verify, and both counts then match.</p>
+  const moveCards = moves.map((m, i) => `<div class="card"><p><b>${peso(m.amount)}</b> left ${esc(accountName(m.from_id))} and arrived in ${esc(accountName(m.to_id))}.</p><p class="note small">One move between your own accounts. It is verified by your tap, and both counts then match.</p>
       <p><button class="primary" data-action="gap-move-confirm" data-id="${i}">Moved to another account of mine</button></p></div>`).join("");
   const btn = (a, why, text) => `<p><button style="width:100%" data-action="gap-decide" data-id="${esc(a.id)}" data-why="${why}">${text}</button></p>`;
   const cards = items.filter((i) => !inMove.has(i.a.id)).map(({ a, gap }) => {
@@ -2995,7 +2995,7 @@ function renderSheet() {
     const a = S().accounts.find((x) => x.id === sh.id), r = pendingCounts()[sh.id], q = a && r ? pendingGap(a, r) : null, more = q && q.difference > 0;
     const others = S().accounts.filter((x) => x.class === "asset" && !x.archived && x.id !== sh.id);
     body = q ? `<h3>${more ? "Moved in from which account?" : "Moved to which account?"}</h3>
-      <p class="note">${a.name}: ${peso(Math.abs(q.difference))} ${more ? "more than logged" : "missing"}. The move waits in Verify.</p>
+      <p class="note">${a.name}: ${peso(Math.abs(q.difference))} ${more ? "more than logged" : "missing"}. The move is verified by this count.</p>
       <label>${more ? "From" : "To"}${REQ}</label>${accountPicker(others, ui.form.other_id, "pick-count-other", "countother", "Choose an account")}
       <p><button class="primary" id="f-save" data-action="gap-move-save" disabled>Save the move</button></p>` : `<p class="note">That count is no longer waiting.</p><p><button class="primary" data-action="close-sheet">Got it</button></p>`;
   } else if (sh.type === "checkin") {
@@ -3932,7 +3932,7 @@ async function postCount(acct, rec, why, otherId, mode) {
     if (made.length) { next.transactions = [...S().transactions, ...made.map((m) => m.transaction)]; next.entries = [...S().entries, ...made.flatMap((m) => m.entries)]; }
   }
   const ok = await commit(next, settingsWithPending(acct.id, null));
-  showToast(why === "move" ? "Counted. The move waits in Verify." : acct.name + ": " + (why === "later" ? "kept apart as not yet explained" : why === "spent" ? "counted as spending you did not log" : "matches the ledger"));
+  showToast(why === "move" ? "Counted. The move is verified by count." : acct.name + ": " + (why === "later" ? "kept apart as not yet explained" : why === "spent" ? "counted as spending you did not log" : "matches the ledger"));
   return ok;
 }
 
@@ -4169,7 +4169,7 @@ async function onClick(el) {
       const r = M.planGapMove(S(), m, { move_id: newId("tx"), now: new Date(), tap: true });   // the owner's confirming tap: the move is verified by count
       if (!r.ok) { showToast("Could not save: " + r.violations[0].message); break; }
       await commit(r.state);
-      showToast(peso(m.amount) + " move from " + accountName(m.short.account_id) + " to " + accountName(m.extra.account_id) + " waits in Verify.");
+      showToast(peso(m.amount) + " move from " + accountName(m.short.account_id) + " to " + accountName(m.extra.account_id) + " is verified by count.");
       break;
     }
     case "gap-decide": await decideGap(id, el.dataset.why); break;
@@ -4185,7 +4185,7 @@ async function onClick(el) {
       if (!r.ok) { showToast("Could not save: " + r.violations[0].message); break; }
       const cur = { ...(ledger.settings.checkin_pending ?? {}) }; delete cur[A.id]; delete cur[B.id];
       await commit(r.state, { ...ledger.settings, checkin_pending: cur });
-      showToast(peso(sh.amount) + " move from " + A.name + " to " + B.name + " waits in Verify.");
+      showToast(peso(sh.amount) + " move from " + A.name + " to " + B.name + " is verified by count.");
       break;
     }
     case "lock-toggle": {
