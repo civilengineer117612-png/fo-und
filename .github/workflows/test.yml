@@ -43,6 +43,7 @@ jobs:
           node e2e/ledger-check.mjs
           node e2e/trial-isolation.mjs
           node e2e/photo-payslip.mjs
+          node e2e/reader-fixture.mjs
           node e2e/tap-safety.mjs
           node e2e/run.mjs 2>&1 | tee e2e.log
       - name: Pass count
