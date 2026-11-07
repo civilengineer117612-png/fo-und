@@ -59,7 +59,7 @@ for (const variant of ["other-id", "same-id"]) {
 }
 
 test("a second cancellation can be put right only when it really is a second one, and only with the exact legs", () => {
-  const s = build(), undo = (extra = {}, legs) => { const t = { id: "undo:C:1", date: "2026-10-20", payee: "Weekly check-in", memo: "x", status: "verified", source: "correction", restores: "C", created_at: TS, verified_at: TS, ...extra };
+  const s = build(), undo = (extra = {}, legs) => { const t = { id: "undo:C:1", date: "2026-10-20", payee: "Weekly check-in", memo: "x", status: "verified", source: "correction", restores: "C", created_at: TS, verified_at: TS, verified_by: "correction of an entry", ...extra };
     const c = s.entries.filter((e) => e.transaction_id === "C").map(({ transaction_id, ...e }) => ({ ...e, transaction_id: t.id }));
     return M.checkTransactionSave(s, { transaction: t, entries: legs ?? c }); };
   assert.equal(undo().ok, true, "C is cancelled twice: one can be put back");
@@ -67,8 +67,8 @@ test("a second cancellation can be put right only when it really is a second one
   assert.ok(undo({ restores: "groc" }, s.entries.filter((e) => e.transaction_id === "groc").map((e) => ({ ...e, transaction_id: "undo:C:1" }))).violations.some((v) => v.code === "RESTORE_NOT_NEEDED"), "an entry cancelled only once or never is refused");
   assert.ok(undo({ restores: "nope" }).violations.some((v) => v.code === "RESTORE_MISSING"));
   const once = { ...s, transactions: s.transactions.filter((t) => t.id !== "rev:C:again"), entries: s.entries.filter((e) => e.transaction_id !== "rev:C:again") };
-  assert.ok(M.checkTransactionSave(once, { transaction: { id: "undo:C:1", date: "2026-10-20", payee: "Weekly check-in", memo: "x", status: "verified", source: "correction", restores: "C", created_at: TS, verified_at: TS }, entries: s.entries.filter((e) => e.transaction_id === "C").map(({ transaction_id, ...e }) => ({ ...e, transaction_id: "undo:C:1" })) }).violations.some((v) => v.code === "RESTORE_NOT_NEEDED"), "an entry cancelled exactly once cannot have its only cancellation put back");
-  assert.ok(M.checkTransactionSave(s, { transaction: { id: "bad", date: "2026-10-20", payee: "x", memo: "x", status: "verified", source: "correction", reverses: "rev:C:again", created_at: TS, verified_at: TS }, entries: [] }).violations.some((v) => v.code === "REVERSAL_OF_REVERSAL"), "cancelling a cancellation is still refused: the only way back is the second-cancellation correction");
+  assert.ok(M.checkTransactionSave(once, { transaction: { id: "undo:C:1", date: "2026-10-20", payee: "Weekly check-in", memo: "x", status: "verified", source: "correction", restores: "C", created_at: TS, verified_at: TS, verified_by: "correction of an entry" }, entries: s.entries.filter((e) => e.transaction_id === "C").map(({ transaction_id, ...e }) => ({ ...e, transaction_id: "undo:C:1" })) }).violations.some((v) => v.code === "RESTORE_NOT_NEEDED"), "an entry cancelled exactly once cannot have its only cancellation put back");
+  assert.ok(M.checkTransactionSave(s, { transaction: { id: "bad", date: "2026-10-20", payee: "x", memo: "x", status: "verified", source: "correction", reverses: "rev:C:again", created_at: TS, verified_at: TS, verified_by: "correction of an entry" }, entries: [] }).violations.some((v) => v.code === "REVERSAL_OF_REVERSAL"), "cancelling a cancellation is still refused: the only way back is the second-cancellation correction");
 });
 
 test("a count that cannot be repaired is skipped and said, the rest is repaired; when nothing can run the status says why in plain words", () => {

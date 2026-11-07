@@ -1746,6 +1746,9 @@ await page.click('button[data-action="income-view"][data-view="overview"]');
 // income added without a payslip (a payslip photo once saved as plain pay received) is listed and can be removed
 await page.click('button:has-text("Add income")'); await page.click('#sheet button:has-text("Other income")');
 await page.fill("#f-amount", "777"); await page.fill("#f-date", "2026-10-01"); await page.click('#sheet .chip:has-text("Salary")'); await page.click('#sheet .chip:has-text("Wallet")'); await page.click("#f-save");
+check(await seen(page, "#toast", "Waiting in Verify"), "P0-7: typed money received says it is saved and waiting in Verify");
+check(!/without one/.test(await text(page, 'button.choice[data-action="open-payslips"]')), "and while it waits it is in no Income figure (the Payslips row does not count it yet)");
+await verifyAll(); await menuGo(page, "Income"); await page.click('button[data-action="income-view"][data-view="overview"]');   // the owner's tap: now it counts
 await seen(page, 'button.choice[data-action="open-payslips"]', "without one");
 check(/without one/.test(await text(page, 'button.choice[data-action="open-payslips"]')), "an income entry with no payslip behind it shows on the Payslips row (+ 1 without one)");
 await page.click('button.choice[data-action="open-payslips"]');
@@ -4641,7 +4644,7 @@ console.log("\n-- Refunds --");
   await page.click('#sheet [data-action="pick-toggle"][data-key="rcat"]'); await page.click('#sheet [data-action="pick-rcat"][data-id="cat-food"]');
   await page.click('#sheet [data-action="pick-acct"]:has-text("Test Bank")');
   check(!(await page.locator("#f-save").isDisabled()), "then it can be saved");
-  await page.click("#f-save"); await seen(page, "#toast", "Recorded"); await page.waitForTimeout(500);
+  await page.click("#f-save"); await seen(page, "#toast", "Waiting in Verify"); await page.waitForTimeout(500);
   d = JSON.parse((await stored(page)).local);
   check(d.state.entries.filter((e) => e.category_id === "cat-food").reduce((n, e) => n + e.amount, 0) === 5000 && d.state.entries.filter((e) => e.category_id === "cat-refund").reduce((n, e) => n + e.amount, 0) === 0, "the new refund took 100.00 off Food and is not income");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }

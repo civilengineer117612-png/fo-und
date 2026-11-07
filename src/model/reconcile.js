@@ -9,7 +9,7 @@ import { accountByLast4, planTransfer, setAccountLast4 } from "./transfers.js";
 import { isPocket, planAccount } from "./banks.js";
 import { countedEntries } from "./balances.js";
 import { categoryFor, loggedMatch, loggedMove } from "./importer.js";
-import { applyDrafts, planExpense } from "./drafts.js";
+import { applyDrafts, planExpense, verifyDraft } from "./drafts.js";
 import { planPayReceived } from "./plan.js";
 import { categoryFromBook } from "./payees.js";
 import { UNLOGGED_CATEGORY_ID } from "./seed.js";
@@ -17,6 +17,7 @@ import { liveSlips } from "./income.js";
 import { checkTransactionSave } from "./index.js";
 import { planCheckIn, ledgerBalanceFor } from "./checkin.js";
 import { phTimestamp } from "./util.js";
+import { EVIDENCE } from "./entryrule.js";
 
 const DAY = 86400000;
 const gap = (a, b) => Math.abs(Math.round((Date.parse(a) - Date.parse(b)) / DAY));
@@ -222,12 +223,26 @@ export function planStatementGap(state, proof, { account_id, newId, unlogged_cat
   const account = state.accounts.find((a) => a.id === account_id);
   if (!proof?.ok || !account || account.class !== "asset" || proof.difference === 0) return { ok: true, state, made: false };
   const now_ = ledgerBalanceFor(account, countedEntries(state));
-  const plan = planCheckIn(state, { id: newId(), transaction_id: newId(), date: proof.asOf, account_id, counted_balance: now_ - proof.difference, unlogged_category_id, why: "later" }, now);
+  const plan = planCheckIn(state, { id: newId(), transaction_id: newId(), date: proof.asOf, account_id, counted_balance: now_ - proof.difference, unlogged_category_id, why: "later", evidence: EVIDENCE.statement }, now);
   if (!plan.ok || !plan.transaction) return { ok: false, message: plan.violations?.[0]?.message ?? "The difference could not be kept." };
   const transaction = { ...plan.transaction, payee: "Statement check", memo: plan.transaction.memo + " (statement closing balance, kept apart as not yet explained)" };
   return { ok: true, made: true, state: { ...state, transactions: [...state.transactions, transaction], entries: [...state.entries, ...plan.entries], checkIns: [...(state.checkIns ?? []), plan.checkIn] } };
 }
 
+// P0-7: what a statement import MATCHES in the ledger and finds still waiting in Verify is verified by that statement ("verified by statement"): a logged entry the same
+// account's statement shows (the same rule as "already logged": exact amount, within 3 days), and a logged move (a card payment made by "I paid the card", a cash
+// withdrawal) the statement shows. Only drafts change; an entry already verified, or a draft that cannot be verified (a payslip whose figures differ), is left as it is.
+// ids: the matched transactions. Returns {ok, state, count}.
+export function planStatementVerify(state, ids, now = new Date()) {
+  let next = state, count = 0;
+  for (const id of new Set(ids.filter(Boolean))) {
+    const t = next.transactions.find((x) => x.id === id);
+    if (!t || t.status !== "draft") continue;
+    const v = verifyDraft(next, id, now, { evidence: EVIDENCE.statement });
+    if (v.ok) { next = v.state; count++; }
+  }
+  return { ok: true, state: next, count };
+}
 // P1-8 fix 3: a statement's card repayments and ATM cash withdrawals (`moveTo` "card" or "cash" on the line) are moves. Each is matched against the moves already
 // logged (`loggedMove`: the statement's account, the exact amount out, within 3 days, one each). One not logged becomes ONE draft move (source "statement") to
 // the Cash account (an asset whose bank is Cash or whose name starts with "Cash"), or to the credit card (the card of the statement's bank, else the only card);

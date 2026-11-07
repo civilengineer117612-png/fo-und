@@ -11,6 +11,7 @@ import { isPocket } from "./banks.js";
 import { planTransfer } from "./transfers.js";
 import { phTimestamp } from "./util.js";
 import { repeatedIds } from "./invariants.js";
+import { settle, correctionOf, EVIDENCE } from "./entryrule.js";
 
 const isCountGap = (t) => t.source === "reconciliation" && String(t.memo ?? "").startsWith("Reconciliation:");
 const dayMs = 86400000, dayNum = (d) => Math.floor(Date.parse(d + "T00:00:00Z") / dayMs);
@@ -68,8 +69,8 @@ export function planGapRepair(state, { now = new Date() } = {}) {
   for (const g of gaps) {
     if (state.transactions.some((t) => t.id === "rev:" + g.id || t.id === "held:" + g.id)) continue;
     const mine = state.entries.filter((e) => e.transaction_id === g.id);
-    const rev = { id: "rev:" + g.id, date: g.date, payee: g.payee, memo: "Correction of " + (g.payee || "an entry") + (g.memo ? " (" + g.memo + ")" : ""), status: "verified", source: "correction", reverses: g.id, created_at: stamp, verified_at: stamp };
-    const heldTx = { id: "held:" + g.id, date: g.date, payee: g.payee, memo: g.memo + " \u00b7 kept apart as not yet explained", status: "verified", source: "reconciliation", adjustment: true, created_at: stamp, verified_at: stamp };
+    const rev = settle({ id: "rev:" + g.id, date: g.date, payee: g.payee, memo: "Correction of " + (g.payee || "an entry") + (g.memo ? " (" + g.memo + ")" : ""), source: "correction", reverses: g.id, created_at: stamp }, correctionOf(g.payee), stamp);
+    const heldTx = settle({ id: "held:" + g.id, date: g.date, payee: g.payee, memo: g.memo + " \u00b7 kept apart as not yet explained", source: "reconciliation", adjustment: true, created_at: stamp }, correctionOf(g.payee), stamp);
     const revEntries = mine.map(({ transaction_id, ...e }) => ({ ...e, transaction_id: rev.id, amount: -e.amount }));
     const heldEntries = mine.map(({ transaction_id, ...e }) => ({ ...e, transaction_id: heldTx.id }));
     if (add(g.id, [[rev, revEntries], [heldTx, heldEntries]])) { gapCount += 1; dates.push(g.date); }
@@ -80,8 +81,8 @@ export function planGapRepair(state, { now = new Date() } = {}) {
     if (state.transactions.some((t) => t.id === id)) continue;
     const mine = state.entries.filter((e) => e.transaction_id === x.target);
     // the extra cancellation holds the entry's opposite legs; putting it right holds the entry's own legs, and the same opposite legs are kept apart as not yet explained
-    const undo = { id, date: x.date, payee: x.payee, memo: "Correction of a second cancellation of " + (x.payee || "an entry"), status: "verified", source: "correction", restores: x.target, ...(held.has(x.id) ? { adjustment: true } : {}), created_at: stamp, verified_at: stamp };
-    const keep = { id: "held:" + id, date: x.date, payee: x.payee, memo: "Reconciliation: a second cancellation of one entry, kept apart as not yet explained", status: "verified", source: "reconciliation", adjustment: true, created_at: stamp, verified_at: stamp };
+    const undo = settle({ id, date: x.date, payee: x.payee, memo: "Correction of a second cancellation of " + (x.payee || "an entry"), source: "correction", restores: x.target, ...(held.has(x.id) ? { adjustment: true } : {}), created_at: stamp }, correctionOf(x.payee), stamp);
+    const keep = settle({ id: "held:" + id, date: x.date, payee: x.payee, memo: "Reconciliation: a second cancellation of one entry, kept apart as not yet explained", source: "reconciliation", adjustment: true, created_at: stamp }, correctionOf(x.payee), stamp);
     const undoEntries = mine.map(({ transaction_id, ...e }) => ({ ...e, transaction_id: id })), keepEntries = mine.map(({ transaction_id, ...e }) => ({ ...e, transaction_id: keep.id, amount: -e.amount }));
     if (add(x.id, [[undo, undoEntries], [keep, keepEntries]])) { extraCount += 1; putBack.set(x.target, (putBack.get(x.target) ?? 0) + 1); dates.push(x.date); }
   }
@@ -142,19 +143,20 @@ export function matchHeldGaps(state, { days = 3 } = {}) {
 
 // Confirming one match: both held gaps are cancelled (each by a correction) and ONE move from the short account to the extra one is made as a DRAFT in Verify,
 // so every balance stays exactly what it was and nothing is counted as spending. Returns {ok, violations, state, move_id}.
-export function planGapMove(state, match, { move_id, now = new Date() }) {
+// P0-7: the move is verified "by count" ONLY when the owner's confirming tap made it (`tap: true`, from the Weekly review button); made without a tap it stays a draft.
+export function planGapMove(state, match, { move_id, now = new Date(), tap = false }) {
   const stamp = phTimestamp(now);
   let next = state;
   for (const g of [match.short, match.extra]) {
     const orig = next.transactions.find((t) => t.id === g.transaction_id);
     if (!orig || next.transactions.some((t) => t.reverses === orig.id)) return { ok: false, violations: [{ code: "ALREADY_CANCELLED", severity: "error", message: "that gap is no longer waiting" }] };
-    const rev = { id: "rev:" + orig.id, date: orig.date, payee: orig.payee, memo: "Correction of " + (orig.payee || "an entry") + (orig.memo ? " (" + orig.memo + ")" : ""), status: "verified", source: "correction", reverses: orig.id, created_at: stamp, verified_at: stamp };
+    const rev = settle({ id: "rev:" + orig.id, date: orig.date, payee: orig.payee, memo: "Correction of " + (orig.payee || "an entry") + (orig.memo ? " (" + orig.memo + ")" : ""), source: "correction", reverses: orig.id, created_at: stamp }, correctionOf(orig.payee), stamp);
     const es = next.entries.filter((e) => e.transaction_id === orig.id).map(({ transaction_id, ...e }) => ({ ...e, transaction_id: rev.id, amount: -e.amount }));
     const check = checkTransactionSave(next, { transaction: rev, entries: es });
     if (!check.ok) return { ok: false, violations: check.violations };
     next = { ...next, transactions: [...next.transactions, rev], entries: [...next.entries, ...es] };
   }
-  const moved = planTransfer(next, { transaction_id: move_id, date: match.short.date, from_account_id: match.short.account_id, to_account_id: match.extra.account_id, amount: match.amount, payee: "Moved (found at count)", source: "manual" }, now);
+  const moved = planTransfer(next, { transaction_id: move_id, date: match.short.date, from_account_id: match.short.account_id, to_account_id: match.extra.account_id, amount: match.amount, payee: "Moved (found at count)", source: "manual", evidence: tap ? EVIDENCE.count : null }, now);
   if (!moved.ok) return { ok: false, violations: moved.violations };
   return { ok: true, violations: [], state: moved.state, move_id };
 }

@@ -4166,7 +4166,7 @@ async function onClick(el) {
     case "past-move": {
       const m = M.matchHeldGaps(S())[Number(id)];
       if (!m) break;
-      const r = M.planGapMove(S(), m, { move_id: newId("tx"), now: new Date() });
+      const r = M.planGapMove(S(), m, { move_id: newId("tx"), now: new Date(), tap: true });   // the owner's confirming tap: the move is verified by count
       if (!r.ok) { showToast("Could not save: " + r.violations[0].message); break; }
       await commit(r.state);
       showToast(peso(m.amount) + " move from " + accountName(m.short.account_id) + " to " + accountName(m.extra.account_id) + " waits in Verify.");
@@ -4307,7 +4307,7 @@ async function onClick(el) {
       if (!plan.ok) { showToast("Could not save: " + plan.violations[0].message); break; }
       ui.sheet = null; renderSheet();
       await commit(plan.state, { ...ledger.settings, gcash: { account_id: ui.form.account_id, allowance_id: ids.allow, buffer_id: ids.buf } });
-      showToast("Wallet split into two parts");
+      showToast("Wallet split into two parts. Saved. Waiting in Verify.");
       break;
     }
     case "open-bufund": ui.sheet = { type: "bufund" }; ui.form = { amount: "", account_id: accountsFor(null).find((a) => a.id !== gcashOf().account_id)?.id ?? null }; renderSheet(); break;
@@ -4318,7 +4318,7 @@ async function onClick(el) {
       if (!plan.ok) { showToast("Could not save: " + plan.violations[0].message); break; }
       ui.sheet = null; renderSheet();
       await commit(plan.state);
-      showToast(peso(amount.centavos) + " added to the buffer");
+      showToast(peso(amount.centavos) + " added to the buffer. Saved. Waiting in Verify.");
       break;
     }
     case "add-cat": ui.sheet = { type: "cat", id: null }; ui.form = { name: "" }; renderSheet(); break;
@@ -4478,7 +4478,7 @@ async function onClick(el) {
       if (!plan.ok) { showToast("Could not save: " + plan.violations[0].message); break; }
       ui.sheet = null; renderSheet();
       await commit(plan.state);
-      showToast("Recorded: " + peso(amount.centavos));
+      showToast("Saved. Waiting in Verify: " + peso(amount.centavos));   // typed money is a draft (P0-7); never silent about it
       break;
     }
     case "open-planform": {   // the first times, a small popup says what the screen is for; then the form opens already filled
@@ -4927,6 +4927,12 @@ async function onClick(el) {
         if (!pm.ok) { showToast(pm.message); break; }
         next = pm.state; if (pm.count) moveNote = `${pm.count} ${pm.count === 1 ? "move draft" : "move drafts"} added.`;
       }
+      let verifyNote = "";
+      if (form.statement?.parsed) {   // P0-7: what the statement matches in the ledger and finds waiting in Verify is verified by the statement
+        const moveIds = (form.statement.leftOut.cardCash || form.statement.leftOut.own) ? M.statementMoves(base, form.statement.parsed.lines, { account_id: accountId, bankId: form.statement.bankId, chosen: form.moveChosen }).map((m) => m.match) : [];
+        const sv = M.planStatementVerify(next, [...p.duplicates.map((d) => d.match_id), ...moveIds]);
+        next = sv.state; if (sv.count) verifyNote = `${sv.count} ${sv.count === 1 ? "entry" : "entries"} you had logged ${sv.count === 1 ? "was" : "were"} verified by the statement.`;
+      }
       let gapNote = "", gapKept = false;
       if (form.statement?.parsed && accountId === form.account_id) {   // balance proof (P1-8 fix 8): what the statement closes at against the ledger with these drafts; the difference may be kept as not yet explained. Not for a pocket this very import made: it starts at 0 and the window never offered the choice (its opening is Start from statement's job)
         const proof = M.statementBalanceProof(next, { account_id: accountId, summary: form.statement.parsed.summary, period: form.statement.period, checkOk: form.statement.check.ok });
@@ -4944,7 +4950,7 @@ async function onClick(el) {
         else { next = { ...next, statementRecords: [...(next.statementRecords ?? []), record], statementLines: [...(next.statementLines ?? []), ...lines] }; kept = "Statement kept: see Setup, Statements."; }
       }
       ui.sheet = null; renderSheet();
-      const said = [pocketNote, r.count ? `${r.count} ${r.count === 1 ? "draft is" : "drafts are"} waiting in Verify.` : "", rewardNote, moveNote, gapNote, kept].filter(Boolean).join(" ");
+      const said = [pocketNote, r.count ? `${r.count} ${r.count === 1 ? "draft is" : "drafts are"} waiting in Verify.` : "", rewardNote, moveNote, verifyNote, gapNote, kept].filter(Boolean).join(" ");
       if (gapKept) {   // the ledger changes beyond plain drafts: the app first keeps a copy by the pre-upgrade mechanism, reads it back, and stops if it cannot
         const nl = M.nextLedger(ledger, next, ledger.settings);
         const rr = await M.replaceWithCopy({ current: ledger, next: nl, io: { readCopies, writeCopies, writeLedger: (text) => writeBoth(text) }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });

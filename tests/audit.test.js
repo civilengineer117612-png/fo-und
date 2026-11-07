@@ -23,8 +23,7 @@ function ledger() {
 const verifyAll = (st) => { let x = st; for (const t of st.transactions.filter((t) => t.status === "draft")) { if (x.transactions.find((y) => y.id === t.id).status !== "draft") continue; const r = M.verifyDraft(x, t.id, NOW); assert.ok(r.ok, JSON.stringify(r.violations)); x = r.state; } return x; };
 const expense = (st, date, cat, amount, acct, o = {}) => { const p = M.planExpense(st, { transaction_id: nid("e"), date, category_id: cat, amount, account_id: acct, payee: o.payee ?? "Shop" }, NOW); assert.ok(p.ok, JSON.stringify(p.violations)); return verifyAll(M.applyDrafts(st, p.drafts)); };
 const transfer = (st, date, from, to, amount, fee = 0) => { const p = M.planTransfer(st, { transaction_id: nid("tr"), date, from_account_id: from, to_account_id: to, amount, fee, source: "manual" }, NOW); assert.ok(p.ok, JSON.stringify(p.violations)); return verifyAll(p.state); };
-const received = (st, date, cat, amount, acct) => { const id = nid("in"); const t = { id, date, payee: "Money in", memo: "", status: "verified", source: "manual", created_at: "2026-10-01T09:00:00.000+08:00", verified_at: "2026-10-01T09:00:00.000+08:00" };
-  const es = [{ transaction_id: id, account_id: acct, amount }, { transaction_id: id, category_id: cat, amount: -amount }]; assert.ok(M.checkTransactionSave(st, { transaction: t, entries: es }).ok); return { ...st, transactions: [...st.transactions, t], entries: [...st.entries, ...es] }; };
+const received = (st, date, cat, amount, acct) => { const p = M.planPayReceived(st, { transaction_id: nid("in"), date, amount, account_id: acct, category_id: cat, payee: "Money in" }, NOW); assert.ok(p.ok, JSON.stringify(p.violations)); return verifyAll(p.state); };   // typed money waits in Verify (P0-7); the owner verifies it
 const balanceOf = (st, id) => M.naturalBalance(st.accounts.find((a) => a.id === id), M.countedEntries(st));
 const checkIn = (st, acct, counted, o = {}) => { const id = nid("ci"); const p = M.planCheckIn(st, { id, transaction_id: "ck" + id, date: o.date ?? "2026-10-13", account_id: acct, counted_balance: counted, unlogged_category_id: UL, why: o.why, basis: o.basis }, NOW);
   assert.ok(p.ok, JSON.stringify(p.violations)); const base = p.posting ? { ...st, transactions: [...st.transactions, p.posting.transaction], entries: [...st.entries, ...p.posting.entries] } : st;
@@ -338,6 +337,9 @@ test("SUSPENSE: a held gap is not in the Budget view and not on a trip either", 
 test("RECOGNITION: a refund reduces spending in its category and is never income", () => {
   let s = expense(ledger(), "2026-10-05", "food", 100000, "chk");
   const r = M.planRefund(s, { transaction_id: nid("rf"), date: "2026-10-09", amount: 40000, account_id: "chk", category_id: "food" }, NOW); assert.ok(r.ok);
+  assert.equal(r.transaction.status, "draft", "P0-7: a typed refund waits in Verify");
+  assert.equal(M.spendingByCategory(r.state, { month: MONTH }).total, 100000, "waiting in Verify it is in no spending figure");
+  r.state = verifyAll(r.state);
   assert.equal(M.spendingByCategory(r.state, { month: MONTH }).total, 60000);
   assert.equal(M.incomeBySource(r.state, { from: FROM, to: TO }).total, 0);
   assert.equal(balanceOf(r.state, "chk"), balanceOf(s, "chk") + 40000);
