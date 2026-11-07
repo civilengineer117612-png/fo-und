@@ -3,8 +3,10 @@ name: WebKit
 # The same e2e scripts as the "e2e" job in test.yml, on Playwright's WebKit (Safari's engine, the one on the owner's iPhone).
 # This is a SEPARATE workflow on purpose: pages.yml reuses test.yml, and the deploy must keep waiting for "test" and "e2e" only.
 # "e2e-webkit" becomes a required check (and a deploy gate) only after 10 green runs in a row, by the owner's decision.
+# One run per commit (owner, Nov 7): pull_request for pull requests, push only for main.
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
