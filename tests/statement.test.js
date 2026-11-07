@@ -218,7 +218,7 @@ test("one choice per person: a person's unsure lines are one group with a count 
   assert.deepEqual(g.map((x) => [x.name, x.ids, x.total]), [["Sample Lender", ["s3"], 4000], ["Sample Friend", ["s1", "s2"], 3500]], "spending lines are not asked; case and dots do not split a person");
   assert.match(app, /case "stm-choose": \{ const g = M\.unsureByPerson\(ui\.form\.items\)\.find\(\(x\) => x\.key === id\); if \(g\) ui\.form\.choice = \{ \.\.\.\(ui\.form\.choice \?\? \{\}\), \.\.\.Object\.fromEntries\(g\.ids\.map/, "the choice is written for every line of that person");
   assert.match(app, /Show the \$\{n\} lines/);
-  assert.match(app, /transfers"\} to your own name/);
+  assert.match(app, /"transfers"\} to or from your own name: moves, not spending or income/);
 });
 
 test("totals titles that wrap over two lines are still read, so the check can run", () => {

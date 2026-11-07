@@ -182,17 +182,21 @@ export function moveTarget(state, moveTo, bankId = null) {
   const cards = state.accounts.filter((a) => a.class === "liability" && !a.archived), mine = bankId ? cards.filter((a) => a.bank === bankId) : [];
   return mine.length === 1 ? mine[0].id : cards.length === 1 ? cards[0].id : null;
 }
-// `chosen` ({cash, card}): the account the owner picked for lines that have no obvious target ("Not imported: choose the account"); it is used only when it is a real,
+// P1-8 fix 4: a transfer to or from the statement's OWN HOLDER (`own` on the line, either direction) is a move too: matched the same way against the moves
+// logged (into the account for money in, out of it for money out); one not logged becomes a draft move to or from the owner's other account, chosen ONCE in the
+// import window for all of them (`chosen.own`). Items carry `moveTo` "own" and `direction`.
+// `chosen` ({cash, card, own}): the account the owner picked for lines that have no obvious target ("Not imported: choose the account"); it is used only when it is a real,
 // open account of the right kind (Cash: a bank, wallet or cash account; card: a credit card) other than the statement's own. A row with no match and no target says
 // `needs: true`: the window lists it under that heading and it imports like any line once an account is picked. Nothing is ever silently dropped.
 const chosenFor = (state, kind, id, account_id) => { const a = id ? state.accounts.find((x) => x.id === id) : null; return a && !a.archived && a.id !== account_id && a.class === (kind === "card" ? "liability" : "asset") ? a.id : null; };
 export function statementMoves(state, lines, { account_id, bankId = null, chosen = {} }) {
   const used = new Set();
-  return lines.filter((l) => l.moveTo && l.direction === "out").map((l) => {
-    const m = account_id ? loggedMove(state, { date: l.date, amount: l.amount, accountId: account_id, direction: "out" }, used) : null;
+  return lines.filter((l) => (l.moveTo && l.direction === "out") || l.own).map((l) => {
+    const direction = l.own ? l.direction : "out";
+    const m = account_id ? loggedMove(state, { date: l.date, amount: l.amount, accountId: account_id, direction }, used) : null;
     if (m) used.add(m.id);
-    const auto = moveTarget(state, l.moveTo, bankId), to = (auto && auto !== account_id ? auto : null) ?? chosenFor(state, l.moveTo, chosen[l.moveTo], account_id);
-    return { date: l.date, name: l.payee || l.text, amount: l.amount, moveTo: l.moveTo, match: m?.id ?? null, to, needs: !m && !to };
+    const auto = l.own ? null : moveTarget(state, l.moveTo, bankId), kind = l.own ? "own" : l.moveTo, to = (auto && auto !== account_id ? auto : null) ?? chosenFor(state, kind, chosen[kind], account_id);
+    return { date: l.date, name: l.payee || l.text, amount: l.amount, moveTo: kind, direction, match: m?.id ?? null, to, needs: !m && !to };
   });
 }
 // The drafts for the moves `statementMoves` found not logged. All or nothing. Returns {ok, state, count, noTarget} or {ok:false, message}.
@@ -201,7 +205,8 @@ export function planStatementMoves(state, moves, { account_id, newId, now = new 
   for (const m of moves) {
     if (m.match) continue;
     if (!m.to) { noTarget++; continue; }
-    const r = planTransfer(next, { transaction_id: newId(), date: m.date, from_account_id: account_id, to_account_id: m.to, amount: m.amount, payee: m.moveTo === "card" ? "Card payment" : "Cash withdrawal", source: "statement" }, now);
+    const into = m.direction === "in", payee = m.moveTo === "card" ? "Card payment" : m.moveTo === "cash" ? "Cash withdrawal" : into ? "Transfer from my account" : "Transfer to my account";
+    const r = planTransfer(next, { transaction_id: newId(), date: m.date, from_account_id: into ? m.to : account_id, to_account_id: into ? account_id : m.to, amount: m.amount, payee, source: "statement" }, now);
     if (!r.ok) return { ok: false, message: `${m.name} (${m.date}): ${r.violations[0].message}` };
     next = r.state; count++;
   }
