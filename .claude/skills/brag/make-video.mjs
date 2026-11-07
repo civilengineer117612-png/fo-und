@@ -17,7 +17,9 @@ import { createRequire } from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url)), root = execSync("git rev-parse --show-toplevel", { cwd: here }).toString().trim();
 const arg = (name, def) => { const i = process.argv.indexOf("--" + name); return i >= 0 ? (process.argv[i + 1] && !process.argv[i + 1].startsWith("--") ? process.argv[i + 1] : true) : def; };
-const ref = arg("ref", "HEAD"), noPdf = arg("no-pdf", false) === true;
+const ref = arg("ref", "HEAD"), noPdf = arg("no-pdf", false) === true, voiceArg = arg("voice", null), voice = typeof voiceArg === "string" ? resolve(voiceArg) : null;
+if (voiceArg === true || (voice && !existsSync(voice))) { console.error("--voice needs the path of a voice recording that exists."); process.exit(2); }
+if (voice && noPdf) { console.error("--voice and --no-pdf cannot be used together: the voice script has a line for the statement."); process.exit(2); }
 const out = resolve(arg("out", join(tmpdir(), "brag")));
 if (out.startsWith(root + "/") || out === root) { console.error("Refusing to write the video inside the repository: use --out outside it."); process.exit(2); }
 mkdirSync(out, { recursive: true });
@@ -103,7 +105,7 @@ await page.evaluate(() => {
 // the recorder: a loop of real 2x screenshots, each with its time; frames are stitched at their real timings afterwards
 const rec = { on: false, list: [], t0: 0, loop: null };
 const record = async () => { while (rec.on) { const t = Date.now(), buf = await page.screenshot({ type: "jpeg", quality: 88, scale: "device" }).catch(() => null); if (!buf) continue; const f = join(framesDir, String(rec.list.length).padStart(5, "0") + ".jpg"); writeFileSync(f, buf); rec.list.push({ f, t }); } };
-const cap = (t) => page.evaluate((x) => window.__brag.cap(x), t), card = (h) => page.evaluate((x) => window.__brag.card(x), h), wait = (ms) => page.waitForTimeout(ms);
+const cap = (t) => page.evaluate((x) => window.__brag.cap(x), t), card = (h) => page.evaluate((x) => window.__brag.card(x), h), wait = (ms) => page.waitForTimeout(voice ? Math.round(ms * 0.5) : ms);   // with a voice the scenes are recorded briskly, then stretched or squeezed to each spoken line
 const scene = async (name, fn) => { try { await fn(); } catch (e) { problems.push(`scene "${name}": ${e.message.split("\n")[0]}`); await cap(""); await card(""); } };
 const menuGo = async (tab) => { await page.click("#menuBtn"); await page.click(`#menu .item[data-tab="${tab}"]`); await page.waitForFunction(() => !document.querySelector("#menu .drawer"), null, { timeout: 8000 }); await wait(500); };
 
@@ -112,9 +114,10 @@ rec.on = true; rec.t0 = Date.now(); rec.loop = record();
 mark("start");
 await scene("title", async () => { await card(`<b>fo/und</b><p>Your money.<br>Only on your phone.</p><small>A personal finance app.<br>Free. No account. No server.</small>`); await wait(3200); await card(""); await wait(600); });
 await scene("log", async () => {
-  mark("log"); await cap("Log a spend in two taps."); await wait(1600);
-  await page.click('button.tile:has-text("Lunch")'); await wait(900);
-  await page.click('#sheet .chip:has-text("Sample Wallet")'); await page.locator("#toast").filter({ hasText: "Saved" }).first().waitFor({ timeout: 6000 }).catch(() => {}); await wait(2200);
+  mark("log"); const slow = voice ? 1.9 : 1;   // the log scene has the longest spoken lines
+  await cap("Log a spend in two taps."); await wait(1600 * slow);
+  await page.click('button.tile:has-text("Lunch")'); await wait(900 * slow);
+  await page.click('#sheet .chip:has-text("Sample Wallet")'); await page.locator("#toast").filter({ hasText: "Saved" }).first().waitFor({ timeout: 6000 }).catch(() => {}); await wait(2200 * slow);
 });
 await scene("cash flow", async () => {
   mark("cash flow"); await cap("See where it went, at a glance."); await menuGo("money"); await wait(2600);
@@ -137,7 +140,7 @@ if (!noPdf) await scene("statement", async () => {
   await page.click('#sheet button:has-text("Cancel")').catch(() => {}); await wait(600);
 });
 await scene("verify", async () => {
-  mark("verify"); await cap("Verified means final."); await page.click('#nav button:has-text("Verify")'); await wait(3200);
+  mark("verify"); await cap("Check once. Then it is final."); await page.click('#nav button:has-text("Verify")'); await wait(3200);
 });
 await scene("end", async () => {
   mark("end"); await cap(""); await card(`<b>fo/und</b><p>Reads receipts and statements<br>on the phone itself.</p><small>Encrypted backups.<br>Your ledger and photos stay on your phone.<br>Free for good. No ads, no subscription.</small>`); await wait(4200);
@@ -145,10 +148,29 @@ await scene("end", async () => {
 rec.on = false; await rec.loop;
 await ctx.close(); await browser.close(); server.close();
 
+// ---- 3b. with a voice: each scene starts when its spoken line starts ----
+// The recording is cut at its pauses. The script (see SKILL.md) has 14 phrases; the phrase that opens each scene is fixed below.
+const SCENE_PHRASE = { start: 0, log: 2, "cash flow": 4, budget: 5, cards: 6, statement: 7, verify: 9, end: 10 };
+let warp = null, voiceSeconds = 0;
+if (voice) {
+  voiceSeconds = Number(execSync(`ffprobe -v error -show_entries format=duration -of csv=p=0 ${JSON.stringify(voice)}`).toString().trim());
+  const sd = spawnSync("ffmpeg", ["-hide_banner", "-nostats", "-i", voice, "-af", "silencedetect=n=-38dB:d=0.2", "-f", "null", "-"], { encoding: "utf8" }).stderr;
+  const starts = [0, ...[...sd.matchAll(/silence_end: ([\d.]+) \| silence_duration: ([\d.]+)/g)].filter((m) => Number(m[2]) >= 0.35).map((m) => Number(m[1])).filter((t) => t < voiceSeconds - 0.3)];   // a pause between lines is at least a third of a second
+  if (starts.length !== 14) problems.push(`voice: found ${starts.length} phrases, the script has 14; the scenes were not timed to the voice`);
+  else {
+    const names = marks.map(([n]) => n), target = names.map((n) => starts[SCENE_PHRASE[n]]); target.push(voiceSeconds + 0.6);
+    const actual = marks.map(([, t]) => t); actual.push((rec.list[rec.list.length - 1].t - rec.t0) / 1000);
+    warp = { names, target, actual };
+    names.forEach((n, i) => { const f = (target[i + 1] - target[i]) / (actual[i + 1] - actual[i]); if (!["start", "end"].includes(n) && (f < 0.6 || f > 1.8)) problems.push(`scene "${n}" had to be played at ${f.toFixed(2)}x to fit its spoken line`); });
+  }
+}
+const timeOf = (t) => { if (!warp) return t; const a = warp.actual; let i = a.findIndex((x, k) => t >= x && t < a[k + 1]); if (i < 0) i = t < a[0] ? 0 : a.length - 2; return warp.target[i] + (t - a[i]) * (warp.target[i + 1] - warp.target[i]) / (a[i + 1] - a[i]); };
+
 // ---- 4. the file: frames at their real timings, an mp4 that plays everywhere, a few frames to inspect ----
 const mp4 = join(out, "brag.mp4"), listFile = join(framesDir, "list.txt");
-writeFileSync(listFile, rec.list.map((r, i) => `file '${r.f}'\nduration ${(((rec.list[i + 1]?.t ?? r.t + 600) - r.t) / 1000).toFixed(3)}`).join("\n") + `\nfile '${rec.list[rec.list.length - 1].f}'\n`);
-const ff = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listFile, "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-crf", "22", "-preset", "medium", "-movflags", "+faststart", "-an", mp4], { stdio: "inherit" });
+const tl = rec.list.map((r) => timeOf((r.t - rec.t0) / 1000)), tailEnd = warp ? warp.target[warp.target.length - 1] : tl[tl.length - 1] + 0.6;
+writeFileSync(listFile, rec.list.map((r, i) => `file '${r.f}'\nduration ${Math.max(0.001, (tl[i + 1] ?? tailEnd) - tl[i]).toFixed(3)}`).join("\n") + `\nfile '${rec.list[rec.list.length - 1].f}'\n`);
+const ff = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listFile, ...(voice ? ["-i", voice] : []), "-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-crf", "22", "-preset", "medium", "-movflags", "+faststart", ...(voice ? ["-af", "apad", "-c:a", "aac", "-b:a", "128k", "-shortest"] : ["-an"]), mp4], { stdio: "inherit" });
 if (ff.status !== 0) { console.error("ffmpeg failed"); process.exit(1); }
 const dur = Number(execSync(`ffprobe -v error -show_entries format=duration -of csv=p=0 ${JSON.stringify(mp4)}`).toString().trim());
 const frames = join(out, "frames"); mkdirSync(frames, { recursive: true });

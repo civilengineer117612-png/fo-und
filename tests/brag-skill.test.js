@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,4 +46,16 @@ test("the claims on the title and end cards stay inside what CLAUDE.md allows", 
   assert.ok(cards.length >= 2);
   for (const c of cards) for (const banned of [/never leaves/i, /bank-grade/i, /\bAI\b/, /military/i, /100%/, /guarantee/i]) assert.ok(!banned.test(c), `card says ${banned}: ${c}`);
   assert.ok(cards.some((c) => /Free/.test(c)) && cards.some((c) => /stay on your phone/.test(c)));
+});
+
+test("--voice: needs a recording that exists, cannot be combined with --no-pdf, the voice is only ever the owner's file and is cut at its pauses", () => {
+  const run = (...args) => spawnSync("node", [new URL("make-video.mjs", dir).pathname, "--out", join(tmpdir(), "brag-voice-guard"), ...args], { encoding: "utf8", timeout: 20000 });
+  let r = run("--voice", "/nonexistent/voice.mp3"); assert.equal(r.status, 2); assert.match(r.stderr, /--voice needs the path of a voice recording that exists/);
+  r = run("--voice"); assert.equal(r.status, 2);
+  const f = join(tmpdir(), "brag-guard-voice.txt"); writeFileSync(f, "x");
+  r = run("--voice", f, "--no-pdf"); assert.equal(r.status, 2); assert.match(r.stderr, /cannot be used together/); rmSync(f);
+  assert.match(script, /silencedetect=n=-38dB:d=0\.2/); assert.match(script, /Number\(m\[2\]\) >= 0\.35/, "a pause between lines is at least 0.35 s");
+  assert.match(script, /starts\.length !== 14/, "the phrase count is checked, never guessed");
+  assert.ok(!/espeak|flite|piper|tts|speech|elevenlabs|openai/i.test(script), "the script never makes a voice");
+  assert.match(skill, /OWNER records or supplies the voice/);
 });

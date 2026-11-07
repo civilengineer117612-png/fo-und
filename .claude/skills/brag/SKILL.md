@@ -15,6 +15,14 @@ node .claude/skills/brag/make-video.mjs --out <folder outside the repo>
 - About 45 seconds, 780 x 1688, 30 fps, under 3 MB. It prints the file, the length, the scenes and any `problems`. A scene that cannot run is skipped and named in `problems`; fix it before sending.
 - It also writes `frames/<scene>.png` (one still per scene) next to the video.
 
+## A voiceover (optional, owner supplies the recording)
+```
+node .claude/skills/brag/make-video.mjs --out <folder outside the repo> --voice <recording.mp3>
+```
+- The OWNER records or supplies the voice; the skill never makes one (rule 7: no paid or AI service, no API key). `brag-script.md` style: 8 lines, 14 phrases: "This is found." / "A personal finance app that lives only on your phone." / "Log a spend in two taps." / "Pick the amount, pick the account." / "See where your money went, at a glance." / "One budget: by month, by payday, or by week." / "Your amounts stay hidden until you tap the eye." / "Import a bank statement." / "It checks the balance, and nothing gets counted twice." / "Check each entry once, and it is locked." / "Receipts and statements are read on your phone." / "Backups are encrypted." / "Free." / "No account. No ads. No subscription."
+- The script cuts the recording at its pauses (a pause is 0.35 s or more). It needs exactly 14 phrases, otherwise it says so in `problems` and does not time the scenes. Each scene starts when its line starts (`SCENE_PHRASE`); the scene is played a little faster or slower to fit (a scene that needs more than 1.8x or less than 0.6x is named in `problems`). The video ends 0.6 s after the voice. The captions stay, so it also works muted.
+- Every spoken claim follows rule 4 like a caption. If the owner changes the words, check each claim against CLAUDE.md first and change `SCENE_PHRASE` if the phrase count changes.
+
 ## The tour (change it in `make-video.mjs`, one `scene(...)` per step)
 Title card, Log (two taps), Cash flow, Budget (month, payday, week), Cards (amounts hidden, tap the eye), a statement import (the invented `e2e/fixtures/sample-open.pdf`), Verify, closing card. Captions are one short line each (they sit in a band above the app; two lines would cover the screen title).
 
