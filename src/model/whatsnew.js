@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-06-card-cashback", date: "2026-11-06", text: "A card statement's cashback is now added as a credit on the card, so what you owe goes down, as a draft you check in Verify." },
   { id: "2026-11-06-person-transfers", date: "2026-11-06", text: "In a statement that prints your name, money sent to another person is added as a spending draft for you to check in Verify, instead of being asked about." },
   { id: "2026-11-06-own-transfers", date: "2026-11-06", text: "In a statement, a transfer to or from your own name is matched to the move you logged; for the rest you choose your other account once and they become move drafts." },
   { id: "2026-11-06-card-cash-moves", date: "2026-11-06", text: "In a statement, a credit card repayment and an ATM cash withdrawal are moves, not spending: one you already logged is matched, and one you did not becomes a move draft in Verify." },

@@ -4377,12 +4377,13 @@ console.log("\n-- Card statement --");
   const ct = await text(page, "#sheet");
   check(ct.includes("Everything in and out matches the totals at the top") && ct.includes("Lines found") && /3\b/.test(ct), "it adds up (previous balance, purchases, cashback and the current balance) and finds its three lines");
   check(ct.includes("chosen for you") && ct.includes("Test Card"), "the bank's CARD is chosen for it, not the savings account");
-  check((await text(page, "#stm-rewards")).includes("left out: a card cannot receive money"), "its cashback credit is said to be left out, with the reason");
+  check((await text(page, "#stm-rewards")).includes("will be added as credits on the card (what you owe goes down), as drafts."), "its cashback credit is said to be added as a credit on the card, as a draft");
   check(await page.locator("#f-save").isEnabled(), "Add is on");
   await page.click("#f-save");
-  await page.waitForFunction(() => JSON.parse(localStorage.getItem("financialTracker.ledger")).state.transactions.length === 2, null, { timeout: 5000 });
-  const cs = JSON.parse((await stored(page)).local).state;
-  check(cs.transactions.map((x) => x.date).sort().join() === "2026-10-01,2026-10-02" && cs.transactions.every((x) => x.status === "draft" && cs.entries.some((e) => e.transaction_id === x.id && e.account_id === "cc")), "two purchase drafts dated by the transaction day, on the card; nothing for the cashback");
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem("financialTracker.ledger")).state.transactions.length === 3, null, { timeout: 5000 });
+  const cs = JSON.parse((await stored(page)).local).state, credit = cs.transactions.filter((x) => cs.entries.some((e) => e.transaction_id === x.id && e.account_id === "cc" && e.amount > 0)), buys = cs.transactions.filter((x) => !credit.includes(x));
+  check(buys.map((x) => x.date).sort().join() === "2026-10-01,2026-10-02" && buys.every((x) => x.status === "draft" && cs.entries.some((e) => e.transaction_id === x.id && e.account_id === "cc" && e.amount < 0)), "two purchase drafts dated by the transaction day, on the card");
+  check(credit.length === 1 && credit[0].status === "draft" && credit[0].source === "statement" && cs.entries.filter((e) => e.transaction_id === credit[0].id).some((e) => e.account_id === "cc" && e.card_state === "posted") && cs.entries.some((e) => e.transaction_id === credit[0].id && cs.categories.find((c) => c.id === e.category_id)?.kind === "income"), "and the cashback is one draft credit on the card (what is owed goes down), income, waiting in Verify");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 

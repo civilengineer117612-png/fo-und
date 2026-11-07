@@ -14,6 +14,8 @@ import { planPayReceived } from "./plan.js";
 import { categoryFromBook } from "./payees.js";
 import { UNLOGGED_CATEGORY_ID } from "./seed.js";
 import { liveSlips } from "./income.js";
+import { checkTransactionSave } from "./index.js";
+import { phTimestamp } from "./util.js";
 
 const DAY = 86400000;
 const gap = (a, b) => Math.abs(Math.round((Date.parse(a) - Date.parse(b)) / DAY));
@@ -152,11 +154,12 @@ export function planMissingDraft(state, line, { newId, now = new Date(), book = 
 }
 
 // Cashback, rewards and interest read from a statement become income drafts in the account the statement belongs to (source "statement": drafts that wait in Verify). A line
-// whose amount is already there as income on that account within 2 days is left out, so adding the same lines twice never doubles them; a card is skipped (money cannot be
-// received into one). Returns {ok, state, count, skipped}.
+// whose amount is already there as income on that account within 2 days is left out, so adding the same lines twice never doubles them. On a CARD the cashback is a credit that lowers what
+// is owed (P1-8 fix 6). Returns {ok, state, count, skipped}.
 export function planRewards(state, rewards, { account_id, newId, now = new Date() }) {
   const account = state.accounts.find((a) => a.id === account_id);
-  if (!account || account.class !== "asset") return { ok: true, state, count: 0, skipped: rewards.length };
+  if (!account) return { ok: true, state, count: 0, skipped: rewards.length };
+  const card = account.class === "liability";   // P1-8 fix 6: a card's cashback is a CREDIT on the card: what is owed goes down (the card leg is positive), and it is income, a draft in Verify
   const income = state.categories.filter((c) => c.kind === "income"), cat = income.find((c) => c.id === "cat-other-income") ?? income[0];
   if (!cat) return { ok: true, state, count: 0, skipped: rewards.length };
   let next = state, count = 0, skipped = 0;
@@ -164,6 +167,13 @@ export function planRewards(state, rewards, { account_id, newId, now = new Date(
   for (const r of rewards) {
     const there = loggedMatch(next, { date: r.date, name: r.name, amount: -r.amount, accountId: account_id }, used);
     if (there) { used.add(there.id); skipped++; continue; }
+    if (card) {
+      const id = newId(), transaction = { id, date: r.date, payee: r.name, memo: "", status: "draft", source: "statement", created_at: phTimestamp(now) };
+      const entries = [{ transaction_id: id, account_id, amount: r.amount, card_state: "posted" }, { transaction_id: id, category_id: cat.id, amount: -r.amount }];
+      const c = checkTransactionSave(next, { transaction, entries });
+      if (!c.ok) return { ok: false, message: `${r.name} (${r.date}): ${c.violations[0].message}` };
+      next = { ...next, transactions: [...next.transactions, transaction], entries: [...next.entries, ...entries] }; count++; continue;
+    }
     const p = planPayReceived(next, { transaction_id: newId(), date: r.date, amount: r.amount, account_id, category_id: cat.id, payee: r.name, source: "statement" }, now);
     if (!p.ok) return { ok: false, message: `${r.name} (${r.date}): ${p.violations[0].message}` };
     next = p.state; count++;
