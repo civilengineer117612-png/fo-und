@@ -15,6 +15,7 @@ import { categoryFromBook } from "./payees.js";
 import { UNLOGGED_CATEGORY_ID } from "./seed.js";
 import { liveSlips } from "./income.js";
 import { checkTransactionSave } from "./index.js";
+import { planCheckIn, ledgerBalanceFor } from "./checkin.js";
 import { phTimestamp } from "./util.js";
 
 const DAY = 86400000;
@@ -200,6 +201,31 @@ export function notOnStatement(state, lines, { account_id, period = null }) {
     if (hit) hit.used = true; else out.push({ id: t.id, date: t.date, payee: t.payee, amount: per.get(t.id), status: t.status });
   }
   return out;
+}
+
+// P1-8 fix 8: BALANCE PROOF AT IMPORT. The statement says what the account closed at on its last day; the ledger (with the drafts this import would add, `state` is
+// that planned ledger) says what it shows at that date. `difference` = ledger minus statement (+ = the ledger holds more). A card statement prints what is OWED, so
+// it is set against the ledger the same way `statementDifference` does. Nothing is changed. Returns {ok, asOf, statementClosing, ledgerBalance, difference, card}, or
+// {ok:false} when the statement does not print a closing balance and a last day, or its own lines do not add up (then its figure is not trusted).
+export function statementBalanceProof(state, { account_id, summary, period, checkOk = true }) {
+  const account = state.accounts.find((a) => a.id === account_id);
+  if (!account || !Number.isSafeInteger(summary?.closing) || !period?.to || !checkOk) return { ok: false };
+  const card = account.class === "liability", txDate = new Map(state.transactions.map((t) => [t.id, t.date]));
+  const ledgerBalance = account.opening_balance + countedEntries(state).filter((e) => e.account_id === account_id && (txDate.get(e.transaction_id) ?? "") <= period.to).reduce((n, e) => n + e.amount, 0);
+  const bank = card ? -summary.closing : summary.closing;
+  return { ok: true, card, asOf: period.to, statementClosing: summary.closing, ledgerBalance, difference: ledgerBalance - bank };
+}
+// The gap kept as NOT YET EXPLAINED: ONE held count dated the statement's last day (`planCheckIn` with `why: "later"`: the balance is corrected, the gap is an `adjustment`,
+// so it is spending nowhere and is listed under "Not yet explained"). Bank, wallet, cash and pocket accounts only; a card is left to the weekly count. Called on the
+// planned ledger, after the import's own drafts. Returns {ok, state, made} or {ok:false, message}; nothing when there is no gap.
+export function planStatementGap(state, proof, { account_id, newId, unlogged_category_id, now = new Date() }) {
+  const account = state.accounts.find((a) => a.id === account_id);
+  if (!proof?.ok || !account || account.class !== "asset" || proof.difference === 0) return { ok: true, state, made: false };
+  const now_ = ledgerBalanceFor(account, countedEntries(state));
+  const plan = planCheckIn(state, { id: newId(), transaction_id: newId(), date: proof.asOf, account_id, counted_balance: now_ - proof.difference, unlogged_category_id, why: "later" }, now);
+  if (!plan.ok || !plan.transaction) return { ok: false, message: plan.violations?.[0]?.message ?? "The difference could not be kept." };
+  const transaction = { ...plan.transaction, payee: "Statement check", memo: plan.transaction.memo + " (statement closing balance, kept apart as not yet explained)" };
+  return { ok: true, made: true, state: { ...state, transactions: [...state.transactions, transaction], entries: [...state.entries, ...plan.entries], checkIns: [...(state.checkIns ?? []), plan.checkIn] } };
 }
 
 // P1-8 fix 3: a statement's card repayments and ATM cash withdrawals (`moveTo` "card" or "cash" on the line) are moves. Each is matched against the moves already
