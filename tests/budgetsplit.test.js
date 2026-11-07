@@ -105,7 +105,7 @@ test("old Pay plan data (Food 3,000.00 on each payday) moves to a monthly 6,000.
   assert.equal(M.budgetFor(r.state.rules, "food", MONTH), 600000); assert.deepEqual(r.settings.budget_split.food, { amounts: [300000, 300000], for: 600000 });
   assert.equal(M.budgetFor(r.state.rules, "fun", MONTH), 150000); assert.deepEqual(r.settings.budget_split.fun.amounts, [100000, 50000]);
   assert.equal(r.settings.goal_monthly.trip, 300000); assert.equal(r.settings.buffer_monthly, 100000); assert.equal(r.settings.plan_moved, MONTH);
-  assert.deepEqual(r.settings.pay_schedule, { days: [15, "last"] }, "the paydays are kept");
+  assert.deepEqual(r.settings.pay_schedule, { kind: "twice", days: [15, "last"] }, "the paydays are kept");
   assert.deepEqual(r.settings.plans, [plan], "the old plan is still there, untouched");
   assert.equal(M.budgetFor(r.state.rules, "food", "2026-09"), null, "past months keep the budgets they had");
   const v = M.budgetPlan(r.state, { ...r.settings, income_base_pin: undefined }, MONTH);
