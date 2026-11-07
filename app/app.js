@@ -2470,7 +2470,9 @@ function viewCheckin() {
 // ONE BUDGET (P0-6): one stored figure per category per month, shown as the whole Month, each payday's share, or a Per week guide. Changing the view never
 // changes the figure; only editing an amount does (src/model/budgetsplit.js).
 const bvNow = () => M.budgetPlan(S(), ledger.settings, M.monthOf(today()));
-const bvIncomes = (v) => v.perPayday.map((p) => p.income);
+const bvIncomes = (v) => v.regularIncomes;   // lines are shared over the REGULAR paydays only; an extra payday takes none
+const bvRegular = (v) => v.paydays.filter((p) => !p.extra);
+const bvNextReg = (v, w) => v.perPayday.slice(w + 1).find((p) => !p.extra) ?? null;   // the next regular payday in this month (never the next month)
 const bvAmounts = (v, key) => { const line = v.lines.find((l) => l.key === key); return line ? M.paydayShares(ledger.settings, line, bvIncomes(v)).map(M.amountText) : []; };
 const BUDGET_GROUPS = ["Needs", "Savings", "Buffer", "Wants", "Other"];   // the order of funding: needs, savings, the buffer, then wants (Fixed comes first in PR 4)
 const incomeWords = (inc) => (inc.source === "pinned" ? "Your own figure" : inc.source === "payslips" ? "From your payslips" : inc.source === "plan" ? "From your Pay plan" : "");
@@ -2496,7 +2498,7 @@ function viewBudget() {
   const card = (g) => { const list = rows.filter((r) => r.group === g); return list.length ? `<h4 class="sugh">${g}</h4>` + barCard(list.map((r) => ({ name: `${esc(r.name)}${r.kind === "category" ? hiddenTag(r.id) : ""}`, sub: shareNote(r), fig: peso(r.amount), pct: Math.round((r.amount * 100) / max), label: r.name, ...act(r) }))) : ""; };
   const noBudget = per === "month" ? expenseCategories().filter((c) => !M.isHiddenCategory(set, c.id) && !(M.budgetFor(S().rules, c.id, month) > 0)) : [];
   const noBudgetCard = noBudget.length ? `<h4 class="sugh">No budget yet</h4>` + barCard(noBudget.map((c) => ({ id: c.id, action: "open-budget", name: esc(c.name), sub: changeNote(c.id, null), fig: "No budget", pct: null }))) : "";
-  const moveBtn = per === "payday" && v.paydays.length > 1 && w === 0 && left < 0 ? `<p><button data-action="bv-move-pick" style="width:100%">Move ${pesoW(-left)} to the next payday?</button></p>` : "";
+  const moveBtn = per === "payday" && !block.extra && bvNextReg(v, w) && left < 0 ? `<p><button data-action="bv-move-pick" style="width:100%">Move ${pesoW(-left)} to the next payday?</button></p>` : "";
   const moveCard = !review.done && review.plan && !review.nothing ? `<div class="card" style="margin:10px 0;padding:14px 16px"><div class="ct"><span class="ctn">Your Pay plan moves into Budget<small>Look it over, then move it. Your plan stays in your history.</small></span></div><p style="margin:10px 0 0"><button data-action="open-plan-move" style="width:100%">Look it over</button></p></div>` : "";
   const hiddenList = v.hidden.length ? `<p class="center"><button class="link" data-action="bv-hidden">Hidden (${v.hidden.length})</button></p>${ui.budgetHidden ? barCard(v.hidden.map((h) => ({ name: esc(h.name), sub: "hidden: not in any figure above", fig: peso(h.amount), pct: null }))) : ""}` : "";
   const weekNote = per === "week" ? `<p class="note small">A guide: each month x 12 / 52, rounded down to the centavo. Rounding leaves ${peso(v.perWeek.roundedAway)} a month out of these figures.</p>` : "";
@@ -3018,19 +3020,25 @@ function renderSheet() {
   } else if (sh.type === "bv-line") {
     const bvv = bvNow(), line = bvv.lines.find((l) => l.key === sh.key), pin = ledger.settings.payday_pins?.[sh.key];
     body = !line ? `<p class="note">That line is no longer in the budget.</p><p><button class="primary" data-action="close-sheet">Got it</button></p>` : `<h3>${esc(line.name)}</h3><p class="note">${peso(line.amount)} a month. Type each payday's amount; the month is their total.</p>
-      ${bvv.paydays.map((p, i) => `<label for="bv-a${i}">${esc(p.label)} (₱)</label><input id="bv-a${i}" data-field="a${i}" inputmode="decimal" value="${esc(ui.form["a" + i] ?? "")}" autocomplete="off">`).join("")}
-      <label>Whole amount on</label><div class="seg" role="group" aria-label="Whole amount on one payday"><button data-action="bv-pin" data-id="split" aria-pressed="${!Number.isInteger(pin)}">Share by pay</button>${bvv.paydays.map((p, i) => `<button data-action="bv-pin" data-id="${i}" aria-pressed="${pin === i}">${esc(p.label)}</button>`).join("")}</div>
+      ${bvRegular(bvv).map((p, i) => `<label for="bv-a${i}">${esc(p.label)} (₱)</label><input id="bv-a${i}" data-field="a${i}" inputmode="decimal" value="${esc(ui.form["a" + i] ?? "")}" autocomplete="off">`).join("")}
+      <label>Whole amount on</label><div class="seg" role="group" aria-label="Whole amount on one payday"><button data-action="bv-pin" data-id="split" aria-pressed="${!Number.isInteger(pin)}">Share by pay</button>${bvRegular(bvv).map((p, i) => `<button data-action="bv-pin" data-id="${i}" aria-pressed="${pin === i}">${esc(p.label)}</button>`).join("")}</div>
       <p><button class="primary" id="bv-save" data-action="bv-line-save" style="margin-top:6px">Save</button></p><p><button data-action="close-sheet" style="width:100%">Cancel</button></p>`;
   } else if (sh.type === "bv-move-pick") {
-    const bvv = bvNow(), p0 = bvv.perPayday[0], over = p0 ? -p0.left : 0, next = bvv.paydays[1];
+    const bvv = bvNow(), p0 = bvv.perPayday[ui.budgetPayday ?? 0], over = p0 ? -p0.left : 0, next = bvNextReg(bvv, ui.budgetPayday ?? 0);
     body = `<h3>Move ${esc(pesoW(over))} to the ${esc((next?.label ?? "next payday").toLowerCase())}?</h3><p class="note">Choose what moves. Nothing moves by itself.</p>
       <div class="chips">${(p0?.rows ?? []).filter((r) => r.amount > 0).map((r) => `<button class="chip" data-action="bv-move-to-next" data-id="${esc(r.key)}">${esc(r.name)} · ${esc(pesoW(r.amount))}</button>`).join("")}</div>
       <p><button data-action="close-sheet" style="width:100%">Not now</button></p>`;
   } else if (sh.type === "bv-paydays") {
-    const f = ui.form, twice = f.kind !== "once";
-    body = `<h3>Paydays</h3><div class="chips"><button class="chip" data-action="bv-kind" data-id="twice" aria-pressed="${twice}">Twice a month</button><button class="chip" data-action="bv-kind" data-id="once" aria-pressed="${!twice}">Once a month</button></div>
-      <label for="bv-d1">${twice ? "1st payday" : "Payday"}: day of the month (1 to 28)${REQ}</label><input id="bv-d1" data-field="d1" inputmode="numeric" value="${esc(f.d1 ?? "")}" autocomplete="off">
-      ${twice ? `<label for="bv-d2">2nd payday: day of the month, or last${REQ}</label><input id="bv-d2" data-field="d2" inputmode="text" value="${esc(f.d2 ?? "")}" autocomplete="off">` : ""}
+    const f = ui.form, k = f.kind ?? "twice", chip = (id, t) => `<button class="chip" data-action="bv-kind" data-id="${id}" aria-pressed="${k === id}">${t}</button>`;
+    const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const fields = k === "twice" ? `<label for="bv-d1">1st payday: day of the month (1 to 28)${REQ}</label><input id="bv-d1" data-field="d1" inputmode="numeric" value="${esc(f.d1 ?? "")}" autocomplete="off">
+      <label for="bv-d2">2nd payday: day of the month, or last${REQ}</label><input id="bv-d2" data-field="d2" inputmode="text" value="${esc(f.d2 ?? "")}" autocomplete="off">`
+      : k === "once" ? `<label for="bv-d1">Payday: day of the month (1 to 28), or last${REQ}</label><input id="bv-d1" data-field="d1" inputmode="text" value="${esc(f.d1 ?? "")}" autocomplete="off">`
+      : k === "biweekly" ? `<label for="bv-start">One of your paydays${REQ}</label><input id="bv-start" type="date" data-field="start" value="${esc(f.start ?? "")}"><p class="note small">The others follow every two weeks. A third payday in a month is an extra payday.</p>`
+      : `<label>Payday each week${REQ}</label><div class="seg" role="group" aria-label="Weekday">${WD.map((d, i) => `<button data-action="bv-wd" data-id="${i}" aria-pressed="${Number(f.weekday) === i}">${d}</button>`).join("")}</div>`;
+    body = `<h3>Paydays</h3>${f.from ? `<p class="note small">From your payslips${f.fromLabel ? `: \u201c${esc(f.fromLabel)}\u201d` : ""}.</p>` : ""}
+      <div class="chips">${chip("twice", "Twice a month")}${chip("biweekly", "Every two weeks")}${chip("once", "Once a month")}${chip("weekly", "Every week")}</div>
+      ${fields}
       ${REQNOTE}<p><button class="primary" id="bv-save" data-action="bv-paydays-save">Save paydays</button></p><p><button data-action="close-sheet" style="width:100%">Cancel</button></p>`;
   } else if (sh.type === "plan-move") {
     const month = M.monthOf(today()), rv = M.planMigrationReview(S(), ledger.settings, month), pick = (r) => ui.form.pm?.[r.category_id] ?? r.default;
@@ -4035,7 +4043,7 @@ async function onClick(el) {
     }
     case "bv-line-save": {
       const v = bvNow(), line = v.lines.find((l) => l.key === ui.sheet.key); if (!line) break;
-      const amounts = v.paydays.map((_, i) => M.parsePesos(ui.form["a" + i] || "0"));
+      const amounts = bvRegular(v).map((_, i) => M.parsePesos(ui.form["a" + i] || "0"));
       if (amounts.some((a) => !a.ok)) { showToast("Type each amount like 2000."); break; }
       const r = M.setPaydayAmounts(S(), ledger.settings, line, bvIncomes(v), amounts.map((a) => a.centavos), { newId: () => newId("rule"), now: new Date(), month: M.monthOf(today()) });
       if (!r.ok) { showToast(r.message); break; }
@@ -4043,18 +4051,30 @@ async function onClick(el) {
     }
     case "bv-move-pick": ui.sheet = { type: "bv-move-pick" }; renderSheet(); break;
     case "bv-move-to-next": {
-      const v = bvNow(), line = v.lines.find((l) => l.key === id), p0 = v.perPayday[0]; if (!line || !p0) break;
-      const here = p0.rows.find((r) => r.key === id)?.amount ?? 0, r = M.movePayday(ledger.settings, line, bvIncomes(v), 0, 1, Math.min(-p0.left, here));
+      const v = bvNow(), w = ui.budgetPayday ?? 0, line = v.lines.find((l) => l.key === id), p0 = v.perPayday[w], nx = bvNextReg(v, w); if (!line || !p0 || p0.extra || !nx) break;
+      const here = p0.rows.find((r) => r.key === id)?.amount ?? 0, r = M.movePayday(ledger.settings, line, bvIncomes(v), p0.reg, nx.reg, Math.min(-p0.left, here));
       if (!r.ok) { showToast(r.message); break; }
       ui.sheet = null; renderSheet(); await commit(S(), r.settings); showToast("Moved " + peso(Math.min(-p0.left, here)) + " of " + line.name + " to the next payday."); break;
     }
-    case "bv-paydays": { const d = M.paydaysFor(ledger.settings); ui.sheet = { type: "bv-paydays" }; ui.form = { kind: d.length === 1 ? "once" : "twice", d1: d[0] ? String(d[0].day) : "15", d2: d[1] ? String(d[1].day) : "last" }; renderSheet(); break; }
+    case "bv-paydays": {   // filled from the schedule saved, else from what the payslips say (their own words shown)
+      const sc = M.scheduleOf(ledger.settings), fromSlips = sc ? null : M.scheduleFromPayslips(S()), use = sc ?? fromSlips?.schedule ?? { kind: "twice", days: [15, "last"] };
+      const kind = use.kind === "monthly" ? "once" : use.kind;
+      ui.sheet = { type: "bv-paydays" }; ui.form = { kind, d1: String(use.days?.[0] ?? 15), d2: String(use.days?.[1] ?? "last"), start: use.start ?? "", weekday: use.weekday ?? 5, from: Boolean(fromSlips), fromLabel: fromSlips?.label ?? null }; renderSheet(); break;
+    }
     case "bv-kind": ui.form.kind = id; renderSheet(); break;
+    case "bv-wd": ui.form.weekday = Number(id); renderSheet(); break;
     case "bv-paydays-save": {
-      const f = ui.form, d1 = Number(String(f.d1).trim()), d2 = String(f.d2).trim().toLowerCase() === "last" ? "last" : Number(String(f.d2).trim()), two = f.kind !== "once";
-      if (!Number.isInteger(d1) || d1 < 1 || d1 > 28) { showToast("Type the payday as a day from 1 to 28."); break; }
-      if (two && !(d2 === "last" || (Number.isInteger(d2) && d2 > d1 && d2 <= 28))) { showToast("Type the 2nd payday as a day after the first, or last."); break; }
-      ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, pay_schedule: { days: two ? [d1, d2] : [d1] } }); showToast("Paydays saved."); break;
+      const f = ui.form, k = f.kind ?? "twice", dayOf = (v) => (String(v ?? "").trim().toLowerCase() === "last" ? "last" : Number(String(v ?? "").trim()));
+      let schedule;
+      if (k === "biweekly") { if (!/^\d{4}-\d{2}-\d{2}$/.test(f.start ?? "")) { showToast("Choose the date of one of your paydays."); break; } schedule = { kind: "biweekly", start: f.start }; }
+      else if (k === "weekly") { if (!(Number.isInteger(f.weekday) && f.weekday >= 0 && f.weekday <= 6)) { showToast("Choose the weekday you are paid."); break; } schedule = { kind: "weekly", weekday: f.weekday }; }
+      else {
+        const d1 = dayOf(f.d1), d2 = dayOf(f.d2), ok1 = d1 === "last" ? k === "once" : Number.isInteger(d1) && d1 >= 1 && d1 <= 28;
+        if (!ok1) { showToast("Type the payday as a day from 1 to 28" + (k === "once" ? ", or last." : ".")); break; }
+        if (k === "twice" && !(d2 === "last" || (Number.isInteger(d2) && d2 > d1 && d2 <= 28))) { showToast("Type the 2nd payday as a day after the first, or last."); break; }
+        schedule = k === "twice" ? { kind: "twice", days: [d1, d2] } : { kind: "monthly", days: [d1] };
+      }
+      ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, pay_schedule: schedule }); showToast("Paydays saved."); break;
     }
     case "open-plan-move": ui.sheet = { type: "plan-move" }; ui.form = { pm: {} }; renderSheet(); break;
     case "plan-move-pick": ui.form.pm = { ...(ui.form.pm ?? {}), [id]: el.dataset.pick }; renderSheet(); break;
