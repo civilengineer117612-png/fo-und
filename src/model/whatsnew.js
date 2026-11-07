@@ -2,6 +2,8 @@
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
   { id: "2026-11-07-one-rule", date: "2026-11-07", text: "Everything you type now waits in Verify until you check it, money received and refunds included; only what a document proves, like a payslip or a statement that matches, is checked at once." },
+  { id: "2026-11-07-unclear-headings", date: "2026-11-07", text: "When a payslip's Earnings or Deductions heading cannot be read, the form says so and Save makes a draft to check, instead of putting a line under the wrong heading." },
+  { id: "2026-11-07-reader-iphone", date: "2026-11-07", text: "Photos of payslips and receipts are read more accurately on iPhone: the reader now resizes the picture the same way everywhere." },
   { id: "2026-11-06-statement-proof", date: "2026-11-06", text: "Importing a statement checks its closing balance against your ledger, and a difference can be kept as not yet explained (it is not counted as spending); a copy of your data is kept first." },
   { id: "2026-11-06-not-on-statement", date: "2026-11-06", text: "When you import a statement, a list shows what is in your ledger on that account but not on the statement; nothing is changed." },
   { id: "2026-11-06-card-cashback", date: "2026-11-06", text: "A card statement's cashback is now added as a credit on the card, so what you owe goes down, as a draft you check in Verify." },

@@ -208,6 +208,37 @@ try {
     console.log('ok: Verify anyway makes the deposit verified money in, and the lines stay as read');
   }
 
+  // Owner, Nov 7: a table title that cannot be read ("Tax Deductions" printed as marks) gives "Check this: section headings unclear" and a draft, never a silent wrong section.
+  { const before = await ledgerNow();
+    await page.locator('#nav [data-tab="log"]').click();
+    await payrollScan({ change: (a) => { a.find((i) => i.str === 'Tax Deductions').str = 'Tax Dxxxctxxns'; } });
+    await page.locator('#p-net').waitFor({ state: 'attached' });
+    assert.match(await page.locator('#p-sections').innerText(), /^Check this: section headings unclear$/);
+    assert.equal(await page.locator('#p-sections').isVisible(), true, 'the line is shown');
+    await page.locator('#p-from').fill('2025-12-01'); await page.locator('#p-to').fill('2025-12-15'); await page.locator('#p-date').fill('2025-12-16');
+    const paid = page.locator('#sheet button[data-id="example-bank"]');
+    if (!(await paid.isVisible())) await paid.locator('xpath=ancestor::div[@class="pick"][1]').locator('.pickrow').click();
+    await paid.click();
+    assert.equal((await page.locator('#f-save').innerText()).trim(), 'Save as a draft', 'Save says it will be a draft');
+    await page.locator('#f-save').click();
+    await page.waitForFunction((n) => JSON.parse(localStorage.getItem('financialTracker.ledger')).state.payslips.length === n, before.state.payslips.length + 1);
+    assert.equal(await page.locator('#p-ask').isVisible().catch(() => false), false, 'nothing is asked: it is simply a draft');
+    const after = await ledgerNow(), slip = after.state.payslips.at(-1), tx = after.state.transactions.find((t) => t.id === slip.transaction_id);
+    assert.equal(slip.sections_unclear, true); assert.equal(tx.status, 'draft'); assert.equal(verifiedPay(after), verifiedPay(before), 'no verified income was created'); assert.equal(after.v, seed.v);
+    await page.locator('#nav [data-tab="verify"]').click();
+    const mine = page.locator(`#screen [data-action="verify-ok"][data-id="${tx.id}"]`);   // Verify shows the OLDEST draft first: this one is dated before the drafts left by the checks above
+    assert.equal(await mine.count(), 1, 'it is the entry Verify shows');
+    await mine.first().click();
+    await page.locator('#sheet').getByText(/The section headings were unclear\. Verify anyway\?/).waitFor();
+    await page.locator('#sheet [data-action="close-sheet"]').last().click();
+    assert.equal(verifiedPay(await ledgerNow()), verifiedPay(before), 'Not now: it stays a draft');
+    await mine.first().click();
+    await page.locator('#sheet [data-action="verify-paper-gap"]').click();
+    await page.waitForFunction((id) => JSON.parse(localStorage.getItem('financialTracker.ledger')).state.transactions.find((t) => t.id === id)?.status === 'verified', tx.id);
+    await page.locator('#menuBtn').click(); await page.locator('#menu [data-tab="money"]').click(); await page.locator('#top [data-tab="income"]').click();
+    console.log('ok: unclear section headings say so, save a draft, ask at Verify, and only the yes makes it income');
+  }
+
   // An old payslip (saved before every printed line was kept) reads the same invented PDF again: the lines must reconcile to what it holds, and the pay is untouched.
   { const l = await ledgerNow(), at = "2026-10-20T09:00:00.000+08:00";
     l.state.transactions.push({ id: "tx-oldslip", date: "2026-10-20", payee: "Old Employer", memo: "Payslip", status: "verified", source: "manual", created_at: at, verified_at: at });

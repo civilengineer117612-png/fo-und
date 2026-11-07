@@ -25,4 +25,24 @@ await asked("the stronger photo reader (PaddleOCR on ONNX Runtime) runs", `async
   const boxes = await Promise.race([readBoxes(blob), new Promise((_, no) => setTimeout(() => no(new Error("no answer in 120 s")), 120000))]);
   return "yes, read: " + boxes.map((b) => b.text).join(" / ");
 } catch (e) { return "no: " + (e && e.message ? e.message : String(e)).slice(0, 200); } }`);
+// The SAME picture bytes (an invented payslip drawn once, in Chromium, and kept as e2e/fixtures/sample-payslip-photo.png) read by the stronger reader in this engine.
+// Chromium reads every line exactly; if this engine reads them differently from the same bytes, the difference is in how this engine prepares the picture or runs the reader, not in how the test page was drawn.
+await asked("the invented payslip picture (fixed bytes) read by the stronger reader", `async () => { try {
+  const bytes = await (await fetch(location.origin + "/e2e/fixtures/sample-payslip-photo.png")).blob();
+  const { readBoxes } = await import(location.origin + "/app/paddle.js");
+  const boxes = await Promise.race([readBoxes(bytes), new Promise((_, no) => setTimeout(() => no(new Error("no answer in 150 s")), 150000))]);
+  return boxes.length + " lines: " + boxes.map((b) => b.text).join(" / ");
+} catch (e) { return "no: " + (e && e.message ? e.message : String(e)).slice(0, 200); } }`);
+// WHERE do the two engines part ways on the same bytes? Checksums of the pixels at each step the app's reader takes: decoding, the resize the finder gets, and one straightened strip.
+await asked("reader path pixel checksums (decode | finder resize | strip of the 'Pay date' line)", `async () => { try {
+  const blob = await (await fetch(location.origin + "/e2e/fixtures/sample-payslip-photo.png")).blob();
+  const sum = (d) => { let a = 0, b = 0; for (let i = 0; i < d.length; i += 4) { a += d[i] + d[i + 1] + d[i + 2]; b = (b * 31 + d[i]) % 1000003; } return a + "/" + b; };
+  const bmp = await createImageBitmap(blob), c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height; c.getContext("2d").drawImage(bmp, 0, 0);
+  const decode = c.width + "x" + c.height + ":" + sum(c.getContext("2d").getImageData(0, 0, c.width, c.height).data);
+  const w = Math.round(c.width / 32) * 32, h = Math.round(c.height / 32) * 32, r = document.createElement("canvas"); r.width = w; r.height = h; const rx = r.getContext("2d"); rx.drawImage(c, 0, 0, w, h);
+  const resize = w + "x" + h + ":" + sum(rx.getImageData(0, 0, w, h).data);
+  const tw = 700, strip = document.createElement("canvas"); strip.width = tw; strip.height = 48; const sx = strip.getContext("2d"); sx.imageSmoothingQuality = "high"; sx.fillStyle = "#fff"; sx.fillRect(0, 0, tw, 48);
+  const k = 0.7; sx.setTransform(k, 0, 0, k, -30 * k, -(300) * k); sx.drawImage(c, 0, 0);
+  return decode + " | " + resize + " | " + tw + "x48:" + sum(sx.getImageData(0, 0, tw, 48).data);
+} catch (e) { return "no: " + String(e && e.message).slice(0, 150); } }`);
 await browser.close();

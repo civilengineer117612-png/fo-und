@@ -23,6 +23,7 @@ export async function warmReader(progress = () => {}) {
   progress(n, READER_FILES.length);
 }
 
+import { resizeRGB, warpStrip } from "../src/model/resample.js";
 let ort = null, det = null, rec = null, dict = null;
 async function load(progress) {
   if (det && rec && dict) return;
@@ -36,22 +37,23 @@ async function load(progress) {
   dict ??= ["", ...(await (await fetch(BASE + "ppocr_keys_v1.txt")).text()).split(/\r?\n/).filter((x) => x.length), " "];
 }
 
-async function toCanvas(blob) {
+// The picture as plain pixels. Decoding is the same in every engine; every RESIZE after it is done by src/model/resample.js, never by the canvas, because Safari's engine
+// and Chromium resample differently and the reader then saw different pixels (owner's WebKit finding, Nov 7).
+async function toPixels(blob) {
   const bmp = await createImageBitmap(blob);
   const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height;
-  c.getContext("2d").drawImage(bmp, 0, 0); bmp.close?.();
-  return c;
+  const x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(bmp, 0, 0); bmp.close?.();
+  const { data } = x.getImageData(0, 0, c.width, c.height);
+  return { width: c.width, height: c.height, data };
 }
 
 // The picture shrunk for the finder (sides a multiple of 32), as the numbers it expects.
-function forFinder(canvas) {
-  const k = Math.min(1, DET_MAX / Math.max(canvas.width, canvas.height));
-  const w = Math.max(32, Math.round((canvas.width * k) / 32) * 32), h = Math.max(32, Math.round((canvas.height * k) / 32) * 32);
-  const c = document.createElement("canvas"); c.width = w; c.height = h;
-  const ctx = c.getContext("2d"); ctx.drawImage(canvas, 0, 0, w, h);
-  const d = ctx.getImageData(0, 0, w, h).data, t = new Float32Array(3 * w * h), mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225];
-  for (let i = 0; i < w * h; i++) for (let ch = 0; ch < 3; ch++) t[ch * w * h + i] = (d[i * 4 + ch] / 255 - mean[ch]) / std[ch];
-  return { tensor: new ort.Tensor("float32", t, [1, 3, h, w]), w, h, scale: canvas.width / w };
+function forFinder(img) {
+  const k = Math.min(1, DET_MAX / Math.max(img.width, img.height));
+  const w = Math.max(32, Math.round((img.width * k) / 32) * 32), h = Math.max(32, Math.round((img.height * k) / 32) * 32);
+  const d = resizeRGB(img, w, h).data, t = new Float32Array(3 * w * h), mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225];
+  for (let i = 0; i < w * h; i++) for (let ch = 0; ch < 3; ch++) t[ch * w * h + i] = (d[i * 3 + ch] / 255 - mean[ch]) / std[ch];
+  return { tensor: new ort.Tensor("float32", t, [1, 3, h, w]), w, h, scale: img.width / w };
 }
 
 // Groups the finder's "this pixel is text" map into pieces of text (connected blobs), each as a tilted rectangle grown a little all round.
@@ -81,16 +83,13 @@ function pieces(prob, w, h, thr = 0.3, minMean = 0.5) {
 }
 
 // Reads one piece: straighten its tilted rectangle into a strip 48 high, then decode the reader's answer (CTC: collapse repeats, drop blanks).
-async function readPiece(canvas, b, scale) {
+async function readPiece(img, b, scale) {
   const Lu = (b.u1 - b.u0) * scale, Hv = (b.v1 - b.v0) * scale; if (Lu < 6 || Hv < 6) return null;
-  const tw = Math.min(960, Math.max(32, Math.ceil((48 * Lu) / Hv))), strip = document.createElement("canvas"); strip.width = tw; strip.height = 48;
-  const ctx = strip.getContext("2d"); ctx.imageSmoothingQuality = "high"; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, tw, 48);
+  const tw = Math.min(960, Math.max(32, Math.ceil((48 * Lu) / Hv)));
   const cs = Math.cos(b.th), sn = Math.sin(b.th), um = (b.u0 + b.u1) / 2, vm = (b.v0 + b.v1) / 2;
   const Cx = (b.cx + um * cs - vm * sn) * scale, Cy = (b.cy + um * sn + vm * cs) * scale, k = tw / Lu, k2 = 48 / Hv;
-  ctx.setTransform(k * cs, -k2 * sn, k * sn, k2 * cs, tw / 2 - k * (cs * Cx + sn * Cy), 24 - k2 * (-sn * Cx + cs * Cy));
-  ctx.drawImage(canvas, 0, 0);
-  const d = ctx.getImageData(0, 0, tw, 48).data, t = new Float32Array(3 * 48 * tw);
-  for (let i = 0; i < 48 * tw; i++) for (let ch = 0; ch < 3; ch++) t[ch * 48 * tw + i] = (d[i * 4 + ch] / 255 - 0.5) / 0.5;
+  const d = warpStrip(img, [k * cs, -k2 * sn, k * sn, k2 * cs, tw / 2 - k * (cs * Cx + sn * Cy), 24 - k2 * (-sn * Cx + cs * Cy)], tw, 48, Math.min(4, Math.max(2, Math.ceil(1 / Math.min(k, k2))))).data, t = new Float32Array(3 * 48 * tw);   // our own resampling: the same numbers in every engine
+  for (let i = 0; i < 48 * tw; i++) for (let ch = 0; ch < 3; ch++) t[ch * 48 * tw + i] = (d[i * 3 + ch] / 255 - 0.5) / 0.5;
   const out = await rec.run({ [rec.inputNames[0]]: new ort.Tensor("float32", t, [1, 3, 48, tw]) });
   const o = out[rec.outputNames[0]], T = o.dims[1], K = o.dims[2], data = o.data;
   let text = "", last = -1;
@@ -106,14 +105,14 @@ function boxOf(b, scale) {
 // Resolves to [{text, th, x0, y0, x1, y1}] for a picture (a Blob), one per line of text found. progress(fraction, words) as it works.
 export async function readBoxes(blob, progress = () => {}) {
   await load(progress);
-  const canvas = await toCanvas(blob);
+  const img = await toPixels(blob);
   progress(0.05, "Finding the text");
-  const { tensor, w, h, scale } = forFinder(canvas);
+  const { tensor, w, h, scale } = forFinder(img);
   const prob = (await det.run({ [det.inputNames[0]]: tensor }))[det.outputNames[0]].data;
   const found = pieces(prob, w, h).sort((a, b) => a.cy - b.cy), lines = [];
   for (let i = 0; i < found.length; i++) {
     progress(0.1 + 0.9 * (i / found.length), "Reading the photo");
-    const line = await readPiece(canvas, found[i], scale); if (line) lines.push(line);
+    const line = await readPiece(img, found[i], scale); if (line) lines.push(line);
   }
   return lines;
 }

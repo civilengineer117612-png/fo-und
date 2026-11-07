@@ -3,6 +3,7 @@
 // sees it, corrects it, and verifies it like any other entry.
 import { isPhDate } from "./util.js";
 import { BANKS } from "./banks.js";
+import { matchHeading, unreadableHeading, SECTIONS_UNCLEAR, TABLE_VOCAB } from "./headings.js";
 
 export const KINDS = [   // order = who wins a tie
   { id: "payslip", label: "Payslip", direction: "in" },
@@ -284,12 +285,16 @@ const OTHER_TABLE = /^\s*(?:summary|accruals?|absences?|leave\s+balances?|net\s+
 const INFO_LABELS = [["pay_rate", /\bpay\s*rate\b|\brate\s*of\s*pay\b/i], ["pay_basis", /\b(?:pay|rate)\s*basis\b/i], ["period_type", /\b(?:pay\s*)?period\s*type\b|\bpay\s*frequency\b/i]];
 const SECTION_HEADINGS = [["employer", /^\s*employer'?s?\s+(?:share|contributions?)\b/i], ["earning", /^\s*(?:earnings?|income|gross\s+earnings|hours\s+and\s+earnings)\b/i], ["deduction", /^\s*(?:deductions?|less\b|pre-?tax|after-?tax|tax\s*deductions?\s*$)/i]];
 // "Basic Salary   15,000.00   30,000.00" -> "Basic Salary": the printed words, with the figures and the currency sign taken off.
+// A heading the exact patterns above missed, read within the allowed difference of a KNOWN heading word (src/model/headings.js). Never a line that carries a figure (a digit makes
+// a line, not a heading). The heading words themselves may contain label words ("Tax Deductions"), so labels are not excluded here: a label is nowhere near a heading word.
+const knownLabel = (line) => { const low = line.toLowerCase(); return EARNING_LABELS.some(([, re]) => re.test(low)) || DEDUCTION_LABELS.some(([, re]) => re.test(low)) || INFO_LABELS.some(([, re]) => re.test(line)) || SKIP_LINE.test(low) || TITLE_ONLY.test(line.replace(/\s+/g, " ").trim()) || OTHER_TABLE.test(line); };
+const fuzzyHeading = (line) => { const m = matchHeading(line); return m ? [m.section] : null; };
 const labelOf = (line) => line.replace(/(?:₱|php|\bp\b|#|£)?\s*(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}\b/gi, " ").replace(/\s+/g, " ").replace(/^[\s:.\-–]+|[\s:.\-–]+$/g, "").trim();
 
 export function readPayslip(text, today, { allowHistorical = false } = {}) {
   const lines = String(text ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const notes = [], earnings = [], deductions = [], items = [], info = {};
-  let section = null, unplaced = 0;
+  let section = null, unplaced = 0, trust = true, unclear = false;   // trust: false after a heading-like line that no known heading explains, until a heading is read
   let printed_gross = null, printed_net = null, total_salary = null, printed_deductions = null;
   const end = lines.findIndex((l) => /year\s*-?\s*to\s*-?\s*date|\bytd\b/i.test(l) && !amountsIn(l).length);
   const body = end >= 0 ? lines.slice(0, end) : lines;
@@ -304,16 +309,22 @@ export function readPayslip(text, today, { allowHistorical = false } = {}) {
     if (/total\s*deductions?/.test(low)) { printed_deductions ??= first(); return; }
     if (SKIP_LINE.test(low)) return;
     if (TITLE_ONLY.test(labelOf(line))) return;
-    if (section === "other" && !SECTION_HEADINGS.some(([, re]) => re.test(line))) return;
+    if (section === "other" && !SECTION_HEADINGS.some(([, re]) => re.test(line)) && !fuzzyHeading(line)) return;
     // EVERY printed line is kept as printed (data version 11): its label, its section, its first figure (0.00 too). The section comes from the heading above it
     // (Earnings, Deductions, Employer share); a line the old kind words recognise is placed by them. The owner adds what could not be placed.
     const infoHit = INFO_LABELS.find(([, re]) => re.test(line));
     if (infoHit) { const v = line.replace(infoHit[1], "").replace(/^[\s:=-]+|[\s:=-]+$/g, ""); if (v && !(infoHit[0] in info)) info[infoHit[0]] = v; return; }
-    if (!amountsIn(line, { zero: true }).length) { const h = SECTION_HEADINGS.find(([, re]) => re.test(line)); if (h) section = h[0]; }
+    if (!amountsIn(line, { zero: true }).length) {
+      const h = SECTION_HEADINGS.find(([, re]) => re.test(line)) ?? fuzzyHeading(line);
+      if (h) { section = h[0]; trust = true; }
+      else if (!knownLabel(line) && unreadableHeading(line)) trust = false;   // a heading we could not read: lines placed only by the heading above are not to be trusted
+    }
     else {
       const label = labelOf(line), figure = amountsIn(line, { zero: true })[0];
       if (label && /[a-z]{2}/i.test(label)) {
+        const byWords = DEDUCTION_LABELS.some(([, re]) => re.test(low)) || EARNING_LABELS.some(([, re]) => re.test(low));
         const place = section === "employer" ? "employer" : DEDUCTION_LABELS.some(([, re]) => re.test(low)) ? "deduction" : EARNING_LABELS.some(([, re]) => re.test(low)) ? "earning" : section;
+        if (place && !byWords && !trust) unclear = true;   // placed only by a heading above that could not be read: never a silent section
         if (place) items.push({ section: place, label, amount: figure, position: items.length }); else unplaced++;
       }
     }
@@ -372,10 +383,11 @@ export function readPayslip(text, today, { allowHistorical = false } = {}) {
   const named = top.map(clean).find((l) => letters(l) >= 5 && letters(l) >= l.length * 0.6 && l.length <= 45);
   const employer = (labelled ? clean(labelled) : null) || company || named || null;
   const table = lines.includes("Payslip table") ? readPayrollTable(lines) : null;
-  const read = { employer, period_from, period_to, pay_date, printed_gross, printed_net, printed_deductions, earnings, deductions, items, info, ...(table ?? {}) };
+  const read = { employer, period_from, period_to, pay_date, printed_gross, printed_net, printed_deductions, earnings, deductions, items, info, ...(unclear ? { sections_unclear: true } : {}), ...(table ?? {}) };
   // A table is read by its columns: the line-by-line notes (lines not placed, two figures on a line) are about a reading that was not used.
   const kept = notes.filter((n) => !/printed (?:gross|net) pay/.test(n) && (!table || /pay date/.test(n)));
   if (read.printed_gross == null || read.printed_net == null) kept.push(NOT_CHECKED);
+  if (unclear && !table) kept.push(SECTIONS_UNCLEAR);
   return { ...read, notes: [...kept, ...(table?.notes ?? [])] };
 }
 // The owner's words (Nov 1): a payslip whose printed gross or net could not be found is not checked, and saving it makes a draft.
@@ -444,10 +456,13 @@ export function pdfScanText(items) {
 
 // Table PDF rows are normalized before the general photo reader sees them. Columns
 // are located by headings, never by employer, stream order, or a fixed page size.
+// The part of a payroll table a title opens: the exact titles first (as they always were), then a title read badly within the allowed difference of a known one.
+function tableTitleKey(title) {
+  const t = String(title ?? "").trim();
+  return /^Hours and Earnings$/i.test(t) ? "earning" : /^Pre[- ]Tax Deductions$/i.test(t) ? "pre-tax" : /^Tax Deductions$/i.test(t) ? "taxes" : /^After Tax Deductions$/i.test(t) ? "deductions" : /^Employer(?:'s)? (?:Share|Contributions?)$/i.test(t) ? "employer" : (matchHeading(t, TABLE_VOCAB)?.section ?? null);
+}
 function payrollTableText(rows, headersIn) {
   const joined = (r) => r.items.map(i => i.str.trim()).join(" ");
-  const start = rows.findIndex(r => /Hours and Earnings/i.test(joined(r)));
-  if (start < 0) return null;
   const right = i => i.x + i.w;
   const find = (items, re) => {
     for (let j = 0; j < items.length; j++) for (let k = j; k < Math.min(items.length, j + 5); k++) {
@@ -456,7 +471,10 @@ function payrollTableText(rows, headersIn) {
     }
     return null;
   };
-  const pre = find(rows[start].items, /^Pre[- ]Tax Deductions$/i);
+  const titled = (key) => ({ test: (s) => tableTitleKey(s) === key });
+  const start = rows.findIndex(r => /Hours and Earnings/i.test(joined(r)) || find(r.items, titled("earning")));
+  if (start < 0) return null;
+  const pre = find(rows[start].items, /^Pre[- ]Tax Deductions$/i) ?? find(rows[start].items, titled("pre-tax"));
   const out = ["Payslip table"];
   // An incomplete recognized table must fail closed, not fall back to label guesses.
   if (!pre) return out.join("\n");
@@ -507,11 +525,11 @@ function payrollTableText(rows, headersIn) {
       if (!items.length) continue;
       const title = items.map(i => i.str.trim()).join(" ");
       if (/^(Accruals|Absences|Net Pay Distribution|Other Information)\b/i.test(title)) break;
-      const key = /^Hours and Earnings$/i.test(title) ? "earning" : /^Pre[- ]Tax Deductions$/i.test(title) ? "pre-tax" : /^Tax Deductions$/i.test(title) ? "taxes" : /^After Tax Deductions$/i.test(title) ? "deductions" : /^Employer(?:'s)? (?:Share|Contributions?)$/i.test(title) ? "employer" : null;
+      const key = tableTitleKey(title);
       if (key) { section = key; amount = hours = null; emit("Section", key); continue; }
       const hs = headersIn({items});
       if (hs.some(h => /^amount$/i.test(h.str))) { amount = hs.find(h => /^amount$/i.test(h.str)); hours = hs.find(h => /^hours$/i.test(h.str)); continue; }
-      if (!section || !amount) { emit("Unreadable", "table heading"); continue; }
+      if (!section || !amount) { emit("Unreadable", !section ? "table heading" : "table column"); continue; }   // no section above the row = its heading could not be read
       // Only the amount column supplies money; zero hours are still a paid line.
       const value = [...items].sort((a,b) => Math.abs(right(a)-right(amount)) - Math.abs(right(b)-right(amount)))[0];
       const label = items.filter(i => i !== value && (!hours || right(i) < hours.x)).map(i => i.str).join(" ").trim();
@@ -543,7 +561,7 @@ function payrollTableText(rows, headersIn) {
 // (`unread`, shown as empty rows to fill in), and says in `flags` what the arithmetic did not prove: earnings = gross, each deduction section = its
 // printed total, gross - deductions = net, sum of deposits = net. A flag is only a note: {field, reason}; nothing here decides what is saved.
 function readPayrollTable(lines) {
-  const flags = [], unread = { earning: 0, deduction: 0 };
+  const flags = [], unread = { earning: 0, deduction: 0 }; let sectionLess = 0;
   const flag = (field, reason) => flags.push({ field, reason });
   const plain = (c) => (Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const money = s => /^(?:\d{1,3}(?:,\d{3})*|\d+)\.\d{2}$/.test(s ?? "") ? amountsIn(s)[0] ?? (s === "0.00" ? 0 : null) : null;
@@ -555,7 +573,7 @@ function readPayrollTable(lines) {
   for (const line of lines) {
     const [key, label, value, hoursText] = line.split("\t");
     if (key.startsWith("Info ")) { if (label) info[key.slice(5)] = label; continue; }
-    if (key === "Unreadable") { if (label === "distribution row") flag("deposit", "a net pay distribution row could not be read"); else lost(here ?? "earning"); continue; }
+    if (key === "Unreadable") { if (label === "distribution row") flag("deposit", "a net pay distribution row could not be read"); else { if (label === "table heading") sectionLess++; lost(here ?? "earning"); } continue; }
     if (key === "Section") { if (sections.has(label)) flag("structure", "a payroll section appears twice"); sections.add(label); here = label; continue; }
     if (key.startsWith("Summary ")) {
       const n = money(label), name = key.slice(8);
@@ -597,7 +615,10 @@ function readPayrollTable(lines) {
   // ONLY what the page prints (owner, Nov 1): a check compares the lines with the printed gross, net and deposit, never with a total made from the
   // lines themselves (that would compare a value with itself and always pass). A figure the page does not show stays empty.
   const printedDed = ["pre-tax", "taxes", "deductions"].some((k) => summary.has(k)) ? (summary.get("pre-tax") ?? 0) + (summary.get("taxes") ?? 0) + (summary.get("deductions") ?? 0) : null;
-  return { earnings: entries(earnings), deductions: entries(deductions), printed_gross: gross, printed_net: net, printed_deductions: printedDed || null, deposit: distributions ? deposit : null, items, info, notes: [], flags, unread };
+  // A section the table should have was not found, or a row had no section above it: the headings could not be read. Said in one plain line, and the payslip is saved as a draft.
+  const unclear = flags.some((f) => f.field === "structure") || sectionLess > 0;
+  if (unclear) flag("sections", "section headings unclear");
+  return { earnings: entries(earnings), deductions: entries(deductions), printed_gross: gross, printed_net: net, printed_deductions: printedDed || null, deposit: distributions ? deposit : null, items, info, notes: unclear ? [SECTIONS_UNCLEAR] : [], flags, unread, ...(unclear ? { sections_unclear: true } : {}) };
 }
 
 
