@@ -129,7 +129,7 @@ test("what the importer takes: spending, fees and the unsure (turned off one by 
   const items = statementItems(r.lines);
   assert.deepEqual(items.map((i) => [i.name, i.amount, i.meaning]), [["SAMPLE STORE", 56800, "spending"], ["Interbank transfer fee", 800, "fee"], ["Outbound interbank transfer", 10000, "unsure"]]);
   assert.ok(items.every((i) => /^s\d+$/.test(i.id) && /^\d{4}-\d{2}-\d{2}$/.test(i.dateRaw)));
-  assert.deepEqual(statementLeftOut(r.lines), { moves: 1, own: 0, moneyIn: 1, rewards: 0 });
+  assert.deepEqual(statementLeftOut(r.lines), { moves: 1, cardCash: 0, own: 0, moneyIn: 1, rewards: 0 });
 });
 
 test("a PDF with no table of transactions says so plainly", () => {
@@ -167,7 +167,7 @@ test("statement follow-ups: unsure lines wait for your choice, a failed check ho
   assert.match(app, /data-action="stm-choose" data-id="\$\{esc\(g\.key\)\}" data-pick="spending" aria-pressed="\$\{all\("spending"\)\}"/, "neither choice is pressed at first: one row per person");
   assert.match(app, /lines need"\} your choice<\/b>: left out until you choose/);
   assert.match(app, /held = !!f\.statement && !f\.statement\.check\.ok && !f\.looked;/);
-  assert.match(app, /\(p\.lines\.length \|\| \(f\.statement && f\.keep !== false\)\) && acct && !held \? "" : " disabled"/, "Add stays off while held (and with nothing to add and nothing to keep)");
+  assert.match(app, /\(p\.lines\.length \+ mvMake \|\| \(f\.statement && f\.keep !== false\)\) && acct && !held \? "" : " disabled"/, "Add stays off while held (and with nothing to add and nothing to keep)");
   assert.match(app, /if \(form\.statement && !form\.statement\.check\.ok && !form\.looked\) break;/, "and saving is refused too, not just greyed");
   assert.match(app, /data-action="stm-looked" aria-pressed="\$\{!!f\.looked\}">I looked at the amounts</);
   assert.match(app, /activeAccounts\(\)\.filter\(\(a\) => a\.class === \(statement\.style === "card" \? "liability" : "asset"\) && !M\.isPocket\(a\) && a\.bank === statement\.bankId\)/, "the ordinary accounts linked to the statement's bank (pockets of that bank do not count); a card statement looks among the bank's cards");
@@ -205,7 +205,7 @@ test("a transfer to or from your own name is a move between your accounts: never
   const r = parseStatement([[t(40, 723, "SAMPLE PEDRO DELA CRUZ JR"), ...page]]);
   assert.deepEqual(r.lines.map((l) => l.meaning), ["move", "move", "unsure", "spending"]);
   assert.ok(r.lines[0].own && r.lines[1].own);
-  assert.deepEqual(statementLeftOut(r.lines), { moves: 0, own: 2, moneyIn: 0, rewards: 0 }, "said as transfers to your own name");
+  assert.deepEqual(statementLeftOut(r.lines), { moves: 0, cardCash: 0, own: 2, moneyIn: 0, rewards: 0 }, "said as transfers to your own name");
   assert.equal(statementItems(r.lines).filter((i) => i.meaning === "unsure").length, 1, "only the friend is asked about");
   const noName = parseStatement([page]);
   assert.deepEqual(noName.lines.map((l) => l.meaning), ["in", "unsure", "unsure", "spending"], "with no name at the top, nothing is guessed");
@@ -338,7 +338,7 @@ test("cashback, a campaign reward and interest are marked as rewards; a loan or 
   assert.equal(c("Debit Card Cashback", "Reward", "out").reward, undefined, "money out is never a reward");
   const lines = [{ date: "2026-08-08", text: "Debit Card Cashback", payee: "Debit Card Cashback", amount: 138, direction: "in", meaning: "in", reward: true }, { date: "2026-08-09", text: "Loan Disbursement", payee: "Loan Disbursement", amount: 499055, direction: "in", meaning: "in" }];
   assert.deepEqual(statementRewards(lines), [{ date: "2026-08-08", name: "Debit Card Cashback", amount: 138 }]);
-  assert.deepEqual(statementLeftOut(lines), { moves: 0, own: 0, moneyIn: 1, rewards: 1 }, "rewards are counted apart from other money in");
+  assert.deepEqual(statementLeftOut(lines), { moves: 0, cardCash: 0, own: 0, moneyIn: 1, rewards: 1 }, "rewards are counted apart from other money in");
 });
 
 test("a card statement (posted date, transaction date, merchant above, kind below, signed amounts) reads, adds up and keeps its dates", () => {

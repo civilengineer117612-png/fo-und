@@ -8,7 +8,7 @@ import { accountLines, proveMonths } from "./proof.js";
 import { accountByLast4, planTransfer, setAccountLast4 } from "./transfers.js";
 import { isPocket, planAccount } from "./banks.js";
 import { countedEntries } from "./balances.js";
-import { categoryFor, loggedMatch } from "./importer.js";
+import { categoryFor, loggedMatch, loggedMove } from "./importer.js";
 import { applyDrafts, planExpense } from "./drafts.js";
 import { planPayReceived } from "./plan.js";
 import { categoryFromBook } from "./payees.js";
@@ -169,6 +169,43 @@ export function planRewards(state, rewards, { account_id, newId, now = new Date(
     next = p.state; count++;
   }
   return { ok: true, state: next, count, skipped };
+}
+
+// P1-8 fix 3: a statement's card repayments and ATM cash withdrawals (`moveTo` "card" or "cash" on the line) are moves. Each is matched against the moves already
+// logged (`loggedMove`: the statement's account, the exact amount out, within 3 days, one each). One not logged becomes ONE draft move (source "statement") to
+// the Cash account (an asset whose bank is Cash or whose name starts with "Cash"), or to the credit card (the card of the statement's bank, else the only card);
+// when there is no such account, or more than one could be meant, the line is only counted (`noTarget`) and nothing is guessed.
+// Returns [{date, name, amount, moveTo, match, to}]: match = the logged transaction id or null, to = the account a draft would go to or null.
+const isCashAccount = (a) => a.class === "asset" && !a.archived && (a.bank === "cash" || /^cash\b/i.test(a.name));
+export function moveTarget(state, moveTo, bankId = null) {
+  if (moveTo === "cash") { const c = state.accounts.filter(isCashAccount); return c.length === 1 ? c[0].id : null; }
+  const cards = state.accounts.filter((a) => a.class === "liability" && !a.archived), mine = bankId ? cards.filter((a) => a.bank === bankId) : [];
+  return mine.length === 1 ? mine[0].id : cards.length === 1 ? cards[0].id : null;
+}
+// `chosen` ({cash, card}): the account the owner picked for lines that have no obvious target ("Not imported: choose the account"); it is used only when it is a real,
+// open account of the right kind (Cash: a bank, wallet or cash account; card: a credit card) other than the statement's own. A row with no match and no target says
+// `needs: true`: the window lists it under that heading and it imports like any line once an account is picked. Nothing is ever silently dropped.
+const chosenFor = (state, kind, id, account_id) => { const a = id ? state.accounts.find((x) => x.id === id) : null; return a && !a.archived && a.id !== account_id && a.class === (kind === "card" ? "liability" : "asset") ? a.id : null; };
+export function statementMoves(state, lines, { account_id, bankId = null, chosen = {} }) {
+  const used = new Set();
+  return lines.filter((l) => l.moveTo && l.direction === "out").map((l) => {
+    const m = account_id ? loggedMove(state, { date: l.date, amount: l.amount, accountId: account_id, direction: "out" }, used) : null;
+    if (m) used.add(m.id);
+    const auto = moveTarget(state, l.moveTo, bankId), to = (auto && auto !== account_id ? auto : null) ?? chosenFor(state, l.moveTo, chosen[l.moveTo], account_id);
+    return { date: l.date, name: l.payee || l.text, amount: l.amount, moveTo: l.moveTo, match: m?.id ?? null, to, needs: !m && !to };
+  });
+}
+// The drafts for the moves `statementMoves` found not logged. All or nothing. Returns {ok, state, count, noTarget} or {ok:false, message}.
+export function planStatementMoves(state, moves, { account_id, newId, now = new Date() }) {
+  let next = state, count = 0, noTarget = 0;
+  for (const m of moves) {
+    if (m.match) continue;
+    if (!m.to) { noTarget++; continue; }
+    const r = planTransfer(next, { transaction_id: newId(), date: m.date, from_account_id: account_id, to_account_id: m.to, amount: m.amount, payee: m.moveTo === "card" ? "Card payment" : "Cash withdrawal", source: "statement" }, now);
+    if (!r.ok) return { ok: false, message: `${m.name} (${m.date}): ${r.violations[0].message}` };
+    next = r.state; count++;
+  }
+  return { ok: true, state: next, count, noTarget };
 }
 
 // Start an account from its statement: the account's opening balance and date become the FIRST statement month's opening balance and the day its statement starts,
