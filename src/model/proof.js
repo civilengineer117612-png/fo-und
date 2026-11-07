@@ -3,7 +3,7 @@
 // fee lines of a proved month into VERIFIED entries (source "statement"). Moves, money in and unsure lines are not turned into entries here
 // (the next phase matches those); they are counted. Pure logic: the app reads files and saves; every amount is in centavos.
 import { applyDrafts, planExpense, verifyDraft } from "./drafts.js";
-import { categoryFor, loggedMatch } from "./importer.js";
+import { categoryFor, loggedMatch, STATEMENT_MATCH_DAYS } from "./importer.js";
 import { phTimestamp } from "./util.js";
 
 const key = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -118,7 +118,7 @@ function buildProveMonths(state, accountId) {
 }
 
 // Accepting a proved month: its spending and fee lines become VERIFIED entries (source "statement"), in the category the import would choose.
-// A line already in the ledger (the same amount on that account within 2 days, whatever it was called) is not made twice: a draft of it is verified, a verified one is left as it is.
+// A line already in the ledger (the same amount on that account within 3 days, whatever it was called) is not made twice: a draft of it is verified, a verified one is left as it is.
 // Nothing is changed unless the whole month goes through. Returns {ok, state, made, verified, alreadyLogged, leftOut:{moves, moneyIn, unsure}} or {ok:false, message}.
 export function acceptMonth(state, accountId, month, { newId, now = new Date() }) {
   const row = proveMonths(state, accountId).find((r) => r.month === month);
@@ -132,7 +132,7 @@ export function acceptMonth(state, accountId, month, { newId, now = new Date() }
   const used = new Set();
   for (const l of spend) {
     const name = l.payee || l.text, item = { name };
-    const same = loggedMatch(next, { date: l.date, name, amount: l.amount, accountId }, used);
+    const same = loggedMatch(next, { date: l.date, name, amount: l.amount, accountId }, used, STATEMENT_MATCH_DAYS);
     if (same) {
       used.add(same.id);
       if (same.status === "draft") { const v = verifyDraft(next, same.id, now); if (!v.ok) return { ok: false, message: `${name} (${l.date}): ${v.violations[0].message}` }; next = v.state; verified++; } else alreadyLogged++;
@@ -170,7 +170,7 @@ export function monthSummary(state, accountId, month) {
   const ml = accountLines(state, accountId).filter((l) => l.date.slice(0, 7) === month), sum = (xs) => xs.reduce((n, l) => n + l.amount, 0);
   const spend = ml.filter((l) => l.direction === "out" && (l.meaning === "spending" || l.meaning === "fee")), rest = ml.filter((l) => !spend.includes(l));
   const used = new Set();
-  const already = spend.filter((l) => { const m = loggedMatch(state, { date: l.date, name: l.payee || l.text, amount: l.amount, accountId }, used); if (m) used.add(m.id); return Boolean(m); }).length;   // the same rule Accept uses
+  const already = spend.filter((l) => { const m = loggedMatch(state, { date: l.date, name: l.payee || l.text, amount: l.amount, accountId }, used, STATEMENT_MATCH_DAYS); if (m) used.add(m.id); return Boolean(m); }).length;   // the same rule Accept uses
   return { row, failing: row.status === "broken" ? failingLines(state, accountId, month) : [], spend: { count: spend.length, total: sum(spend), already },
     leftOut: { count: rest.length, total: sum(rest), moves: rest.filter((l) => l.meaning === "move").length, moneyIn: rest.filter((l) => l.meaning === "in").length, unsure: rest.filter((l) => l.meaning === "unsure").length } };
 }
@@ -191,4 +191,24 @@ export function removeStatement(state, recordId) {
   const blocked = (state.statementAccepts ?? []).some((a) => a.account_id === r.account_id && months.has(a.month));
   if (blocked) return { ok: false, message: "A month from this statement was accepted, so it stays." };
   return { ok: true, state: { ...state, statementRecords: state.statementRecords.filter((x) => x.id !== recordId), statementLines: (state.statementLines ?? []).filter((l) => l.record_id !== recordId) } };
+}
+
+// ON STATEMENT (owner, P1-8): which logged entries a KEPT statement shows. Each kept line of an account answers one entry: the same account, the exact amount,
+// dated within 3 days, the same name and the closest date first (`loggedMatch`, the import's own rule). Nothing is stored: the mark is worked out from the kept
+// statements, so removing a statement removes its marks and no verified entry is ever touched. Returns a Set of transaction ids. One answer is kept per set of arrays.
+const onCache = new WeakMap();
+export function onStatementIds(state) {
+  const key = state.statementLines ?? NONE, hit = onCache.get(key);
+  if (hit && hit.tx === state.transactions && hit.en === state.entries && hit.rec === state.statementRecords && hit.n === key.length + ":" + state.transactions.length + ":" + state.entries.length) return hit.ids;
+  const ids = new Set();
+  for (const acc of new Set((state.statementRecords ?? []).map((r) => r.account_id))) {
+    const used = new Set();
+    for (const l of accountLines(state, acc)) {
+      if (l.direction !== "out") continue;   // money out answers a spend; moves and money in are matched by their own rules
+      const m = loggedMatch(state, { date: l.date, name: l.payee || l.text, amount: l.amount, accountId: acc }, used, STATEMENT_MATCH_DAYS);
+      if (m) { used.add(m.id); ids.add(m.id); }
+    }
+  }
+  onCache.set(key, { tx: state.transactions, en: state.entries, rec: state.statementRecords, n: key.length + ":" + state.transactions.length + ":" + state.entries.length, ids });
+  return ids;
 }

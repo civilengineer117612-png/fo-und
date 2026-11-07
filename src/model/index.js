@@ -108,12 +108,12 @@ export { splitSavings, parseShares, shareableGoals, UNPLACED_NAME } from "./savi
 export { guessType, typeOf, kindOf } from "./types.js";
 export { CHANGES, whatsNew } from "./whatsnew.js";
 export { HOWTOS, HOWTO_HINT, clipData, howtoClip } from "./howto.js";
-export { readDate, dateOrder, readAmount, parseNotes, linesByRow, parseTable, parseCsv, readXlsx, categoryFor, previewImport, planImport, loggedMatch } from "./importer.js";
+export { readDate, dateOrder, readAmount, parseNotes, linesByRow, parseTable, parseCsv, readXlsx, categoryFor, previewImport, planImport, loggedMatch, STATEMENT_MATCH_DAYS } from "./importer.js";
 export { SINKING_LABEL, SINKING_NOTE, SINKING_HELP, sinkingStart, sinkingBalance, sinkingFunds, setAsideForSpending, toggleSinking } from "./sinking.js";
 
 export { MAX_INTRO_SHOWS, INTROS, introFor, shouldShowIntro, markIntro, introDrawing } from "./intros.js";
 
-export { recordFromParse, accountLines, proveMonths, acceptMonth, monthSummary, failingLines, alreadyKept, removeStatement } from "./proof.js";
+export { recordFromParse, accountLines, proveMonths, acceptMonth, monthSummary, failingLines, alreadyKept, removeStatement, onStatementIds } from "./proof.js";
 export { pairMoves, moveLogged, planPairedMove, matchPayslips, statementDifference, planMissingDraft, planRewards, startFromStatement, planPocketFromStatement } from "./reconcile.js";
 export { payeeKey, payeeLabel, withPayeeBook, spendingByPayee, payeeMonths, payeeCount, namePayee, categoryFromBook } from "./payees.js";
 export { RANGES, dailySpending, firstSpendingDate, rangeFor, stepFor, seriesFor, measureSpan, zoomWindow, addDays, daysBetween } from "./spendline.js";
