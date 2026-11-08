@@ -2,7 +2,7 @@
 // The owner's report (Nov 1): a screenshot of a payroll table was read line by line, so the Hours column became the amounts, the Summary's figures became
 // deduction lines and the dates were lost. Here the same LAYOUT is drawn into a picture and read by the app's own on-phone reader, as on the phone.
 import assert from "node:assert/strict";
-import { launchBrowser } from "./engine.mjs";
+import { launchBrowser, drawPicture } from "./engine.mjs";
 import { emptyLedger, CHANGES } from "../src/model/index.js";
 import { photoRows, PHOTO_EARNINGS, PHOTO_DEDUCTIONS } from "./payslip-photo.mjs";
 const browser = await launchBrowser();
@@ -29,15 +29,15 @@ async function open() {
   return { ctx, page };
 }
 // The invented page drawn as a screenshot would show it: white, black letters, the app's own bundled font so every engine draws the same letters.
-const draw = (page, rows) => page.evaluate(async (rows) => {
+const drawRows = async (rows) => {
   const face = new FontFace("Slip", "url(fonts/ibm-plex-sans-latin-600-normal.woff2)"); await face.load(); document.fonts.add(face);
   const k = 1.5, c = document.createElement("canvas"); c.width = 1500; c.height = 1320;
   const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.fillStyle = "#000"; x.font = "600 21px Slip"; x.textBaseline = "middle";
   for (const r of rows) { x.textAlign = r.a === "r" ? "right" : "left"; x.fillText(r.t, r.x * k, r.y * k); }
   return c.toDataURL("image/png").split(",")[1];
-}, rows);
+};
 async function scan(page, rows) {
-  const png = await draw(page, rows);
+  const png = await drawPicture(page, drawRows, rows);
   await page.click("#menuBtn"); await page.click('#menu .item:has-text("Scan")'); await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
   await page.setInputFiles("input[data-scan]:not([capture])", { name: "payslip.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
   await page.locator("#sheet h3", { hasText: "Add a payslip" }).waitFor({ timeout: READ });

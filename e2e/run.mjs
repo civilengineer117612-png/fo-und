@@ -4,7 +4,7 @@
 import { createRequire } from "node:module";
 import { protectionChecks } from "./protection.mjs";
 import { appLockChecks } from "./applock.mjs";
-import { ENGINE, TOOLS, launchBrowser, skipped, skippedPictures } from "./engine.mjs";
+import { ENGINE, TOOLS, launchBrowser, skipped, skippedPictures, drawPicture } from "./engine.mjs";
 import { execSync } from "node:child_process";
 import { readFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1256,6 +1256,13 @@ check((await text(page, "#scan-why")) === "Choose the account it was paid from t
 await page.fill("#f-date", "2026-10-03");   // dated today, so the entry shows in the Log list
 await page.click('#sheet .chip:has-text("Wallet")');
 check((await text(page, "#scan-why")) === "" && await page.locator("#f-save").isEnabled(), "once the account is chosen the line is gone and saving is on");
+// A bank app screenshot (drawn here, before the block a WebKit run skips, because later blocks read it too): the bank on the From line paid, and nothing else is guessed over it.
+var bankPng = await page.evaluate(() => {
+  const c = document.createElement("canvas"); c.width = 900; c.height = 1000;
+  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 900, 1000); x.fillStyle = "#000"; x.font = "bold 40px sans-serif";
+  ["Transaction Details", "PHP 592.50", "From MariBank", "To SAMPLE SUPERMARKET", "Transaction Amount PHP 592.50", "Transaction Type Credit Card Transaction", "Transaction Time 01 Oct 2026, 19:52"].forEach((l, i) => x.fillText(l, 40, 80 + i * 90));
+  return c.toDataURL("image/png").split(",")[1];
+});
 if (!TOOLS.pictureStore) { skippedPictures("5f from saving the photo on: the saved photo, See the photo, Verify's photo and the photo queue"); await ctx.close(); } else {
 await page.click("#f-save");
 check(await seen(page, "#screen", "as a draft with its photo"), "saving keeps it as a draft, with its photo");
@@ -1299,13 +1306,6 @@ await seen(page, "#screen", "Nothing to verify");
 await page.waitForTimeout(300);
 var left = await page.evaluate(() => new Promise((res) => { const r = indexedDB.open("financialTracker"); r.onsuccess = () => { const g = r.result.transaction("photos").objectStore("photos").count(); g.onsuccess = () => res(g.result); }; }));
 check(left === 0, "deleting the draft deletes its photo from the phone");
-// A bank app screenshot: the bank on the From line paid, and nothing else is guessed over it.
-var bankPng = await page.evaluate(() => {
-  const c = document.createElement("canvas"); c.width = 900; c.height = 1000;
-  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 900, 1000); x.fillStyle = "#000"; x.font = "bold 40px sans-serif";
-  ["Transaction Details", "PHP 592.50", "From MariBank", "To SAMPLE SUPERMARKET", "Transaction Amount PHP 592.50", "Transaction Type Credit Card Transaction", "Transaction Time 01 Oct 2026, 19:52"].forEach((l, i) => x.fillText(l, 40, 80 + i * 90));
-  return c.toDataURL("image/png").split(",")[1];
-});
 await menuGo(page, "Scan");
 await page.setInputFiles("input[data-scan]:not([capture])", { name: "bank.png", mimeType: "image/png", buffer: Buffer.from(bankPng, "base64") });
 check(await seen(page, "#sheet", "Check what I read", 180000), "a bank screenshot is read too");
@@ -1948,7 +1948,7 @@ check((await text(page, "#sheet")).includes("View the photo"), "and the Payslips
 await page.click('#sheet button:has-text("Close")');
 
 // a payslip with the earnings on the left, the deductions on the right, photographed a little crooked (invented figures)
-var crookedPng = await page.evaluate(() => {
+var crookedPng = await drawPicture(page, () => {   // drawn by Chromium on every engine (see drawPicture)
   const c = document.createElement("canvas"); c.width = 1400; c.height = 1000;
   const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 1400, 1000); x.fillStyle = "#000";
   x.translate(60, 40); x.rotate(0.05);

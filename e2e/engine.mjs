@@ -72,6 +72,20 @@ process.on("exit", () => {
   if (tapSafety.size) { console.log("  FAIL tap-safety: " + [...tapSafety].map(([k, n]) => k + " (" + n + "x)").join(" | ")); process.exitCode = 1; }
 });
 
+// A picture the tests READ is always DRAWN by Chromium (owner, Nov 8), whatever engine runs the test: each engine rasterizes canvas text its own way, so a
+// picture drawn in the test gave Chromium and WebKit different pictures, and a reading difference could not be told from a drawing difference. `draw` is a
+// self-contained function run in a page of the app; under Chromium it runs in the test's own page, under WebKit in a throw-away Chromium page at the same
+// address. The picture bytes come back as base64; both engines then read the very same bytes.
+export async function drawPicture(page, draw, arg) {
+  if (ENGINE === "chromium") return page.evaluate(draw, arg);
+  const other = await playwright().chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
+  try {
+    const p = await (await other.newContext({ serviceWorkers: "block" })).newPage();
+    await p.goto(page.url());
+    return await p.evaluate(draw, arg);
+  } finally { await other.close(); }
+}
+
 export async function launchBrowser() {
   const browser = await playwright()[ENGINE].launch(ENGINE === "chromium" && process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
   const make = browser.newContext.bind(browser);

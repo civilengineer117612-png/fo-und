@@ -25,7 +25,7 @@ jobs:
       - name: Install Playwright and WebKit
         run: |
           npm install -g playwright@1.64.1
-          npx playwright install --with-deps webkit
+          npx playwright install --with-deps webkit chromium   # chromium only draws the pictures the tests read (e2e/engine.mjs drawPicture)
       - name: Serve the repository
         run: |
           python3 -m http.server 8124 >/dev/null 2>&1 &
