@@ -1982,6 +1982,10 @@ console.log("Read now");
   ({ ctx, page, errors } = await open({ blockSw: true }));   // without the service worker the page's own requests can be held back
   await addAccount(page, "Test Cash", "asset", "500");
   await page.addInitScript(() => { window.__stallMs = 6000; });
+  // WHAT THE SCREEN SAID, IN ORDER (owner, Nov 8: 5k stays a known failure until actual vs expected shows the cause): every change of the screen's text is kept in the page's session storage (it survives the reloads)
+  // and printed at the end as "diag", with the failing step, so a WebKit log says what happened instead of only that a wait ran out. Nothing is changed or loosened.
+  await page.addInitScript(() => { const go = () => { const el = document.querySelector("#screen"); if (!el) return setTimeout(go, 50); const rec = () => { const t = el.innerText.replace(/\s+/g, " ").slice(0, 140), a = JSON.parse(sessionStorage.getItem("__trail") ?? "[]"); if (a.at(-1) !== t) { a.push(t); sessionStorage.setItem("__trail", JSON.stringify(a)); } }; new MutationObserver(rec).observe(el, { childList: true, subtree: true, characterData: true }); rec(); }; go(); });
+  try {
   await page.route(HUNG, () => {});   // the request stays open for ever
   await page.reload(); await page.waitForSelector("#nav button");
   await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles('input[data-scan="quick"]:not([capture])', { name: "bank.png", mimeType: "image/png", buffer: Buffer.from(bankPng, "base64") });
@@ -1993,6 +1997,10 @@ console.log("Read now");
   await page.click('button[data-action="read-queue"]');
   check(await seen(page, "#screen", "Reading the photos", 4000), "tapping Read now while the app is already reading says it is still reading (it used to do nothing)");
   check(await seen(page, "#screen", "could not run", 30000), "and when that run gives up the reason is shown, with Read now to try again");
+  } finally {
+    const trail = await page.evaluate(() => JSON.parse(sessionStorage.getItem("__trail") ?? "[]")).catch(() => ["(the page could not be read)"]);
+    console.log("  diag 5k the screen said, in order (" + ENGINE + "): " + JSON.stringify(trail));
+  }
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
