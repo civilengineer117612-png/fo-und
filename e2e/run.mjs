@@ -1975,8 +1975,11 @@ check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors
 await ctx.close();
 } catch (e) { await blockFailed(e); }
 
+// A WebKit run cannot keep the photo (the test build has no picture store), so this block, which queues a photo and reads it later, is skipped there with the owner's words.
+// Its cause was read from the "diag" trail (owner, Nov 8): on WebKit the screen went Keeping the photo, Preparing the photo, Getting the stronger reader ready, then back to the plain Log with no photo waiting.
+// The held-open request this block also uses is NOT proved on WebKit either way. Chromium runs it in full.
 // ===== 5k. Read now while the app is already reading by itself =====
-try { blockName = "5k. Read now while the app is already reading by itself";
+try { blockName = "5k. Read now while the app is already reading by itself"; if (!TOOLS.pictureStore) skippedPictures(blockName); else {
 console.log("Read now");
 { const HUNG = /\/src\/vendor\/paddle\/ort\.wasm\.min\.mjs/;   // a reader that never answers
   ({ ctx, page, errors } = await open({ blockSw: true }));   // without the service worker the page's own requests can be held back
@@ -2002,7 +2005,7 @@ console.log("Read now");
     console.log("  diag 5k the screen said, in order (" + ENGINE + "): " + JSON.stringify(trail));
   }
   await ctx.close(); }
-} catch (e) { await blockFailed(e); }
+} } catch (e) { await blockFailed(e); }
 
 // ===== 5l. several employers, old payslips, what changed =====
 try { blockName = "5l. several employers, old payslips, what changed";
