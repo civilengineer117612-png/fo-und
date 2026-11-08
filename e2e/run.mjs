@@ -4,7 +4,7 @@
 import { createRequire } from "node:module";
 import { protectionChecks } from "./protection.mjs";
 import { appLockChecks } from "./applock.mjs";
-import { ENGINE, TOOLS, launchBrowser, skipped, skippedPictures } from "./engine.mjs";
+import { ENGINE, TOOLS, launchBrowser, skipped, skippedPictures, drawPicture } from "./engine.mjs";
 import { execSync } from "node:child_process";
 import { readFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1948,7 +1948,18 @@ check((await text(page, "#sheet")).includes("View the photo"), "and the Payslips
 await page.click('#sheet button:has-text("Close")');
 
 // a payslip with the earnings on the left, the deductions on the right, photographed a little crooked (invented figures)
-var crookedPng = readFileSync(new URL("./fixtures/sample-payslip-crooked.png", import.meta.url)).toString("base64");   // fixed bytes (e2e/make-fixtures.mjs): a canvas drew it differently in each engine
+var crookedPng = await drawPicture(page, () => {   // drawn by Chromium on every engine (see drawPicture)
+  const c = document.createElement("canvas"); c.width = 1400; c.height = 1000;
+  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 1400, 1000); x.fillStyle = "#000";
+  x.translate(60, 40); x.rotate(0.05);
+  x.font = "bold 36px sans-serif"; x.fillText("PHIL SAMPLE, INC.", 20, 60); x.fillText("PAYSLIP", 900, 60); x.font = "30px sans-serif"; x.fillText("Apr 16-30, 2026", 900, 110);
+  x.fillText("Net Pay:  P 9,075.00", 900, 170);
+  const left = [["EARNINGS", ""], ["Basic Salary", "9,000.00"], ["Rice Subsidy", "1,000.00"], ["Skills Allowance", "500.00"], ["Gross Earnings", "10,500.00"]];
+  const right = [["DEDUCTIONS", ""], ["Withholding Tax", "650.00"], ["SSS Premium Cont.", "400.00"], ["Philhealth Premium Cont.", "225.00"], ["Pag-Ibig Premium Cont.", "100.00"], ["Absences", "50.00"], ["Total Deductions", "1,425.00"]];
+  left.forEach(([l, a], i) => { x.fillText(l, 20, 260 + i * 55); if (a) x.fillText(a, 400, 260 + i * 55); });
+  right.forEach(([l, a], i) => { x.fillText(l, 560, 240 + i * 55); if (a) x.fillText(a, 1060, 240 + i * 55); });
+  return c.toDataURL("image/png").split(",")[1];
+});
 await menuGo(page, "Scan");
 await page.setInputFiles("input[data-scan]:not([capture])", { name: "crooked.png", mimeType: "image/png", buffer: Buffer.from(crookedPng, "base64") });
 check(await seen(page, "#sheet", "Add a payslip", 240000), "a crooked two-column payslip photo opens the payslip window");
