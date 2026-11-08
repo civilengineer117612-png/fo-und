@@ -248,6 +248,7 @@ test("end to end: suggestions that round up past the income are brought back und
   let found = 0;
   for (let income = 3000100; income < 3000100 + 50000 && found < 3; income += 997) {
     const s = base(); s.categories.push({ id: "shop", name: "Shopping", kind: "expense" }, { id: "tr", name: "Transpo", kind: "expense", role: "transport" }, { id: "hl", name: "Health", kind: "expense", role: "health" }, { id: "ess", name: "Essentials", kind: "expense", role: "essentials" });
+    s.goals = [{ id: "g1", name: "Cushion", hidden_by_default: false, role: "emergency", target: 9000000 }];   // a goal whose monthly need (9,000,000 / 12 = 750,000) is more than the savings figure, so the savings are placed and rounding can bind
     slip(s, "2026-09-28", income);
     const r = sug(s, { rent: 333333 });
     assert.equal(r.ok, true);

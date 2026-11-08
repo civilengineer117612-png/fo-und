@@ -65,9 +65,9 @@ test("unequal paydays (10,000 and 20,000): income is the median net, and on each
   assert.equal(line(r, 1, "Rent").amount, 800000); assert.equal(line(r, 0, "Rent"), undefined);
   assert.equal(line(r, 0, "Overrun buffer").amount + line(r, 1, "Overrun buffer").amount, 150000);
   assert.equal(line(r, 0, "Overrun buffer").amount, 50000, "split by what each payday brings in, 1 to 2");
-  const saved = ["first", "second"].map((_, i) => line(r, i, "Savings").amount);
-  assert.equal(saved[0] + saved[1], 450000);
-  assert.equal(r.paydays[0].unallocated + r.paydays[1].unallocated, 3000000 - 1850000 - 450000);
+  // the savings figure is 450,000, but with no goal nothing places it: it stays Left, not assigned (owner, Nov 8)
+  assert.equal(r.funding.saving, 450000); assert.equal(line(r, 0, "Savings"), undefined);
+  assert.equal(r.paydays[0].unallocated + r.paydays[1].unallocated, 3000000 - 1850000);
   assert.ok(r.paydays.every((p) => p.short === 0));
 });
 
@@ -174,14 +174,12 @@ test("a ratchet amount, when present, is used for savings, and without one savin
   const params = { start: 100000, step: 20000, floor: 50000 }, amount = ratchetSchedule(params, [true, true])[2];
   assert.equal(amount, 140000);
   const r = run(s, { ratchet: { amount } });
-  assert.equal(line(r, 0, "Savings").amount + line(r, 1, "Savings").amount, 140000);
-  assert.match(line(r, 0, "Savings").reason, /From your savings ratchet/);
+  assert.equal(r.funding.saving, 140000, "the ratchet owns the savings figure");
   assert.ok(balances(r));
   // no ratchet: a cautious start; with no room it is the floor, never negative
   const free = run(s), tight = run(withHistory((x) => { x.payslips.forEach((p) => { p.deposit = p.printed_net = p.printed_gross = Math.floor(p.deposit / 3); }); x.payslipLines.forEach((l) => { l.amount = Math.floor(l.amount / 3); }); }), { settings: { savings_floor: 20000 } });
-  assert.equal(line(free, 0, "Savings").amount + line(free, 1, "Savings").amount, 450000);
-  const t = tight.paydays.reduce((a, p) => a + (p.lines.find((l) => l.name === "Savings")?.amount ?? 0), 0);
-  assert.equal(t, 20000, "the floor, even when it leaves a shortfall");
+  assert.equal(free.funding.saving, 450000);
+  assert.equal(tight.funding.saving, 20000, "the floor, even when it leaves a shortfall");
   assert.ok(tight.paydays.some((p) => p.short > 0));
   const zero = run(withHistory((x) => { x.payslips.forEach((p) => { p.deposit = p.printed_net = p.printed_gross = 10000; }); x.payslipLines.forEach((l) => { l.amount = 10000; }); }));
   assert.ok(zero.paydays.every((p) => p.lines.every((l) => l.amount >= 0)), "never negative");
@@ -293,7 +291,7 @@ test("monthly pay (one payday): everything lands on the one payday, the whole mo
   assert.equal(p.income, 3000000); assert.match(p.incomeReason, /Your base income figure/);
   assert.equal(p.lines.find((l) => l.name === "Food").amount, 600000); assert.equal(p.lines.find((l) => l.name === "Rent").amount, 800000);
   assert.equal(p.lines.reduce((a, l) => a + l.amount, 0) + p.unallocated - p.short, 3000000);
-  assert.equal(p.lines.find((l) => l.name === "Savings").amount, 450000);
+  assert.equal(r.funding.saving, 450000); assert.equal(p.lines.find((l) => l.name === "Savings"), undefined, "with no goal the savings stay Left, not assigned");
   assert.equal(r.paydays[0].lines.find((l) => l.name === "Rent").category_id, "rent", "a line carries its category id");
   assert.equal(suggestPlan({ state: s, paydays: [{ day: 1 }], income: [3000000.5], today: TODAY, month: MONTH }).ok, false, "a float income is refused");
   assert.equal(suggestPlan({ state: s, paydays: [{ day: 1 }], income: [1, 2], today: TODAY, month: MONTH }).ok, false, "one figure per payday");

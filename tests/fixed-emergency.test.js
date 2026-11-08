@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fixedMap, withFixed, fixedWhy, emergencyFund, emergencyFormula, formulaWords, addSchedule, budgetPlan, suggestBudgets, UNLOGGED_CATEGORY_ID } from "../src/model/index.js";
+import { fixedMap, withFixed, fixedWhy, emergencyFund, emergencyFormula, formulaWords, addSchedule, budgetPlan, suggestBudgets, bucketRows, UNLOGGED_CATEGORY_ID } from "../src/model/index.js";
 import { makeState, account } from "./fixtures.js";
 
 // P0-6 PR 4 (owner's answers, Nov 8). Invented numbers only; 100 centavos = 1 peso. Hand-worked below.
@@ -115,4 +115,43 @@ test("no screen reads the old plan-based emergency status any more, and the new 
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8"), sw = readFileSync(new URL("../app/sw.js", import.meta.url), "utf8");
   assert.doesNotMatch(app, /emergencyFundStatus|emergencyFundFromBudgets/);
   assert.match(sw, /fixed\.js/); assert.match(sw, /emergency\.js/);
+});
+
+// ---- owner's defaults, Nov 8 ----
+test("a role the owner stored always wins: Fixed whatever the name reads as or the bucket says; a role only guessed from the name does not beat Other", () => {
+  const s = state();
+  s.categories.push(cat("nf", "Netflix"), cat("nfr", "Netflix again", { role: "subscription" }));
+  assert.equal(fixedMap(s, {}, TODAY).get("nf"), "name", "no stored role: the name says subscription, and the bucket is not Other");
+  const other = { bucket_overrides: { nf: "other", nfr: "other", subs: "other" } };
+  assert.equal(fixedMap(s, other, TODAY).has("nf"), false, "a guessed role does not beat Keep in Other");
+  assert.equal(fixedMap(s, other, TODAY).get("nfr"), "role", "a stored role does");
+  assert.equal(fixedMap(s, other, TODAY).get("subs"), "role", "Streaming (stored role) stays Fixed in Other");
+  assert.equal(fixedMap(s, { ...other, fixed_overrides: { subs: false } }, TODAY).has("subs"), false, "the owner's own switch Off still wins");
+});
+
+test("Fixed is counted inside the 50: the Needs part holds rent and a Fixed subscription; an owner's own split is never changed", () => {
+  const s = state(), budgets = { rent: 2000000, subs: 50000, food: 800000, fun: 300000 };
+  const rowOf = (r, b) => r.rows.find((x) => x.bucket === b).amount;
+  const plain = bucketRows({ categories: s.categories, overrides: {}, targets: undefined, budgets, income: 10000000 });
+  assert.equal(rowOf(plain, "need"), 2800000, "without Fixed: rent and food");
+  const fixed = bucketRows({ categories: s.categories, overrides: {}, targets: undefined, budgets, income: 10000000, fixedIds: new Set(fixedMap(s, {}, TODAY).keys()) });
+  assert.equal(rowOf(fixed, "need"), 2850000, "with Fixed: rent, the subscription and food, all inside the Needs part");
+  assert.equal(fixed.rows.find((x) => x.bucket === "want")?.amount ?? 0, 300000, "the subscription is no longer in Wants");
+  assert.deepEqual([fixed.targets.need, fixed.targets.want, fixed.targets.savings], [5000, 3000, 2000], "50 / 30 / 20 stays the default");
+  const mine = bucketRows({ categories: s.categories, overrides: {}, targets: { need: 6000, want: 2000, savings: 2000 }, budgets, income: 10000000, fixedIds: new Set(["rent"]) });
+  assert.deepEqual([mine.targets.need, mine.targets.want, mine.targets.savings], [6000, 2000, 2000], "an owner's own split is never changed");
+});
+
+test("the starter suggestion takes Fixed subscriptions out of the needs part, not the wants part", () => {
+  const run = (subs) => { const s = state(); s.categories = s.categories.filter((c) => c.id !== "subs"); s.categories.push(cat("fun2", "Fun stuff")); s.subscriptions = subs; return suggestBudgets({ state: s, today: TODAY, month: MONTH, pin: 10000000, rent: 2000000 }); };
+  const none = run([]), withSub = run([{ id: "sb", name: "Streaming plan", amount: 100000, renewal_day: 5 }]);
+  const amount = (r, id) => r.rows.find((x) => x.category_id === id).amount;
+  assert.equal(amount(withSub, "fun2"), amount(none, "fun2"), "Wants are untouched by a Fixed subscription");
+  assert.ok(Math.abs(amount(none, "food") - amount(withSub, "food") - 100000) <= 5000, "Food, a need, pays for it (give or take rounding to 50 pesos)");
+});
+
+test("the Budget offers Add to savings from Left: a tap, never automatic", () => {
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  assert.match(app, /Add .* to savings/); assert.match(app, /case "add-left-to-savings"/);
+  assert.doesNotMatch(app, /placeSurplus[^;]*\n[^\n]*commit\([^\n]*\n[^\n]*render/, "the offer is only ever run by its own action");
 });

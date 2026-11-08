@@ -65,7 +65,7 @@ function clipFor(id) {
     const month = M.monthOf(today()), set = ledger.settings, income = M.baseIncome(S(), { plan: planOf(), pin: set.income_base_pin ?? null }).amount ?? 0;
     const cats = expenseCategories().map((c) => ({ c, amount: M.budgetFor(S().rules, c.id, month) ?? 0 }));
     const rows = [...cats.filter((x) => x.amount > 0), ...cats.filter((x) => x.amount === 0)].map((x) => ({ name: x.c.name, amount: x.amount, bucket: M.bucketOf(x.c, set.bucket_overrides ?? {}) }));
-    const bk = M.bucketRows({ categories: S().categories, overrides: set.bucket_overrides ?? {}, targets: set.bucket_targets, income, budgets: Object.fromEntries(cats.map((x) => [x.c.id, x.amount])), skipId: M.UNLOGGED_CATEGORY_ID }).rows.filter((r) => r.bucket !== "other");
+    const bk = M.bucketRows({ categories: S().categories, overrides: set.bucket_overrides ?? {}, targets: set.bucket_targets, income, budgets: Object.fromEntries(cats.map((x) => [x.c.id, x.amount])), skipId: M.UNLOGGED_CATEGORY_ID, fixedIds: new Set(M.fixedMap(S(), set, today()).keys()) }).rows.filter((r) => r.bucket !== "other");
     budget = { income, rows, buckets: bk };
   }
   const trips = id === "trips" ? S().tags.map((t) => ({ name: t.name, days: M.tripDays(t), spent: M.tagSummary(S(), t.id, { categoryMaps: S().categoryMaps, asOf: today() }).spent })) : [];
@@ -2491,6 +2491,12 @@ const bvNextReg = (v, w) => v.perPayday.slice(w + 1).find((p) => !p.extra) ?? nu
 const bvAmounts = (v, key) => { const line = v.lines.find((l) => l.key === key); return line ? M.paydayShares(ledger.settings, line, bvIncomes(v)).map(M.amountText) : []; };
 const BUDGET_GROUPS = ["Fixed", "Needs", "Savings", "Buffer", "Wants", "Other"];   // the order of funding: Fixed payments first, then needs, savings, the buffer, then wants
 const incomeWords = (inc) => (inc.source === "pinned" ? "Your own figure" : inc.source === "payslips" ? "From your payslips" : inc.source === "plan" ? "From your Pay plan" : "");
+// The offer "Add to savings" for an amount that is Left: {add: {goal_id: centavos}, total, left} (model: placeSurplus). Used by the Budget and by its own tap.
+function savingsOffer(left) {
+  const set = ledger.settings, goals = S().goals, progress = new Map(goals.map((g) => [g.id, M.goalProgress(S(), g)]));
+  const efGoal = goals.find((g) => g.role === "emergency"), ef = efGoal ? M.emergencyFund(S(), set, efGoal, { month: M.monthOf(today()), today: today() }) : null;
+  return M.placeSurplus({ goals, progress, left, monthly: set.goal_monthly ?? {}, shares: set.goal_shares ?? {}, emergencyTarget: ef && ef.source === "formula" ? ef.target : null });
+}
 function viewBudget() {
   const month = M.monthOf(today()), set = ledger.settings, v = M.budgetPlan(S(), set, month, today()), review = M.planMigrationReview(S(), set, month);
   const has = v.paydays.length > 0, per = has ? ui.budgetView ?? "month" : "month", w = Math.min(ui.budgetPayday ?? 0, Math.max(0, v.paydays.length - 1));
@@ -2504,6 +2510,9 @@ function viewBudget() {
   const eyebrow = per === "month" ? "Pay each month" : per === "week" ? "Pay each week" : "Pay on this payday";
   const src = per === "week" ? "Month x 12 / 52" : v.income.amount ? incomeWords(v.income) : "";
   const leftLine = left >= 0 ? `Left: ${pesoW(left)}, not assigned` : `Over by ${pesoW(-left)}`;
+  // ADD TO SAVINGS (owner, Nov 8): what is Left is never placed by itself; this offer puts it on the goals that still have a gap, only when it is tapped.
+  const offer = per === "month" && left > 0 ? savingsOffer(left) : null;
+  const offerHtml = offer && offer.total > 0 ? `<p style="margin-bottom:4px"><button data-action="add-left-to-savings" style="width:100%">Add ${pesoW(offer.total)} to savings</button></p><p class="note small" style="margin-top:0">The emergency fund first, then your other goals by your percentages. Never more than a goal still needs.</p>` : "";
   const max = Math.max(1, ...rows.map((r) => r.amount));
   const nextM = M.addMonths(month, 1), changeNote = (id, now) => { const l = M.budgetFor(S().rules, id, nextM); return (l ?? null) !== (now ?? null) ? `${l === null ? "ends" : peso(l) + " a month"} from ${esc(M.monthLabel(nextM))}` : ""; };
   const spentNote = (r) => { if (!prog || r.kind !== "category") return ""; const sp = prog.spent[r.id] ?? 0, d = r.amount - sp; return `Spent ${peso(sp)} \u00b7 ${d >= 0 ? peso(d) + " left" : peso(-d) + " over"}`; };
@@ -2522,12 +2531,12 @@ function viewBudget() {
     <div class="pp-whole" role="img" aria-label="${esc(pesoW(block.placed))} of ${esc(pesoW(income))} placed" style="margin:12px 0 8px"><span style="width:${income > 0 ? Math.max(0, Math.min(100, Math.round((block.placed * 100) / income))) : 0}%"></span></div>
     <div class="ct" style="display:flex;justify-content:space-between;gap:10px"><span class="note small" style="margin:0">${esc(src)}</span><span class="amt" style="white-space:nowrap">${esc(leftLine)}</span></div>${v.income.other ? `<p class="note small">Your payslips say ${peso(v.income.other.amount)}; your own figure is used.</p>` : ""}${payLine ? `<p class="note small" id="pay-line">${payLine}</p>` : ""}${prog ? `<p class="note small">${esc(longDate(prog.start))} to ${esc(longDate(prog.end))}. Only verified spending counts.</p>` : ""}</div>` : `<p class="note">${esc(M.NO_INCOME_PROMPT)}</p>`;
   const body = BUDGET_GROUPS.map(card).join("");
-  return `<h1>Budget</h1>${moveCard}${seg}${daySeg}${top}${moveBtn}${per === "week" ? "" : `<p><button data-action="open-income" style="width:100%">Record pay received</button></p>`}${noPay}${body}${noBudgetCard}${weekNote}
+  return `<h1>Budget</h1>${moveCard}${seg}${daySeg}${top}${moveBtn}${offerHtml}${per === "week" ? "" : `<p><button data-action="open-income" style="width:100%">Record pay received</button></p>`}${noPay}${body}${noBudgetCard}${weekNote}
     <p><button class="primary" data-action="open-suggest" style="width:100%">Suggest a budget</button></p>${hiddenList}`;
 }
 
 const rowWhy = (x) => (x.source === "starter" && !x.pinned ? (/Lowered by .*$/.exec(x.reason)?.[0] ?? "") : x.reason);
-const runSuggest = () => { const set = ledger.settings; return M.suggestBudgets({ state: S(), plan: planOf(), pin: set.income_base_pin ?? null, today: today(), month: M.monthOf(today()), settings: set.suggest_settings, pins: set.budget_pins ?? {}, rent: set.starter_rent ?? undefined, goalPins: set.goal_monthly ?? {}, goalShares: set.goal_shares ?? {}, overrides: set.bucket_overrides ?? {}, targets: set.bucket_targets, hidden: M.hiddenCategoryIds(set) }); };
+const runSuggest = () => { const set = ledger.settings; return M.suggestBudgets({ state: S(), plan: planOf(), pin: set.income_base_pin ?? null, today: today(), month: M.monthOf(today()), settings: set.suggest_settings, pins: set.budget_pins ?? {}, rent: set.starter_rent ?? undefined, goalPins: set.goal_monthly ?? {}, goalShares: set.goal_shares ?? {}, overrides: set.bucket_overrides ?? {}, targets: set.bucket_targets, hidden: M.hiddenCategoryIds(set), fixed: set.fixed_overrides ?? {} }); };
 // What the "Yours" box shows: what was typed or taken from the suggestion, else the pinned figure, else the budget in force.
 const yoursOf = (x, f) => (f["y_" + x.category_id] !== undefined ? f["y_" + x.category_id] : ledger.settings.budget_pins?.[x.category_id] !== undefined ? (ledger.settings.budget_pins[x.category_id] / 100).toFixed(2) : x.current != null ? (x.current / 100).toFixed(2) : "");
 // The figures the owner has in the suggestion sheet, as {category_id: centavos}, plus which were TYPED (those become pins).
@@ -3096,7 +3105,7 @@ function renderSheet() {
       ${typed ? `<p><button data-action="clear-goal-monthly" style="width:100%">Use the suggestion again</button></p>` : ""}`;
   } else if (sh.type === "shares") {
     const goals = sh.ids.map((id) => S().goals.find((g) => g.id === id)).filter(Boolean);
-    body = `<h3>Share what is left</h3><p class="note">What is left after typed amounts, finish dates and the emergency fund is shared by these goals. Whole percents adding to 100.</p>
+    body = `<h3>Percentages for Add to savings</h3><p class="note">Add to savings puts what is left on the emergency fund first, then on these goals by these percentages. Whole percents adding to 100.</p>
       ${goals.map((g) => `<label for="s-${esc(g.id)}">${esc(g.name)} (%)</label><input id="s-${esc(g.id)}" data-field="s_${esc(g.id)}" inputmode="numeric" value="${esc(ui.form["s_" + g.id] ?? "")}" autocomplete="off">`).join("")}
       <p class="note" id="s-msg" role="status"></p>
       <p><button class="primary" id="f-save" data-action="save-shares" style="margin-top:6px" disabled>Save</button></p>`;
@@ -3120,7 +3129,7 @@ function renderSheet() {
     } else {
       const sugAmt = (x) => { const typed = f["y_" + x.category_id]; const a = typed !== undefined && typed !== "" ? M.parsePesos(typed) : null; return a?.ok ? a.centavos : x.suggested ?? 0; };
       const budgets = Object.fromEntries(r.rows.map((x) => [x.category_id, sugAmt(x)])), goalsTotal = r.saved.filter((x) => x.kind === "goal").reduce((n, x) => n + x.amount, 0), bufferAmt = r.saved.filter((x) => x.kind === "buffer").reduce((n, x) => n + x.amount, 0);
-      const bk = M.bucketRows({ categories: S().categories, overrides: ledger.settings.bucket_overrides ?? {}, targets: ledger.settings.bucket_targets, budgets, goals: goalsTotal, buffer: bufferAmt, income: r.income.amount });
+      const bk = M.bucketRows({ categories: S().categories, overrides: ledger.settings.bucket_overrides ?? {}, targets: ledger.settings.bucket_targets, budgets, goals: goalsTotal, buffer: bufferAmt, income: r.income.amount, fixedIds: new Set(M.fixedMap(S(), ledger.settings, today()).keys()) });
       const top = barCard([
         { name: "Income", sub: esc(r.income.text), fig: `${peso(r.income.amount)} a month`, pct: null, action: "open-income-base", id: "x" },
         ...(r.income.other ? [{ name: "Your payslips say", sub: "Not used: your own figure is", fig: `${peso(r.income.other.amount)} a month`, pct: null }] : []),
@@ -3133,7 +3142,7 @@ function renderSheet() {
       body = `<h3>Suggest a budget</h3><p class="note">Nothing is saved until you confirm. Suggestions are rounded to the nearest \u20B150; typing a figure pins it as yours.${r.history.used === "starter" && ledger.settings.starter_rent != null ? ` Rent: ${peso(ledger.settings.starter_rent)} <button class="link" data-action="change-rent">Change</button>` : ""}</p>
         ${top}<p class="center"><button class="link" data-action="open-targets">Change the 50 / 30 / 20 split</button></p>
         <h4 class="sugh">Spending, each a month</h4>${list}<p class="center"><button class="link" data-action="sug-edit">${f.sugEdit ? "Hide my own figures" : "Type my own figures"}</button></p>
-        ${saved ? `<h4 class="sugh">Saved and set aside</h4>${saved}<p class="center"><button class="link" data-action="open-shares">Share the saving between goals</button></p>` : ""}
+        ${saved ? `<h4 class="sugh">Saved and set aside</h4>${saved}<p class="center"><button class="link" data-action="open-shares">Percentages for Add to savings</button></p>` : ""}
         <p class="note" id="sug-left">${r.short > 0 ? `<b>Short by ${peso(r.short)}.</b> Fixed, needs and savings floor: ${peso(r.income.amount + r.short)}. Income: ${peso(r.income.amount)}.` : `Funded in order: fixed, needs, savings floor, buffer, then wants (up to ${peso(r.funding.wantsCap)}). Left: <b>${peso(r.unallocated)}</b>.`}${r.trimmed.length ? ` Rounding would have gone over your income, so ${esc(r.trimmed.map((t) => `${t.name} was lowered by ${peso(t.by)}`).join(", "))}.` : ""}</p>
         <p><button data-action="use-all-sug" style="width:100%">Use all suggestions</button></p>
         <p><button class="primary" data-action="review-sug">Confirm</button></p>`;
@@ -4295,6 +4304,13 @@ async function onClick(el) {
     case "view-goal": ui.sheet = { type: "goal-view", id, tab: "overview" }; ui.form = {}; renderSheet(); break;
     case "goal-tab": ui.sheet = { ...ui.sheet, tab: id }; renderSheet(); break;
     case "open-goal-share": { const g = S().goals.find((x) => x.id === id), sl = M.goalSlices(S(), S().accounts.find((x) => x.id === g.account_id)).get(id); ui.sheet = { type: "goal-share", id }; ui.form = { pct: String(sl.bps / 100) }; renderSheet(); break; }
+    case "add-left-to-savings": {
+      const v = M.budgetPlan(S(), ledger.settings, M.monthOf(today()), today()), offer = v.monthView.left > 0 ? savingsOffer(v.monthView.left) : null;
+      if (!offer || offer.total <= 0) { showToast("Nothing to add right now."); break; }
+      const monthly = { ...(ledger.settings.goal_monthly ?? {}) };
+      for (const [gid, add] of Object.entries(offer.add)) monthly[gid] = (Number.isSafeInteger(monthly[gid]) ? monthly[gid] : 0) + add;
+      await commit(S(), { ...ledger.settings, goal_monthly: monthly }); showToast(peso(offer.total) + " added to savings"); break;
+    }
     case "open-goal-target": { const g = S().goals.find((x) => x.id === id); ui.sheet = { type: "goal-target", id }; ui.form = { amount: g?.target > 0 ? (g.target / 100).toFixed(2) : "" }; renderSheet(); break; }
     case "save-goal-target": {
       const a = M.parsePesos(ui.form.amount ?? ""), r = a.ok ? M.setGoalTarget(S(), ui.sheet.id, a.centavos) : null;

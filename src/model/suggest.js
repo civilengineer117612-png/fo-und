@@ -206,8 +206,9 @@ export function suggestPlan(input) {
     // Rent and fixed needs come first, but the everyday needs keep at least their floor of the needs part; what the fixed needs take past that comes out of
     // the wants part (and, when wants run out, out of savings, which only gets what is left).
     const needsPart = Math.floor((monthIncome * S.starter.needs) / 10000), keep = Math.floor((needsPart * S.needs_variable_floor) / 10000);
-    const overFixed = Math.max(0, fixedNeeds - (needsPart - keep));
-    const needsPool = Math.max(0, needsPart - fixedNeeds + overFixed), wantsPool = Math.max(0, Math.floor((monthIncome * S.starter.wants) / 10000) - fixedWants - overFixed);
+    // FIXED COUNTS INSIDE THE 50 (owner, Nov 8): rent, scheduled payments AND Fixed subscriptions all come out of the needs part, with Needs.
+    const fixedAll = fixedNeeds + fixedWants, overFixed = Math.max(0, fixedAll - (needsPart - keep));
+    const needsPool = Math.max(0, needsPart - fixedAll + overFixed), wantsPool = Math.max(0, Math.floor((monthIncome * S.starter.wants) / 10000) - overFixed);
     const loggedAny = wantsList.some((c) => (logged.get(c.id) ?? 0) > 0);
     const groups = [["needs", needsList, needsPool, needWeight, loggedNeeds ? "after the rent and fixed payments, shared by what you have logged so far" : "after the rent and fixed payments, shared by typical weights for its role"],
       ["wants", wantsList, wantsPool, loggedAny ? (c) => logged.get(c.id) ?? 0 : () => 1, loggedAny ? "shared by what you have logged so far" : "shared evenly because nothing is logged yet"]];
