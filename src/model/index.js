@@ -105,7 +105,9 @@ export { BUCKETS, CHOICES, BUCKET_LABELS, INVESTED_LABEL, DEFAULT_TARGETS, TARGE
 export { categoryInUse, removeKind, removeCategory, restoreCategory, hiddenCategoryIds, isHiddenCategory, hideCategory, showCategory, pickable } from "./catedit.js";
 export { groupRows, parseStatement, classifyLine, checkStatement, badLineDetails, statementItems, statementRewards, statementLeftOut, unsureByPerson, nameKey, holderNames, isOwnName, isTransferOut } from "./statement.js";
 export { BUCKET_WORDS, readBucket } from "./bucketwords.js";
-export { splitSavings, parseShares, shareableGoals, UNPLACED_NAME } from "./savings.js";
+export { splitSavings, parseShares, shareableGoals, monthlyNeed, proRata, NEED_MONTHS, UNPLACED_NAME } from "./savings.js";
+export { fixedMap, isFixed, withFixed, fixedWhy, FIXED_LABEL, FIXED_ROLES } from "./fixed.js";
+export { emergencyFund, emergencyFormula, formulaWords, EF_MONTHS } from "./emergency.js";
 export { guessType, typeOf, kindOf } from "./types.js";
 export { CHANGES, whatsNew } from "./whatsnew.js";
 export { HOWTOS, HOWTO_HINT, clipData, howtoClip } from "./howto.js";

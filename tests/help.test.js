@@ -87,5 +87,5 @@ test("Budget and Goals are two tabs: nothing is hidden from the menu, and the Pa
 test("the old Pay plan is not typed in any more: no By payday section on Budget, and no plan section on Setup", () => {
   assert.ok(!app.includes("function byPaydaySection") && !app.includes("By payday"), "the plan is not repeated inside Budget");
   assert.ok(!app.includes("<h2>Pay plan</h2>\n    <p class=\"note\">A plan is in effect."), "Setup has no Pay plan section any more");
-  assert.match(app, /3 months of your rent, food and essentials, from your budgets/, "the emergency fund hint points at the budgets, not at loading a plan");
+  assert.match(app, /3 \\u00d7 \(Fixed \+ Needs\) of your budgets/, "the emergency fund hint points at the budgets, not at loading a plan");
 });

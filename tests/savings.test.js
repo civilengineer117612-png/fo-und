@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { splitSavings, parseShares, shareableGoals, UNPLACED_NAME, suggestBudgets, shares, savedRows } from "../src/model/index.js";
+import { splitSavings, parseShares, shareableGoals, monthlyNeed, UNPLACED_NAME, suggestBudgets, shares, savedRows } from "../src/model/index.js";
 import { UNLOGGED_CATEGORY_ID } from "../src/model/seed.js";
 import { makeState, account } from "./fixtures.js";
 
@@ -56,21 +56,59 @@ test("a goal with a finish date is sized to make it, and never takes more than w
   assert.deepEqual(by(tight), { trip: 25000, b: 0 });
 });
 
-test("the emergency fund takes what is left until its target, then the rest is shared; with no target it takes it all", () => {
+test("the emergency fund's need is its gap over 12 months; the rest of the money goes to the others; with no target it takes it all", () => {
   const goals = [g("b"), g("ef", { role: "emergency" })];
-  const r = split(goals, [prog("b"), prog("ef", { target: 130000, balance: 100000 })]);
-  assert.deepEqual(by(r), { ef: 30000, b: 70000 });
+  const r = split(goals, [prog("b"), prog("ef", { target: 130000, balance: 100000 })]);   // gap 30,000 / 12 = 2,500
+  assert.deepEqual(by(r), { ef: 2500, b: 97500 });
   const open = split(goals, [prog("b"), prog("ef")]);
-  assert.deepEqual(by(open), { ef: 100000, b: 0 }, "no target set: it comes first and takes the lot (type a monthly amount to change that)");
+  assert.deepEqual(by(open), { ef: 100000, b: 0 }, "no target at all: it is open-ended, comes first and takes the lot (type a monthly amount to change that)");
   const full = split(goals, [prog("b"), prog("ef", { target: 130000, balance: 130000 })]);
   assert.deepEqual(by(full), { b: 100000 }, "a goal at its target gets nothing");
+  const formula = split(goals, [prog("b"), prog("ef")], { emergencyTarget: 240000 });   // the formula target stands in when none is typed: 240,000 / 12 = 20,000
+  assert.deepEqual(by(formula), { ef: 20000, b: 80000 });
+  const typedWins = split(goals, [prog("b"), prog("ef", { target: 120000 })], { emergencyTarget: 240000 });
+  assert.deepEqual(by(typedWins), { ef: 10000, b: 90000 }, "a typed target wins over the formula");
 });
 
-test("the order is typed amounts, then finish dates, then the emergency fund, then the others", () => {
-  const goals = [g("a"), g("ef", { role: "emergency" }), g("trip", { deadline: "2026-12-31" }), g("p")];
-  const p = [prog("a"), prog("ef", { target: 1000000, balance: 0 }), prog("trip", { target: 100000, balance: 0 }), prog("p")];
-  const r = split(goals, p, { total: 200000, pins: { p: 50000 } });   // trip: 100000 over 2 months = 50000
-  assert.deepEqual(by(r), { p: 50000, trip: 50000, ef: 100000, a: 0 });
+test("the monthly need: a finish date sizes it, no finish date is the gap over 12 months, no target or a reached goal needs nothing", () => {
+  const dated = monthlyNeed({ id: "t", deadline: "2027-01-31" }, { target: 120000, balance: 0, remaining: 120000 }, "2026-10");
+  assert.deepEqual([dated.need, dated.basis], [40000, "date"]);
+  const open = monthlyNeed({ id: "o" }, { target: 100000, balance: 1, remaining: 99999 }, "2026-10");
+  assert.deepEqual([open.need, open.basis], [8334, "twelve"], "99,999 / 12 = 8,333.25, rounded up");
+  assert.equal(monthlyNeed({ id: "n" }, { target: null, balance: 5, remaining: null }, "2026-10").need, 0);
+  assert.equal(monthlyNeed({ id: "d" }, { target: 100, balance: 100, remaining: 0 }, "2026-10").need, 0);
+});
+
+test("when the money covers every need, each goal gets its need and the rest is shared by the percentages", () => {
+  const goals = [g("a"), g("b"), g("c")], p = [prog("a", { target: 120000 }), prog("b", { target: 240000 }), prog("c")];   // needs 10,000 and 20,000; c has none
+  const r = split(goals, p, { total: 130000 });
+  assert.deepEqual(by(r), { a: 10000 + 33334, b: 20000 + 33333, c: 33333 }, "100,000 is left over and shared equally (the odd centavo to the first of the equals)");
+  assert.equal(sum(r), 130000);
+  const set = split(goals, p, { total: 130000, shares: { a: 5000, b: 5000, c: 0 } });
+  assert.deepEqual(by(set), { a: 10000 + 50000, b: 20000 + 50000, c: 0 });
+});
+
+test("when the money cannot cover every need: the emergency fund first, then the rest pro rata to need, exactly", () => {
+  const goals = [g("a"), g("b"), g("ef", { role: "emergency" })];
+  const p = [prog("a", { target: 120000 }), prog("b", { target: 360000 }), prog("ef", { target: 600000 })];   // needs 10,000, 30,000 and 50,000 (a month of 12)
+  const enough = split(goals, p, { total: 90000 });
+  assert.deepEqual(by(enough), { a: 10000, b: 30000, ef: 50000 });
+  const short = split(goals, p, { total: 70000 });   // the fund takes its 50,000; 20,000 is shared 1 to 3
+  assert.deepEqual(by(short), { ef: 50000, a: 5000, b: 15000 });
+  const odd = split(goals, p, { total: 70001 });   // 20,001 shared 1 to 3: 5,000 and 15,000, the odd centavo to the biggest need
+  assert.equal(sum(odd), 70001); assert.deepEqual(by(odd), { ef: 50000, a: 5000, b: 15001 });
+  const tiny = split(goals, p, { total: 30000 });   // the fund's need is more than the money: it takes everything, the others get nothing
+  assert.deepEqual(by(tiny), { ef: 30000, a: 0, b: 0 });
+  assert.match(short.parts.find((x) => x.goal_id === "ef").why, /comes first/);
+  const none = split([g("a"), g("b")], [prog("a", { target: 120000 }), prog("b", { target: 360000 })], { total: 20000 });   // no emergency fund: pro rata to need
+  assert.deepEqual(by(none), { a: 5000, b: 15000 });
+});
+
+test("a typed amount is paid before any need, and a goal with a date counts its need the same way", () => {
+  const goals = [g("a"), g("trip", { deadline: "2026-12-31" }), g("ef", { role: "emergency" })];
+  const p = [prog("a"), prog("trip", { target: 100000 }), prog("ef", { target: 1200000 })];   // trip needs 50,000 (2 months), the fund 100,000
+  const r = split(goals, p, { total: 200000, pins: { a: 60000 } });   // 140,000 left, the needs are 150,000: the fund is paid first, the trip gets the rest
+  assert.deepEqual(by(r), { a: 60000, ef: 100000, trip: 40000 });
   assert.equal(sum(r), 200000);
 });
 
@@ -80,9 +118,9 @@ test("when every goal is full or has nothing left to take, the rest is shown as 
   assert.match(r.parts[0].why, /no open goal/i);
 });
 
-test("even a few centavos no goal can take are shown, not dropped", () => {
-  const r = split([g("ef", { role: "emergency" })], [prog("ef", { target: 100000, balance: 0 })], { total: 100050 });
-  assert.deepEqual(r.parts.map((x) => [x.name, x.amount]), [["EF", 100000], [UNPLACED_NAME, 50]]);
+test("a few centavos no goal can take are shown, not dropped", () => {
+  const r = split([g("ef", { role: "emergency" })], [prog("ef", { target: 100000, balance: 0 })], { total: 100050 });   // its need is 8,334 a month
+  assert.deepEqual(r.parts.map((x) => [x.name, x.amount]), [["EF", 8334], [UNPLACED_NAME, 91716]]);
   assert.equal(sum(r), 100050);
 });
 
@@ -147,5 +185,5 @@ test("a typed monthly amount and the percentages reach the suggestion", () => {
 test("the screens read the settings and the rule is the same everywhere", () => {
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8"), sw = readFileSync(new URL("../app/sw.js", import.meta.url), "utf8"), eng = readFileSync(new URL("../src/model/suggest.js", import.meta.url), "utf8");
   assert.match(sw, /savings\.js/);
-  assert.match(eng, /splitSavings\(\{ goals, progress, month, total: saving, pins: input\.goalPins \?\? \{\}, shares: input\.goalShares \?\? \{\} \}\)/);
+  assert.match(eng, /splitSavings\(\{ goals, progress, month, total: saving, pins: input\.goalPins \?\? \{\}, shares: input\.goalShares \?\? \{\}, emergencyTarget: input\.emergencyTarget \?\? null \}\)/);
 });

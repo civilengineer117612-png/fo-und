@@ -261,14 +261,16 @@ test("the overrun buffer is a setting; without one it is the starter share, mark
   assert.equal(line(dflt, 0, "Overrun buffer").source, "starter"); assert.match(line(dflt, 0, "Overrun buffer").reason, /5% of pay/);
 });
 
-test("goals with a deadline are sized to reach it; the emergency goal takes the rest; a reached goal gets nothing", () => {
+test("goals with a deadline are sized to reach it; the emergency goal is paid first when the money is short; a reached goal gets nothing", () => {
   const s = withHistory((x) => {
     x.accounts.push(account({ id: "g1", name: "Test Trip Pot", class: "asset", opening_balance: 100000 }), account({ id: "g2", name: "Test Cushion", class: "asset", opening_balance: 0 }), account({ id: "g3", name: "Test Done Pot", class: "asset", opening_balance: 900000 }));
     x.goals = [{ id: "a", account_id: "g1", name: "Trip Pot", target: 400000, deadline: "2027-02-28", hidden_by_default: false }, { id: "b", account_id: "g2", name: "Cushion", target: 5000000, hidden_by_default: false, role: "emergency" }, { id: "c", account_id: "g3", name: "Done Pot", target: 800000, hidden_by_default: false }];
   });
   const r = run(s), all = (name) => r.paydays.reduce((a, p) => a + (p.lines.find((l) => l.name === name)?.amount ?? 0), 0);
-  assert.equal(all("Trip Pot"), 75000, "300,000 still to go over the 4 months left");
-  assert.equal(all("Cushion"), 450000 - 75000, "the emergency goal takes what is left");
+  // needs: Trip Pot 300,000 over the 4 months left = 75,000; Cushion 5,000,000 / 12 = 416,667 (rounded up). 491,667 is more than the 450,000 set aside, so the
+  // emergency fund is paid first and the rest goes to the other goal.
+  assert.equal(all("Cushion"), 416667, "the emergency fund comes first when the money does not cover every need");
+  assert.equal(all("Trip Pot"), 450000 - 416667, "and the other goal gets what is left");
   assert.equal(all("Done Pot"), 0);
   assert.equal(all("Savings"), 0);
   assert.ok(balances(r));

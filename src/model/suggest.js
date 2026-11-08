@@ -284,14 +284,15 @@ export function suggestPlan(input) {
     why = saving === floorAmt && floorAmt > 0 && left === 0 ? "Your savings floor; there is not enough room for more." : `A cautious start: what is left after your costs, up to ${pct(S.starter.savings)} of pay (a rule of thumb), never below your savings floor.`;
   }
   const funding = { income: monthIncome, fixed: fixedTotal, needs: needTotal, floor: floorAmt, buffer: bufferAmt, wants: wantsTotal, wantsCap, saving, shortBy };
-  // The money set aside is shared between the goals by one rule (savings.js): typed amounts first, finish dates, the emergency fund until its target, then percentages.
+  // The money set aside is shared between the goals by one rule (savings.js): typed amounts first, then each goal's monthly need (the emergency fund first when the money is short, the rest pro rata to need), then the percentages for what is left.
   const goals = state.goals ?? [], progress = new Map(goals.map((g) => [g.id, goalProgress(state, g)]));
-  const shared = splitSavings({ goals, progress, month, total: saving, pins: input.goalPins ?? {}, shares: input.goalShares ?? {} });
+  const shared = splitSavings({ goals, progress, month, total: saving, pins: input.goalPins ?? {}, shares: input.goalShares ?? {}, emergencyTarget: input.emergencyTarget ?? null });
   for (const part of shared.parts) {
     const [a, b] = splitBy(part.amount, income[0], inc1);
     put(part.name, "goal", [a, b], part.pinned ? part.why : `${why} ${part.why}`, input.ratchet || learn ? "history" : "starter");
     const l = lines.get(part.name.trim().toLowerCase());
     if (part.goal_id) l.goal_id = part.goal_id;
+    if (part.need) l.need = part.need;   // what the goal needs each month, so the screen can say it
     if (part.pinned) l.pinned = true;
   }
   applyPins();
@@ -299,7 +300,7 @@ export function suggestPlan(input) {
   // 7. Per payday: the lines, and the exact gap to the income. Nothing is cut.
   const rows = [...lines.values()];
   const out = paydays.map((p, i) => {
-    const key = i === 0 ? "first" : "second", list = rows.map((l) => ({ name: l.name, kind: l.kind, amount: l[key], reason: l.reason, source: l.source, ...(l.nudged ? { nudged: l.nudged } : {}), ...(l.category_id ? { category_id: l.category_id } : {}), ...(l.goal_id ? { goal_id: l.goal_id } : {}), ...(l.pinned ? { pinned: true } : {}) })).filter((l) => l.amount > 0 || l.pinned);
+    const key = i === 0 ? "first" : "second", list = rows.map((l) => ({ name: l.name, kind: l.kind, amount: l[key], reason: l.reason, source: l.source, ...(l.nudged ? { nudged: l.nudged } : {}), ...(l.category_id ? { category_id: l.category_id } : {}), ...(l.goal_id ? { goal_id: l.goal_id } : {}), ...(l.need ? { need: l.need } : {}), ...(l.pinned ? { pinned: true } : {}) })).filter((l) => l.amount > 0 || l.pinned);
     const sum = list.reduce((n, l) => n + l.amount, 0);
     return { id: p.id ?? (i === 0 ? "first" : "second"), label: p.label ?? (i === 0 ? "1st payday" : "2nd payday"), day: p.day, income: income[i], incomeReason: incomeOf(i), lines: list, total: sum, unallocated: Math.max(0, income[i] - sum), short: Math.max(0, sum - income[i]) };
   });
