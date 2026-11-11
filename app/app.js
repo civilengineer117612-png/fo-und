@@ -1879,25 +1879,25 @@ function viewCards() {
   const seq = [], used = new Set();
   for (const c of o.cards) { for (const m of sorted) if (acct(m.account_id)?.reserve_for === c.account_id) { seq.push({ m }); used.add(m.account_id); } seq.push({ c }); }
   for (const m of sorted) if (!used.has(m.account_id)) seq.push({ m });
-  const swipe = (it) => {
+  // The account grid (owner's reference, Nov 11): two columns of small white cards, each with the picture and name, the balance in bold and the kind under it. Four first; "See all accounts" opens the whole list.
+  const kindOf = (it, a) => (it.c ? "Credit card, you owe" : M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet");
+  const gridCard = (it) => {
     const id = (it.c ?? it.m).account_id, a = acct(id), cv = covers.find((x) => x.reserve_id === id);
     const amount = amt(it.c ? `${peso(it.c.owe)}<span class="sr"> you owe</span>` : peso(it.m.balance));
-    const small = whenShown(it.c ? [it.c.spent > 0 ? flow(true, it.c.spent) : "", it.c.paid > 0 ? flow(false, it.c.paid) : ""].filter(Boolean).join(" ") : (it.m.spent > 0 ? flow(true, it.m.spent) : ""));
-    return `<div class="swcard"${it.c ? ` role="button" tabindex="0" data-action="open-card" data-id="${esc(id)}" aria-label="${esc(a.name)}: pay this card"` : ` role="button" tabindex="0" data-action="open-register" data-id="${esc(id)}" aria-label="${esc(a.name)}: its history"`}><div class="swtop">${iconOf(a, 40)}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${it.c ? ICONS.cards : ICONS.buffer}</svg></div>
-      <div class="swname">${esc(a.name)}${a.last4 ? `<span class="l4" aria-label="ends in ${esc(a.last4)}"> \u00b7\u00b7${esc(a.last4)}</span>` : ""}</div><div class="swamt">${amount}</div>${cv ? (shown ? coverBar(cv.share, coverLabel(cv)) : `<span class="cover" role="img" aria-label="Amounts are hidden"><span style="width:0%"></span></span>`) : small ? `<div class="swsmall">${small}</div>` : M.isPocket(a) ? `<div class="swsmall">Savings pocket</div>` : ""}${ptoggle(id)}</div>`;
+    const open = it.c ? `data-action="open-card" aria-label="${esc(a.name)}: pay this card"` : `data-action="open-register" aria-label="${esc(a.name)}: its history"`;
+    return `<div class="gcard" role="button" tabindex="0" ${open} data-id="${esc(id)}"><div class="gtop">${iconOf(a, 28)}<span class="gname">${esc(a.name)}${a.last4 ? `<span class="l4" aria-label="ends in ${esc(a.last4)}"> \u00b7\u00b7${esc(a.last4)}</span>` : ""}</span></div><div class="gamt">${amount}</div><div class="gtype">${kindOf(it, a)}</div>${cv ? (shown ? coverBar(cv.share, coverLabel(cv)) : `<span class="cover" role="img" aria-label="Amounts are hidden"><span style="width:0%"></span></span>`) : ""}</div>`;
   };
   const netCard = `<div class="netcard" role="group" aria-label="${shown ? `Free ${esc(peso(net.free))}: in your accounts ${esc(peso(o.held))}, owed on cards ${esc(peso(o.owe))}` : "Amounts are hidden"}"><div class="netbigrow"><div class="netbig">${shown ? `${net.free < 0 ? "-" : ""}${peso(Math.abs(net.free))}` : `<span aria-label="Amount hidden">${DOTS}</span>`}</div>${eyeButton("cards-eye", shown)}</div>${shown ? coverBar(net.share, "Owed on cards is " + Math.round(net.share * 100) + "% of what is in your accounts") : `<span class="cover" role="img" aria-label="Amounts are hidden"><span style="width:0%"></span></span>`}<div class="netsides"><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.buffer}</svg>${amt(peso(o.held))}</span><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.cards}</svg>${amt(peso(o.owe))}</span></div></div>`;
   const setAside = (() => { const w = M.setAsideForSpending(M.sinkingFunds(S(), ledger.settings, { month: M.monthOf(today()), asOf: today() })); return w > 0 ? `<p class="note" id="cards-setaside">${shown ? peso(w) : veil(peso(w))} of this is set aside for planned spending, not savings.</p>` : ""; })();
   const listView = `<h2>Credit cards</h2>${cards}
     <h2>Debit, savings and cash</h2>${money}`;
-  const cardView = `<div class="swipe" tabindex="0" aria-label="Your accounts and cards, swipe sideways">${seq.map(swipe).join("")}</div>
-    <div class="dots" aria-hidden="true">${seq.length > 6 ? `<span class="dotcount" data-of="${seq.length}">1 of ${seq.length}</span>` : seq.map((_, i) => `<span${i === 0 ? ' class="on"' : ""}></span>`).join("")}</div>`;   // many cards: a count, not a long row of dots
+  const cardView = `<div class="gridcards">${seq.slice(0, 4).map(gridCard).join("")}</div>`;
   return `<h1>Cards</h1>${periodStepper(p)}
     ${netCard}${setAside}
-    <div class="h2row"><h2>Accounts</h2><button class="iconbtn" data-action="cards-list" aria-label="${ui.cardsList ? "Show as cards" : "Show as a list"}">${ui.cardsList ? GRIDICO : LISTICO}</button></div>
+    <h2>Accounts</h2>
     ${ui.cardsList ? listView : cardView}
-    ${why(`Paying a card bill is not spending: the purchases were counted when you made them. The amounts spent and paid are for ${esc(periodLabel(p))}.`)}
-    ${navCard([navRow({ action: "open-move", text: "Move money between accounts" }), navRow({ action: "open-networth", text: "Net worth over time" }), navRow({ action: "tab", attrs: 'data-tab="setup" data-page="accounts"', text: "Add or change accounts" })])}`;
+    <p class="seeallrow"><button class="seeall" data-action="cards-list">${ui.cardsList ? "Show fewer accounts" : "See all accounts"} ${CHEV}</button></p>
+    <div class="actrow2"><button class="act sm" data-action="open-move">Move money</button><button class="act sm" data-action="open-networth">Net worth</button><button class="act sm" data-action="tab" data-tab="setup" data-page="accounts">Edit accounts</button></div>`;
 }
 
 // Who the money went to in the period (Trends): one row per person, the biggest first, one bar each. A person with several accounts (a GCash number and a bank
