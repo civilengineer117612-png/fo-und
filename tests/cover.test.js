@@ -48,7 +48,7 @@ test("the bar: ink on the track colour, never red, with words only for a screen 
   assert.match(app, /const paidChips = \(selected, pockets = false, extra = \[\]\) => \{[^\n]*accountPicker\(cur \? \[\.\.\.list, cur\] : list, selected\) \+ reserveStrip\(\); \};/);
   assert.ok((app.match(/paidChips\(/g) ?? []).length >= 8, "every Paid from, Arrived in and Take it from row carries the strip");
   assert.match(app, /return a && !a\.archived \? `<div class="coverrow">\$\{iconOf\(a, 20\)\}\$\{coverBar\(c\.share, a\.name \+ ": " \+ coverLabel\(c\)\)\}<\/div>` : "";/, "a picture and a bar for each reserve account, not for an archived one");
-  assert.match(app, /<div class="coverwrap">\$\{coverBar\(cv\.share, coverLabel\(cv\)\)\}<\/div>/, "Setup's account row");
+  assert.match(app, /<span class="coverwrap">\$\{coverBar\(cv\.share, coverLabel\(cv\)\)\}<\/span>/, "Setup's account row");
 });
 
 test("a savings pocket is switched on in the add form and in Setup, kept out of Paid from, folded on Cards, and found by its digits on a statement", () => {
