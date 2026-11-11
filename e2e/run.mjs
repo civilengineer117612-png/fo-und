@@ -87,7 +87,7 @@ async function open({ storageMode = null, logOpen = true, setupFlat = true, ua =
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("pageerror", (e) => recentConsole.push("pageerror: " + e.message)); page.on("console", (m) => { if (m.type() === "error") recentConsole.push(m.text()); });
   page.on("console", (m) => { if (/Content Security Policy|Refused to (load|execute|connect|create)/i.test(m.text())) errors.push("CSP: " + m.text().slice(0, 200)); });   // the content security policy must never refuse something the app needs
-  page.on("console", (m) => { if (m.type() === "error" && !/favicon|gstatic|duckduckgo|icon\.horse|apple-touch-icon|wikipedia|wikimedia/.test(m.location().url ?? "")) errors.push(m.text()); });   // blocked icon requests are staged on purpose
+  page.on("console", (m) => { if (m.type() === "error" && !/favicon|gstatic|duckduckgo|icon\.horse|apple-touch-icon|wikipedia|wikimedia/.test(m.location().url ?? "")) errors.push(m.text() + " [reported at " + (m.location().url || "no address") + "]"); });   // blocked icon requests are staged on purpose
   if (!keepIntro) await page.addLocatorHandler(page.locator('#sheet button[data-action="intro-done"]'), async (b) => { await b.click(); });   // a new install has no switched-off popups: any other test just says Got it when one gets in the way
   await page.clock.setFixedTime(T0);
   await page.goto(url);
@@ -1977,13 +1977,20 @@ check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors
 await ctx.close();
 } catch (e) { await blockFailed(e); }
 
+// A WebKit run cannot keep the photo (the test build has no picture store), so this block, which queues a photo and reads it later, is skipped there with the owner's words.
+// Its cause was read from the "diag" trail (owner, Nov 8): on WebKit the screen went Keeping the photo, Preparing the photo, Getting the stronger reader ready, then back to the plain Log with no photo waiting.
+// The held-open request this block also uses is NOT proved on WebKit either way. Chromium runs it in full.
 // ===== 5k. Read now while the app is already reading by itself =====
-try { blockName = "5k. Read now while the app is already reading by itself";
+try { blockName = "5k. Read now while the app is already reading by itself"; if (!TOOLS.pictureStore) skippedPictures(blockName); else {
 console.log("Read now");
 { const HUNG = /\/src\/vendor\/paddle\/ort\.wasm\.min\.mjs/;   // a reader that never answers
   ({ ctx, page, errors } = await open({ blockSw: true }));   // without the service worker the page's own requests can be held back
   await addAccount(page, "Test Cash", "asset", "500");
   await page.addInitScript(() => { window.__stallMs = 6000; });
+  // WHAT THE SCREEN SAID, IN ORDER (owner, Nov 8: 5k stays a known failure until actual vs expected shows the cause): every change of the screen's text is kept in the page's session storage (it survives the reloads)
+  // and printed at the end as "diag", with the failing step, so a WebKit log says what happened instead of only that a wait ran out. Nothing is changed or loosened.
+  await page.addInitScript(() => { const go = () => { const el = document.querySelector("#screen"); if (!el) return setTimeout(go, 50); const rec = () => { const t = el.innerText.replace(/\s+/g, " ").slice(0, 140), a = JSON.parse(sessionStorage.getItem("__trail") ?? "[]"); if (a.at(-1) !== t) { a.push(t); sessionStorage.setItem("__trail", JSON.stringify(a)); } }; new MutationObserver(rec).observe(el, { childList: true, subtree: true, characterData: true }); rec(); }; go(); });
+  try {
   await page.route(HUNG, () => {});   // the request stays open for ever
   await page.reload(); await page.waitForSelector("#nav button");
   await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles('input[data-scan="quick"]:not([capture])', { name: "bank.png", mimeType: "image/png", buffer: Buffer.from(bankPng, "base64") });
@@ -1995,8 +2002,12 @@ console.log("Read now");
   await page.click('button[data-action="read-queue"]');
   check(await seen(page, "#screen", "Reading the photos", 4000), "tapping Read now while the app is already reading says it is still reading (it used to do nothing)");
   check(await seen(page, "#screen", "could not run", 30000), "and when that run gives up the reason is shown, with Read now to try again");
+  } finally {
+    const trail = await page.evaluate(() => JSON.parse(sessionStorage.getItem("__trail") ?? "[]")).catch(() => ["(the page could not be read)"]);
+    console.log("  diag 5k the screen said, in order (" + ENGINE + "): " + JSON.stringify(trail));
+  }
   await ctx.close(); }
-} catch (e) { await blockFailed(e); }
+} } catch (e) { await blockFailed(e); }
 
 // ===== 5l. several employers, old payslips, what changed =====
 try { blockName = "5l. several employers, old payslips, what changed";
@@ -2611,7 +2622,7 @@ console.log("Correct a verified entry");
   await page.click('#sheet button[data-action="close-sheet"]');   // the Close button: the window with its search box can now cover the dark around it
   await menuGo(page, "Weekly review"); await page.click('.choice:has-text("Wallet")'); await page.fill("#f-amount", "1"); await page.click("#f-save"); await seen(page, "#toast", "Wallet:");
   check((await text(page, "#screen")).includes("A gap can come from a wrong entry"), "a count that shows a gap points to the entries that can be put right");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -2634,7 +2645,7 @@ console.log("Space, pictures and the photo reader");
   await menuGo(page, "Weekly review");
   check((await text(page, "#screen")).includes("One reminder") && (await text(page, "#screen")).includes("2 pictures are kept on this phone. Back up includes them."), "a due backup reminder at the Weekly review names the pictures");
   check((await text(page, "#screen")).includes("Your pictures have not been backed up yet."), "and says the pictures have never been backed up");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -2674,7 +2685,7 @@ console.log("Shrink old pictures");
   check(l.settings.photos_shrunk_through === TS && l.state.attachments.length === 2 && l.state.transactions.length === 2, "the marker is saved and no entry or picture record changed");
   await menuGo(page, "Setup");
   check(await seen(page, "#screen", "shrunk to save space, one time each: 1 of 1 done"), "Setup says how far the shrinking got");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } } catch (e) { await blockFailed(e); }
 
@@ -2702,7 +2713,7 @@ console.log("Shrink now");
     const out = []; for (const id of ids) { const b = await new Promise((res) => { const q = db.transaction("photos").objectStore("photos").get(id); q.onsuccess = () => res(q.result); }); const m = await createImageBitmap(b); out.push(m.width); m.close(); } db.close(); return out; }, rows.map((r) => r.at.id));
   check(dims.every((w) => w === 1600), "every one is 1600 wide (" + dims.join(",") + ")");
   check((await text(page, "#screen")).includes("5 of 5 done") && await page.locator('button[data-action="shrink-now"]').count() === 0, "and the line says 5 of 5, with no button left");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } } catch (e) { await blockFailed(e); }
 
@@ -2812,7 +2823,7 @@ console.log("Pictures file");
     await page.click("#f-save"); await page.click("#f-save");
     check(await picSize() === madeBoth, "and the picture comes back");
   }
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } } catch (e) { await blockFailed(e); }
 
@@ -2841,7 +2852,7 @@ console.log("Suggested scheduled payments");
   check(!(await text(page, "#screen")).includes("Maybe add") && !(await text(page, "#screen")).includes("MAYBE ADD"), "no suggestion is left");
   await page.reload(); await page.waitForSelector("#nav button"); await menuGo(page, "Scheduled");
   check(!(await text(page, "#screen")).toLowerCase().includes("maybe add"), "and they stay gone after a restart");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -2859,7 +2870,7 @@ console.log("Same amount in Verify");
   check(both.includes("Same amount as another entry") && both.includes("a draft, the same day") && (both.includes("Test Cash") || both.includes("Test Debit")), "two drafts of the same amount on the same day: Verify notes it and names the other, with its account");
   await page.click('button[data-action="verify-ok"]');
   check(await seen(page, "#screen", "already verified"), "after one is verified, the other says it is already verified, so you can delete the double");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -2914,7 +2925,7 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   check(await seen(page, "#toast", "The month is now ₱6,000.00"), "typing 3,000.00 on each payday makes the month 6,000.00, said plainly");
   ledgerNow = JSON.parse((await stored(page)).local);
   check(ledgerNow.state.rules.length === rulesBefore + 1 && ledgerNow.state.rules.at(-1).amount === 600000 && ledgerNow.state.rules.at(-1).effective_from === "2026-10-01" && ledgerNow.state.rules.slice(0, rulesBefore).every((r, i) => r.amount === [500000, 600000, 150000, 200000][i]), "one new dated rule from this month; the old rules are untouched");
-  check(errors.length === 0, "no script errors"); await ctx.close(); }
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : "")); await ctx.close(); }
 { // a payday that is over offers to move an amount to the next payday: only when tapped
   ({ ctx, page, errors } = await open({ blockSw: true, seed: budgetSeed([rule("r1", "cat-food", 1200000), rule("r2", "cat-rent", 600000), rule("r3", "cat-shopping", 1500000)], { payday_pins: { "cat-rent": 0 } }, { transactions: [{ id: "pay1", date: "2026-10-15", payee: "Pay received", memo: "", status: "verified", source: "manual", created_at: "2026-10-15T09:00:00.000+08:00", verified_at: "2026-10-15T09:00:00.000+08:00" }], entries: [{ transaction_id: "pay1", account_id: "w", amount: 1200000 }, { transaction_id: "pay1", category_id: "cat-salary", amount: -1200000 }] }) }));
   await menuGo(page, "Budget"); await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
@@ -2929,7 +2940,7 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   await seen(page, "#toast", "to the next payday");
   ledgerNow = JSON.parse((await stored(page)).local); var sp = ledgerNow.settings.budget_split["cat-shopping"];
   check(sp && sp.amounts[0] + sp.amounts[1] === 1500000 && sp.for === 1500000 && JSON.stringify(ledgerNow.settings.budget_split ?? {}) !== before, "the amount moved, and Shopping still adds up to its month: " + JSON.stringify(sp));
-  check(errors.length === 0, "no script errors"); await ctx.close(); }
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : "")); await ctx.close(); }
 { // the pay schedule: four kinds; every two weeks shows a third payday as extra, with no share of any line
   ({ ctx, page, errors } = await open({ blockSw: true, seed: budgetSeed([rule("r1", "cat-food", 600000), rule("r2", "cat-rent", 900000)]) }));
   await menuGo(page, "Budget"); await page.click('#screen button[data-action="bv-paydays"]'); await page.waitForSelector("#sheet #bv-d1");
@@ -2951,7 +2962,7 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   await seen(page, "#toast", "Paydays saved.");
   await page.waitForFunction(() => document.querySelectorAll('#screen button[data-action="bv-payday"]').length === 5, null, { timeout: 5000 }).catch(() => {});   // the screen redraws a moment after the toast: wait for the state, then check it
   check(await page.locator('#screen button[data-action="bv-payday"]').count() === 5, "every Friday: five paydays in October 2026");
-  check(errors.length === 0, "no script errors"); await ctx.close(); }
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : "")); await ctx.close(); }
 { // an old Pay plan moves into Budget: look it over, one choice, a copy first
   const planObj = parsePlan(JSON.stringify({ schema_version: 1, unit: "PHP_whole_pesos", effective_from: "2026-10-01", paydays: [{ id: "first", day: 15, expected_income: 5100 }, { id: "second", day: "last", expected_income: 7100 }],
     lines: [{ name: "Food", first: 3000, second: 3000 }, { name: "Shopping", first: 1000, second: 1000 }, { name: "Rent", first: 0, second: 2000 }, { name: "Apartment", kind: "goal", first: 1000, second: 1000 }, { name: "Buffer", kind: "buffer", first: 100, second: 100 }] })).plan;
@@ -2976,7 +2987,7 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   check(!(await text(page, "#screen")).includes("Your Pay plan moves into Budget"), "and the card is gone");
   await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
   check((await food()).includes("₱3,000.00"), "Per payday shows the plan's own amounts: Food 3,000.00 on each payday");
-  check(errors.length === 0, "no script errors"); await ctx.close(); }
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : "")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
 // Buckets has its own popup the first times it opens: close it so the next tap reaches the strip.
@@ -3008,7 +3019,7 @@ console.log("Budget popup");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.click('#top button[data-action="intro"][data-id="budget"]'); await page.waitForSelector(".in-draw");
   check((await page.locator("#sheet .in-bar").first().evaluate((e) => getComputedStyle(e).animationName)) === "none", "with Reduce Motion the drawing stands still, finished");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -3049,7 +3060,7 @@ console.log("Popups on every screen");
   check(await page.locator(".in-draw").count() === 0 && (await settingsOf()).intro_off?.goals === true, "with the check ticked a popup does not come back");
   await page.click("#menuBtn"); await page.click('#menu .item:has-text("Cash flow")'); await page.waitForTimeout(400);
   check(await page.locator(".in-draw").count() === 1 && (await settingsOf()).intro_seen?.money === 1 && !(await settingsOf()).intro_off?.money, "the other screens' popups are untouched (Cash flow shows again, not switched off)");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -3084,7 +3095,7 @@ console.log("Dropdown rows");
   const acctRows = (await page.locator("#sheet .pick >> nth=1").locator(".pickh, .pickitem").allInnerTexts()).map((t) => t.trim().split("\n").pop());   // an account item starts with its picture's letter
   check(acctRows.join("|") === "Last used|Alpha Bank|Accounts|Zeta Wallet|Cards|Beta Card", "accounts: the one used last, then the rest A to Z, then the cards (" + acctRows.join("|") + ")");
   check(await page.locator("#sheet .picklist:not([hidden])").count() === 1, "opening one list closes the other");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -3115,7 +3126,7 @@ console.log("Dropdown rows, the rest");
   check(inc.length >= 2 && JSON.stringify(inc) === JSON.stringify([...inc].sort((a, b) => a.localeCompare(b))), "the income kinds are A to Z (" + inc.join(", ") + ")");
   await page.click('#sheet .pick >> nth=0 >> .pickitem:has-text("Salary")');
   check(!(await page.locator("#f-save").isDisabled()), "choosing one turns Save on");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -3141,7 +3152,7 @@ console.log("Dropdown search");
   check((await visible()).length === all.length, "clearing the box brings every account back");
   await page.fill("#sheet .pick >> nth=1 >> .picksearch", "wallet"); await page.click('#sheet .pick >> nth=1 >> .pickitem:not([hidden]):has-text("Zeta")');
   check((await text(page, "#sheet .pickrow >> nth=1")).includes("Zeta Wallet") && await page.locator("#sheet .picklist:not([hidden])").count() === 0, "choosing from the filtered list works and folds it shut");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -3167,7 +3178,7 @@ console.log("Name and icon");
   check((await text(page, "#screen")).includes("Test Wallet"), "a version 4 saved copy is still found under the unchanged storage names: its account is on Cards");
   const kept = JSON.parse((await stored(page)).local);
   check(kept.v === LEDGER_V && kept.state.entries.length === 2 && kept.state.accounts[0].name === "Test Wallet", "and it was upgraded in place with its entries kept");
-  check(errors.length === 0, "no script errors");
+  check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 

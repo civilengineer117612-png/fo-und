@@ -59,7 +59,7 @@ jobs:
           {
             echo "### e2e-webkit: ${passed} checks passed, ${failed} failed, ${skipped} skipped, ${crashed} script(s) stopped early"
             echo '```'
-            grep -E '^(probe: |##### |  FAIL |  skip )' e2e-webkit.log
+            grep -E '^(probe: |##### |  FAIL |  skip |  diag )' e2e-webkit.log
             echo '```'
             echo "First lines of each script's error (a script stops at its first step that throws):"
             echo '```'
