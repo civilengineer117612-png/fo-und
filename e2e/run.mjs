@@ -3942,10 +3942,10 @@ console.log("\n-- Goals in the flat look --");
     t = await text(page, "#screen");
     check(/saved toward goals/i.test(t) && t.includes("15,000.00") && t.includes("across 2 goals"), "Goals opens with the total saved");
     check(await page.locator("#screen .catbar").count() === 2 && !(await page.locator("#screen svg.ring").count()), "each goal has a thin bar, no ring");
-    { const aria = (await page.locator("#screen .catbar").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).join(" | "); check(aria.includes("28%") && aria.includes("37%") && /12,000\.00\s*\/\s*.*42,000\.00/.test(t), "each goal says its percent (to a screen reader, on its bar) and reads saved / target: " + aria); }
+    { const aria = (await page.locator("#screen .catbar").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).join(" | "); check(aria.includes("40%") && aria.includes("37%") && /12,000\.00\s*\/\s*.*30,000\.00/.test(t), "each goal says its percent (to a screen reader, on its bar) and reads saved / target; the Emergency Fund uses the 30,000.00 typed on it (your figure), 12,000.00 saved is 40%: " + aria); }
     await page.click("#screen .pair >> nth=0"); await page.waitForTimeout(300);
     t = await text(page, "#screen");
-    check(t.includes("30,000.00 to go") && t.includes("5,000.00 to go") && !/\d \/ \u20B1/.test(t), "one tap on a figure turns every goal into what is to go");
+    check(t.includes("18,000.00 to go") && t.includes("5,000.00 to go") && !/\d \/ \u20B1/.test(t), "one tap on a figure turns every goal into what is to go (30,000.00 typed target less 12,000.00 saved is 18,000.00)");
     await page.click("#screen .pair >> nth=0"); await page.waitForTimeout(300);
     t = await text(page, "#screen");
     check(!t.includes("Monthly contribution") && await page.locator("#screen details.goaldet").count() === 0, "the list keeps one plain row per goal; the emergency fund's table is not folded into it");
