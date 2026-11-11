@@ -1199,15 +1199,16 @@ check(ledgerNow.settings.plans.length === 1 && ledgerNow.settings.plans[0].lines
 await menuGo(page, "Goals");
 if (await page.locator('button[data-action="toggle-reveal"][aria-pressed="false"]').count()) await page.click('button[data-action="toggle-reveal"][aria-pressed="false"]');
 await openGoal(page, "Apartment");
-check(/At your plan's pace\s*about \d+ months?/.test(await text(page, "#sheet")), "a goal's window shows how long the plan takes");
+{ const gt = await text(page, "#sheet");   // P0-6 PR 4: a saved Pay plan no longer feeds any goal figure; the window shows the goal's own account and no plan pace
+  check(/Account\s*\S/.test(gt) && !/plan's pace/.test(gt), "a goal's window shows its account and no pace taken from a saved plan"); }
 await page.click('#sheet button[data-action="close-sheet"]');
 await page.click('button:has-text("Add a goal")'); await page.fill("#g-name", "Emergency Fund"); await page.click('#sheet button[data-action="pick-goal-role"]'); await page.fill("#f-amount", "999"); await page.click("#sheet .chip >> nth=0"); await page.click("#f-save");
 await seen(page, "#screen", "Emergency Fund");
 if (await page.locator('button[data-action="toggle-reveal"][aria-pressed="false"]').count()) await page.click('button[data-action="toggle-reveal"][aria-pressed="false"]');
 await openGoal(page, "Emergency Fund");
 var efText = await text(page, "#sheet");
-check(/Target\s*₱24,000\.00/.test(efText) && efText.includes("3 months of Rent, Food from your plan"), "the Emergency Fund target is worked out from the plan (3 x Rent + Food), not the 999 typed when the goal was made");
-check(/Months to target\s*Not known yet/.test(efText) && /Monthly contribution\s*none in your plan/.test(efText), "with no contribution line in the plan, months to target says it is not known");
+check(/Target\s*₱999\.00\s*·\s*your figure/.test(efText), "the Emergency Fund target is the 999 typed when the goal was made, called your figure (a saved plan is not read)");
+check(/Months to target\s*Not known yet/.test(efText) && /Monthly contribution\s*not set/.test(efText), "with no monthly amount typed for the goal, months to target says it is not known");
 check(!efText.includes("Your plan suggests") && !efText.includes("Use it"), "there is no 'use it' button that would freeze the target as a typed number");
 await shot(page, "41-emergency-target");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
@@ -2253,7 +2254,7 @@ var FIX = { v: 3, rev: 1, saved_at: "2026-10-01T08:00:00.000+08:00", settings: {
   await flipRole(1); await seen(page, "#toast", "is your emergency fund");
   check(await roles() === 1, "the role moves: one goal at most is the emergency fund");
   await flipRole(2);
-  check(await roles() === 1 && (await text(page, "#screen")).includes("from your budgets"), "choosing the goal makes it the emergency fund: its status card appears");
+  check(await roles() === 1 && (await text(page, "#screen")).includes("3 × (Fixed + Needs) of your budgets"), "choosing the goal makes it the emergency fund: its row says the target is 3 × (Fixed + Needs) of the budgets until a figure is typed");
   await flipRole(2);
   check(await roles() === 0, "the same switch takes the role away again");
   // overtime with no emergency fund chosen: the message says to choose, never a name
