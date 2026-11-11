@@ -1879,7 +1879,7 @@ function viewCards() {
   const seq = [], used = new Set();
   for (const c of o.cards) { for (const m of sorted) if (acct(m.account_id)?.reserve_for === c.account_id) { seq.push({ m }); used.add(m.account_id); } seq.push({ c }); }
   for (const m of sorted) if (!used.has(m.account_id)) seq.push({ m });
-  // The account grid (owner's reference, Nov 11): two columns of small white cards, each with the picture and name, the balance in bold and the kind under it. Four first; "See all accounts" opens the whole list.
+  // The account grid (owner's reference, Nov 11): two columns of small white cards, each with the picture and name, the balance in bold and the kind under it. Six first (three rows); "See all accounts" opens the whole list.
   const kindOf = (it, a) => (it.c ? "Credit card, you owe" : M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet");
   const gridCard = (it) => {
     const id = (it.c ?? it.m).account_id, a = acct(id), cv = covers.find((x) => x.reserve_id === id);
@@ -1891,13 +1891,12 @@ function viewCards() {
   const setAside = (() => { const w = M.setAsideForSpending(M.sinkingFunds(S(), ledger.settings, { month: M.monthOf(today()), asOf: today() })); return w > 0 ? `<p class="note" id="cards-setaside">${shown ? peso(w) : veil(peso(w))} of this is set aside for planned spending, not savings.</p>` : ""; })();
   const listView = `<h2>Credit cards</h2>${cards}
     <h2>Debit, savings and cash</h2>${money}`;
-  const cardView = `<div class="gridcards">${seq.slice(0, 4).map(gridCard).join("")}</div>`;
+  const cardView = `<div class="gridcards">${seq.slice(0, 6).map(gridCard).join("")}</div>`;
   return `<h1>Cards</h1>${periodStepper(p)}
     ${netCard}${setAside}
     <h2>Accounts</h2>
     ${ui.cardsList ? listView : cardView}
-    <p class="seeallrow"><button class="seeall" data-action="cards-list">${ui.cardsList ? "Show fewer accounts" : "See all accounts"} ${CHEV}</button></p>
-    <div class="actrow2"><button class="act sm" data-action="open-move">Move money</button><button class="act sm" data-action="open-networth">Net worth</button><button class="act sm" data-action="tab" data-tab="setup" data-page="accounts">Edit accounts</button></div>`;
+    <p class="seeallrow">${ui.cardsList || seq.length > 6 ? `<button class="seeall" data-action="cards-list">${ui.cardsList ? "Show fewer accounts" : "See all accounts"} ${CHEV}</button>` : ""}<button class="seeall" data-action="cards-more">More</button></p>`;
 }
 
 // Who the money went to in the period (Trends): one row per person, the biggest first, one bar each. A person with several accounts (a GCash number and a bank
@@ -2968,6 +2967,11 @@ function renderSheet() {
       <p class="note small">A figure you type is used everywhere, and is called your figure.</p>
       <p><button class="primary" id="f-save" data-action="save-goal-target" style="margin-top:14px" disabled>Save</button></p>
       ${ef?.yours ? `<p><button data-action="clear-goal-target" style="width:100%">Use the formula</button></p>` : ""}`;
+  } else if (sh.type === "cards-more") {
+    body = `<h3>Accounts</h3>
+      <p><button data-action="open-move" style="width:100%">Move money between accounts</button></p>
+      <p><button data-action="open-networth" style="width:100%">Net worth over time</button></p>
+      <p><button data-action="tab" data-tab="setup" data-page="accounts" style="width:100%">Add or change accounts</button></p>`;
   } else if (sh.type === "acct-more") {
     // ONE "More" per account (docs/UI.md): its actions are outlined buttons in one window, never scattered under the row.
     const a = S().accounts.find((x) => x.id === sh.id), usedIds = new Set(S().entries.map((e) => e.account_id)), zero = a && M.naturalBalance(a, M.countedEntries(S())) === 0;
@@ -4615,6 +4619,7 @@ async function onClick(el) {
       break;
     }
     case "open-icon": ui.sheet = { type: "icon", id, goal: el.dataset.goal === "1" }; ui.form = {}; renderSheet(); break;
+    case "cards-more": ui.sheet = { type: "cards-more" }; ui.form = {}; renderSheet(); break;
     case "acct-more": ui.confirmRemove = null; ui.sheet = { type: "acct-more", id }; ui.form = {}; renderSheet(); break;
     case "edit-last4": ui.sheet = { type: "last4", id }; ui.form = { last4: S().accounts.find((a) => a.id === id)?.last4 ?? "", pocket: M.isPocket(S().accounts.find((a) => a.id === id)) }; renderSheet(); break;
     case "save-last4": {
