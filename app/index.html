@@ -723,6 +723,45 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .card .eyebrow { font-size: 12px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; font-weight: 600; }
   .flatbig .flatof { font-size: 18px; font-weight: 400; } .bval .pair + small { display: block; margin-top: 6px; }
   .hub + .note, .hub ~ .note:first-of-type { margin-top: 16px; }
+  /* ACTIONS ARE BUTTONS (owner, Nov 11, docs/UI.md): every action that used to be an underlined word is an outlined button. Underlined links stay only inside Help. */
+  button.act { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: auto; min-height: 48px; margin: 0; padding: 10px 14px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; font-size: 15px; font-weight: 400; font-style: normal; text-decoration: none; }
+  button.act:active { background: var(--track); transform: none; }
+  .entrylink > button.act { width: 100%; }
+  button.act.sm { min-height: 44px; padding: 8px 12px; font-size: 14px; }
+  .actrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; } .actrow > button.act { flex: 1 1 auto; }
+  /* ROWS THAT GO SOMEWHERE, and the controls that sit on the line they control (docs/UI.md) */
+  .navcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 16px; margin: 12px 0; }
+  button.navrow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 10px 0; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; font-size: 16px; color: var(--ink); }
+  button.navrow:last-child { border-bottom: 0; } button.navrow:active { background: none; transform: none; opacity: .6; }
+  .navrow .nr-t { flex: 1; min-width: 0; } .navrow .nr-t small { display: block; color: var(--muted); font-size: 13px; } .navrow .nr-r { color: var(--muted); font-size: 14px; white-space: nowrap; } .nr-chev { color: var(--muted); flex: none; }
+  button.datebtn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 10px; margin-left: -10px; background: none; border: 0; border-radius: 10px; color: var(--muted); font-size: 14px; } button.datebtn:active { background: var(--track); transform: none; }
+  button.addtile { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; background: none; border: 1px dashed var(--dashed); border-radius: 14px; color: var(--muted); font-size: 15px; }
+  .h2row { align-items: center; } .h2row h2 { margin: 0; } button.addtile { margin-top: 16px; }
+  .gridcards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0; }
+  .gcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; min-width: 0; cursor: pointer; }
+  .gcard .gtop { display: flex; align-items: center; gap: 8px; min-width: 0; } .gcard .gname { font-size: 15px; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .gcard .gamt { margin-top: 14px; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; } .gcard .gtype { color: var(--muted); font-size: 13px; margin-top: 2px; } .gcard .cover { margin-top: 8px; }
+  .seeallrow { text-align: center; margin: 8px 0; } button.seeall { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 12px; background: none; border: 0; color: var(--ink); font-size: 15px; font-weight: 600; } button.seeall:active { background: none; transform: none; opacity: .6; }
+  .actrow2 { display: flex; gap: 8px; margin: 8px 0 16px; } .actrow2 > button.act { flex: 1 1 0; padding: 8px 6px; font-size: 14px; }
+  .gcard .ico { border: 0; padding: 0; border-radius: 10px; }
+  .logbtns { display: flex; gap: 10px; margin: 14px 0 0; } .logbtns > button { margin: 0; min-height: 52px; font-size: 16px; } .logbtns > button.primary { flex: 3 1 0; width: auto; } .logbtns > button.act { flex: 2 1 0; }
+  #nav.has-scan { grid-template-columns: 1fr 84px 1fr; }
+  #nav button.navscan { min-height: 52px; padding: 0; margin-top: -24px; overflow: visible; color: var(--accent); }
+  #nav button.navscan .navring { display: flex; align-items: center; justify-content: center; width: 62px; height: 62px; border-radius: 50%; color: var(--accent); border: 2px solid var(--accent);
+    background: linear-gradient(180deg, var(--surface), var(--track)); box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 28%, transparent), 0 1px 2px color-mix(in srgb, var(--ink) 18%, transparent); }
+  #nav button.navscan:active .navring { background: var(--track); box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 24%, transparent); }
+  .navcard.compact { padding: 0 14px; margin: 8px 0; } .navcard.compact button.navrow { min-height: 44px; padding: 6px 0; font-size: 14px; }
+  body { padding-bottom: calc(108px + env(safe-area-inset-bottom)); }
+  /* ONE floating reminder (verify or backup): a pill that rides above the content, not a row of buttons */
+  .floatnote { position: sticky; top: 8px; z-index: 3; display: flex; align-items: center; margin: 8px 0 14px; min-height: 44px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line);
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 14%, transparent); }
+  .floatnote button { background: none; border: 0; border-radius: 0; min-height: 44px; color: var(--ink); font-size: 14px; }
+  .floatnote button:active { background: none; transform: none; opacity: .6; }
+  .floatnote .fn-go { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 4px 0 16px; text-align: left; }
+  .floatnote .fn-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .floatnote .fn-x { flex: none; width: 44px; padding: 0; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+  button.qmark { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; min-height: 44px; padding: 0; margin: -6px 0 -6px auto; color: var(--muted); }
+  .modebar button { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; min-height: 44px; padding: 0; text-decoration: none; color: var(--ink); }
 </style>
 </head>
 <body>

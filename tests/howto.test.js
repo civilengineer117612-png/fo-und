@@ -49,7 +49,7 @@ test("every clip has one caption; the hint names the buttons that hold a how-to,
   for (const h of HOWTOS) assert.ok(h.caption && h.label && h.caption.length < 80, h.id);
   assert.match(HOWTO_HINT, /^Hold a button or a menu row for a moment to watch how it works\. Help lists every clip\.$/);
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8"), css = readFileSync(new URL("../app/index.html", import.meta.url), "utf8");
-  assert.match(app, /data-tab="\$\{id\}" data-howto="\$\{id\}"/); assert.match(app, /class="camicon" data-action="open-scan-pick" data-howto="scan"/);
+  assert.match(app, /data-tab="\$\{id\}" data-howto="\$\{id\}"/); assert.match(app, /class="navscan" data-action="open-scan-pick" data-howto="scan"/);
   assert.match(app, /class="tile addtile" data-action="add-tile" data-howto="log"/);
   assert.match(app, /<button class="item" data-action="tab" data-tab="\$\{id\}" data-howto="\$\{id\}"/, "menu items carry their how-to");
 

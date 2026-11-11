@@ -52,6 +52,6 @@ test("the screen copies only the masked report, made when the PDF is read, and o
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8"), pdf = readFileSync(new URL("../app/pdftext.js", import.meta.url), "utf8");
   assert.match(app, /layoutText: layout \? M\.layoutReport\(layout\) : ""/, "masked when the form opens: the raw pieces are not kept in the form");
   assert.match(app, /case "copy-layout": \{[^]*?writeText\(ui\.form\.layoutText \?\? ""\)/, "what is copied is the masked text");
-  assert.match(app, /\$\{f\.layoutText \? `<p class="note small"><button class="link" data-action="copy-layout">Copy layout report/, "the link shows only when there is a report");
+  assert.match(app, /\$\{f\.layoutText \? `<p class="note small"><button class="act" data-action="copy-layout">Copy layout report/, "the link shows only when there is a report");
   assert.match(pdf, /layout\.push\(items\)/); assert.match(pdf, /blob: await canvasBlob\(preview\), layout \}/);
 });

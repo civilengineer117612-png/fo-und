@@ -175,7 +175,7 @@ test("statement follow-ups: unsure lines wait for your choice, a failed check ho
   assert.match(app, /auto = newPocket \? NEW_POCKET : linked\.length === 1 \? linked\[0\]\.id : null/, "chosen for you only when exactly one account fits");
   assert.match(app, /account_id: auto \?\? \(statement \? null : cashFirst\(activeAccounts\(\)\)\[0\]\?\.id \?\? null\)/, "a statement is never filed under Cash by default: the owner chooses");
   assert.match(app, /chosen for you/);
-  assert.match(app, /seq\.length > 6 \? `<span class="dotcount" data-of="\$\{seq\.length\}">1 of \$\{seq\.length\}<\/span>`/);
+  assert.match(app, /seq\.slice\(0, 6\)\.map\(gridCard\)/, "the grid shows six accounts"); assert.match(app, /ui\.cardsList \|\| seq\.length > 6 \? `<button class="seeall" data-action="cards-list">/, "more than six: See all accounts opens the full list");
 });
 
 test("a listed bank's name near the top of the first page is shown and used to choose the account; an unknown name is not", () => {

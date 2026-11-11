@@ -242,7 +242,7 @@ test("the screens: Move money on Log, last 4 beside an account on Cards, a rate 
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
   assert.ok(app.includes('data-action="open-move" style="width:100%">Move money between accounts</button>') && app.includes('case "save-move"') && app.includes('source: "manual"'), "a transfer can be typed");
   const log = app.slice(app.indexOf("function viewLog()"), app.indexOf("function viewVerify()")), cards = app.slice(app.indexOf("function viewCards()"), app.indexOf("function viewMoney()"));
-  assert.ok(!log.includes("open-move") && cards.includes("open-move"), "it lives on Cards, with the accounts, not on the Log home where few would know what it is");
+  assert.ok(log.includes('data-action="open-move"') && log.includes("Move money</button>") && app.includes('sh.type === "cards-more"'), "it is one tap from the Log home, beside Add expense, and also in the More window on Cards (owner, Nov 11: logging a transfer was harder than logging an expense)");
   assert.ok(/class="l4" aria-label="ends in/.test(app), "Cards shows the last 4 beside the name");
   assert.ok(app.includes("function rateHint") && app.includes("M.lastRate(S(), fx.currency)") && app.includes("${rateHint(f.foreign)}"), "a hint, shown under the foreign note");
   assert.ok(app.includes('(t.source === "photo" || t.source === "manual")'), "Verify edits both ends of a typed transfer too");
