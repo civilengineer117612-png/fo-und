@@ -287,7 +287,7 @@ const pairFig = (done, total, { fmt = peso, tail = "", left = "left", over = nul
 // A ROW THAT GOES SOMEWHERE (docs/UI.md): the words, an optional quiet line, a chevron; rows sit together in one white card. Never an underlined word.
 const CHEV = '<svg class="nr-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
 const navRow = ({ action, attrs = "", text, sub = "", right = "" }) => `<button class="navrow" data-action="${action}" ${attrs}><span class="nr-t">${text}${sub ? `<small>${sub}</small>` : ""}</span>${right ? `<span class="nr-r">${right}</span>` : ""}${CHEV}</button>`;
-const navCard = (rows) => (rows.filter(Boolean).length ? `<div class="navcard">${rows.filter(Boolean).join("")}</div>` : "");
+const navCard = (rows, cls = "") => (rows.filter(Boolean).length ? `<div class="navcard ${cls}">${rows.filter(Boolean).join("")}</div>` : "");
 const CAL = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
 const LISTICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
 const GRIDICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
@@ -331,11 +331,9 @@ function titleOf(title) {
 function renderTop(title) {
   const hub = M.hubOf(ui.tab) && device.allowEntry && M.HUBS[M.hubOf(ui.tab)].filter((id) => !M.menuHidden(ledger.settings).has(id)).length > 1;
   const lines = `<svg width="22" height="16" viewBox="0 0 22 16" aria-hidden="true"><rect y="1" width="22" height="2" rx="1" fill="currentColor"/><rect y="7" width="22" height="2" rx="1" fill="currentColor"/><rect y="13" width="13" height="2" rx="1" fill="currentColor"/></svg>`;   // three lines, the last one shorter, no box
-  // One scanner button: it opens the two choices, camera or photos/files.
-  const camera = device.allowEntry && ui.tab === "log" ? `<button class="camicon" data-action="open-scan-pick" data-howto="scan" aria-label="Scan a receipt or payment screen: take a photo or choose from photos or files"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.scan}</svg></button>` : "";
   const mic = device.allowEntry && ui.tab === "log" ? `<button class="camicon micbtn" data-action="open-voice" aria-label="Say an entry out loud"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.mic}</svg></button>` : "";
   const qm = device.allowEntry && M.introFor(ui.tab) ? `<button class="qmark" type="button" data-action="intro" data-id="${esc(ui.tab)}" aria-label="What is this screen?">?</button>` : "";   // brings back the short explanation
-  $("top").innerHTML = (device.allowEntry ? `<button class="menubtn" id="menuBtn" data-action="open-menu" aria-label="Menu" aria-expanded="${ui.menu}">${lines}</button>` : "") + (hub ? `<h1 class="sr">${esc(title)}</h1>` : titleOf(title)) + qm + mic + camera;
+  $("top").innerHTML = (device.allowEntry ? `<button class="menubtn" id="menuBtn" data-action="open-menu" aria-label="Menu" aria-expanded="${ui.menu}">${lines}</button>` : "") + (hub ? `<h1 class="sr">${esc(title)}</h1>` : titleOf(title)) + qm + mic;
 }
 
 let menuTimer = null;
@@ -379,7 +377,10 @@ function renderNav() {
   const n = device.allowEntry ? dueDrafts().length : 0;
   const pic = { log: '<path d="M7 17 17 7M8 7h9v9"/>', verify: '<path d="M20 6 9 17l-5-5"/>' };   // money going out, and a tick
   const tab = (id, label) => `<button data-action="tab" data-tab="${id}" data-howto="${id}"${ui.tab === id ? ' aria-current="page"' : ""}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${pic[id]}</svg>${label}</button>`;   // hold for its how-to
-  $("nav").innerHTML = tab("log", M.SCREEN_NAMES.log) + tab("verify", n ? `${M.SCREEN_NAMES.verify} (${n})` : M.SCREEN_NAMES.verify);   // photo and audio will join these two
+  // The scanner sits at the bottom centre, raised, as in most bank apps; it is an outlined ring (the filled button on Log stays the only filled one).
+  const scan = device.allowEntry ? `<button class="navscan" data-action="open-scan-pick" data-howto="scan" aria-label="Scan a receipt or payment screen: take a photo or choose from photos or files"><span class="ring"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.scan}</svg></span>Scan</button>` : "";
+  $("nav").classList.toggle("has-scan", !!scan);
+  $("nav").innerHTML = tab("log", M.SCREEN_NAMES.log) + scan + tab("verify", n ? `${M.SCREEN_NAMES.verify} (${n})` : M.SCREEN_NAMES.verify);   // photo and audio will join these two
 }
 
 // The picture strip at the top of a hub's screens: one tap moves between screens that belong together (see HUBS in names.js).
@@ -491,15 +492,15 @@ function viewLog() {
   const shown = ui.dayPick && ui.dayPick !== today() ? ui.dayPick : today();   // the list follows the day chosen with "Select date"
   const todays = S().transactions.filter((t) => t.date === shown && !isGenerated(t)).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const age = M.daysSinceBackup(ledger.settings, today());
-  const backupLink = age === null || age >= BACKUP_NOTE_DAYS ? navRow({ action: "tab", attrs: 'data-tab="setup" data-page="backup"', text: age === null ? "No backup yet" : "Last backup " + age + " days ago", right: "Back up" }) : "";   // said only when a backup is due
-  const dueNote = due ? navRow({ action: "tab", attrs: 'data-tab="verify"', text: `${due} earlier ${due === 1 ? "entry" : "entries"} to verify`, right: "Verify" }) : "";
+  const backupLink = age === null || age >= BACKUP_NOTE_DAYS ? navRow({ action: "tab", attrs: 'data-tab="setup" data-page="backup"', text: age === null ? "No backup yet" : "Last backup " + age + " days ago" }) : "";   // said only when a backup is due
+  const dueNote = due ? navRow({ action: "tab", attrs: 'data-tab="verify"', text: `${due} earlier ${due === 1 ? "entry" : "entries"} to verify` }) : "";
   const trip = S().tags.find((t) => t.id === ledger.settings.active_tag_id);
   const tripNote = trip ? `<p class="note">Tagging new entries: ${esc(trip.name)}. <button class="act" data-action="stop-trip">Stop</button></p>` : "";
   const waitingPhotos = scanQueue().filter((q) => !q.needs).length, needLook = scanQueue().filter((q) => q.needs).length;
   const photoNote = (ui.scan?.busy ? `<p class="note" id="scan-msg" role="status">${esc(ui.scan.msg)}</p>` : ui.scan?.error ? `<p class="note" role="alert">${esc(ui.scan.error)}</p>` : "")
     + (needLook ? `<p class="note"><button class="act" data-action="open-queue">${needLook} photo${needLook === 1 ? " needs" : "s need"} a look</button></p>` : "")
     + (waitingPhotos && !ui.scan?.busy ? `<p class="note">${waitingPhotos} photo${waitingPhotos === 1 ? " is" : "s are"} kept, waiting to be read. <button class="act" data-action="read-queue">Read now</button></p>` : "");
-  return `<h1>Log</h1><div class="logmeta">${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal" aria-label="${esc(longDate(today()))}. Tap to choose another day">${CAL}<span>${esc(longDate(today()))}</span></button>`}</div>${navCard([dueNote, backupLink])}${photoNote}${tripNote}
+  return `<h1>Log</h1><div class="logmeta">${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal" aria-label="${esc(longDate(today()))}. Tap to choose another day">${CAL}<span>${esc(longDate(today()))}</span></button>`}</div>${navCard([dueNote, backupLink], "compact")}${photoNote}${tripNote}
     ${dayCard()}
     ${tilesHtml()}
     <div class="logbtns"><button class="primary" data-action="open-other">Add expense</button><button class="act" data-action="open-move"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-4-4M20 16H6l4 4"/></svg>Move money</button></div>
