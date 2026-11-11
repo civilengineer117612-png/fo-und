@@ -741,7 +741,7 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .h2row { align-items: center; } .h2row h2 { margin: 0; } button.addtile { margin-top: 16px; }
   .gridcards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0; }
   .gcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; min-width: 0; cursor: pointer; }
-  .gcard .gtop { display: flex; align-items: center; gap: 8px; min-width: 0; } .gcard .gname { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gcard .gtop { display: flex; align-items: center; gap: 8px; min-width: 0; } .gcard .gname { font-size: 15px; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .gcard .gamt { margin-top: 14px; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; } .gcard .gtype { color: var(--muted); font-size: 13px; margin-top: 2px; } .gcard .cover { margin-top: 8px; }
   .seeallrow { text-align: center; margin: 8px 0; } button.seeall { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 12px; background: none; border: 0; color: var(--ink); font-size: 15px; font-weight: 600; } button.seeall:active { background: none; transform: none; opacity: .6; }
   .actrow2 { display: flex; gap: 8px; margin: 8px 0 16px; } .actrow2 > button.act { flex: 1 1 0; padding: 8px 6px; font-size: 14px; }
