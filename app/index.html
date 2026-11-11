@@ -729,6 +729,16 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .entrylink > button.act { width: 100%; }
   button.act.sm { min-height: 44px; padding: 8px 12px; font-size: 14px; }
   .actrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; } .actrow > button.act { flex: 1 1 auto; }
+  /* ROWS THAT GO SOMEWHERE, and the controls that sit on the line they control (docs/UI.md) */
+  .navcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 16px; margin: 12px 0; }
+  button.navrow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 10px 0; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; font-size: 16px; color: var(--ink); }
+  button.navrow:last-child { border-bottom: 0; } button.navrow:active { background: none; transform: none; opacity: .6; }
+  .navrow .nr-t { flex: 1; min-width: 0; } .navrow .nr-t small { display: block; color: var(--muted); font-size: 13px; } .navrow .nr-r { color: var(--muted); font-size: 14px; white-space: nowrap; } .nr-chev { color: var(--muted); flex: none; }
+  button.datebtn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 10px; margin-left: -10px; background: none; border: 0; border-radius: 10px; color: var(--muted); font-size: 14px; } button.datebtn:active { background: var(--track); transform: none; }
+  button.addtile { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; background: none; border: 1px dashed var(--dashed); border-radius: 14px; color: var(--muted); font-size: 15px; }
+  .acctrow { padding: 0; } button.acctopen { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 68px; padding: 10px 0; background: none; border: 0; border-radius: 0; text-align: left; color: var(--ink); } button.acctopen:active { background: none; transform: none; opacity: .6; }
+  .acctopen .who { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; } .acctopen .who small { display: block; color: var(--muted); font-size: 13px; } .acctopen .amt { white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
+  .h2row { align-items: center; } .h2row h2 { margin: 0; } button.addtile { margin-top: 16px; }
 </style>
 </head>
 <body>

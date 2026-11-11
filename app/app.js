@@ -284,6 +284,13 @@ const pairFig = (done, total, { fmt = peso, tail = "", left = "left", over = nul
   return `<span class="pair${big ? " big" : ""}" role="button" tabindex="0" data-action="toggle-pair" aria-label="${esc(say)}">${body}</span>`;
 };
 // A long explanation stays out of sight until asked for. The words are the same; they are just folded under "Why?".
+// A ROW THAT GOES SOMEWHERE (docs/UI.md): the words, an optional quiet line, a chevron; rows sit together in one white card. Never an underlined word.
+const CHEV = '<svg class="nr-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
+const navRow = ({ action, attrs = "", text, sub = "", right = "" }) => `<button class="navrow" data-action="${action}" ${attrs}><span class="nr-t">${text}${sub ? `<small>${sub}</small>` : ""}</span>${right ? `<span class="nr-r">${right}</span>` : ""}${CHEV}</button>`;
+const navCard = (rows) => (rows.filter(Boolean).length ? `<div class="navcard">${rows.filter(Boolean).join("")}</div>` : "");
+const CAL = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+const LISTICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
+const GRIDICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
 const why = (html, label = "Why?") => `<details class="why"><summary>${label}</summary><p class="note">${html}</p></details>`;
 // Setup normally shows a short list of pages. The tests ask for the old one long page with a flag in sessionStorage.
 const setupFlat = () => { try { return sessionStorage.getItem("setupFlat") === "1"; } catch { return false; } };
@@ -443,7 +450,7 @@ function dayCard() {
     ${picked ? `<p class="center daycap"><button class="daycapbtn datelink" data-action="open-cal" aria-label="${esc(longDate(picked))}, tap to choose another day">${esc(longDate(picked))}</button></p>
     <p class="note center small">New entries go on this day.</p>
     <p class="center"><button class="act" data-action="reset-day">Today</button></p>`
-    : `<p class="changedate"><button class="act sm datelink" data-action="open-cal">Select date</button></p>`}`;
+    : ""}`;
 }
 
 // Spent today and This month count VERIFIED entries only (owner, Oct 31); what still waits in Verify is shown apart, in the same words on both.
@@ -484,15 +491,15 @@ function viewLog() {
   const shown = ui.dayPick && ui.dayPick !== today() ? ui.dayPick : today();   // the list follows the day chosen with "Select date"
   const todays = S().transactions.filter((t) => t.date === shown && !isGenerated(t)).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const age = M.daysSinceBackup(ledger.settings, today());
-  const backupLink = age === null || age >= BACKUP_NOTE_DAYS ? `<button class="act sm" data-action="tab" data-tab="setup" data-page="backup">${age === null ? "No backup yet" : "Last backup " + age + " days ago"}</button>` : "";   // said only when a backup is due
-  const dueNote = due ? `<p class="note"><button class="act" data-action="tab" data-tab="verify">${due} earlier ${due === 1 ? "entry is" : "entries are"} waiting for you to verify</button></p>` : "";
+  const backupLink = age === null || age >= BACKUP_NOTE_DAYS ? navRow({ action: "tab", attrs: 'data-tab="setup" data-page="backup"', text: age === null ? "No backup yet" : "Last backup " + age + " days ago", right: "Back up" }) : "";   // said only when a backup is due
+  const dueNote = due ? navRow({ action: "tab", attrs: 'data-tab="verify"', text: `${due} earlier ${due === 1 ? "entry" : "entries"} to verify`, right: "Verify" }) : "";
   const trip = S().tags.find((t) => t.id === ledger.settings.active_tag_id);
   const tripNote = trip ? `<p class="note">Tagging new entries: ${esc(trip.name)}. <button class="act" data-action="stop-trip">Stop</button></p>` : "";
   const waitingPhotos = scanQueue().filter((q) => !q.needs).length, needLook = scanQueue().filter((q) => q.needs).length;
   const photoNote = (ui.scan?.busy ? `<p class="note" id="scan-msg" role="status">${esc(ui.scan.msg)}</p>` : ui.scan?.error ? `<p class="note" role="alert">${esc(ui.scan.error)}</p>` : "")
     + (needLook ? `<p class="note"><button class="act" data-action="open-queue">${needLook} photo${needLook === 1 ? " needs" : "s need"} a look</button></p>` : "")
     + (waitingPhotos && !ui.scan?.busy ? `<p class="note">${waitingPhotos} photo${waitingPhotos === 1 ? " is" : "s are"} kept, waiting to be read. <button class="act" data-action="read-queue">Read now</button></p>` : "");
-  return `<h1>Log</h1><div class="logmeta"><span class="sub">${ui.dayPick && ui.dayPick !== today() ? "" : esc(longDate(today()))}</span>${backupLink}</div>${photoNote}${dueNote}${tripNote}
+  return `<h1>Log</h1><div class="logmeta">${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal" aria-label="${esc(longDate(today()))}. Tap to choose another day">${CAL}<span>${esc(longDate(today()))}</span></button>`}</div>${navCard([dueNote, backupLink])}${photoNote}${tripNote}
     ${dayCard()}
     ${tilesHtml()}
     <p><button class="primary compact" data-action="open-other">Add expense</button></p>
@@ -505,7 +512,7 @@ function viewLog() {
 const TRASH = '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/>';
 function tilesHtml() {
   const tile = (p, arranging) => `<${arranging ? "div" : "button"} class="tile" data-action="${arranging ? "edit-tile" : "open-preset"}" data-id="${esc(p.id)}"${arranging ? ' role="button" tabindex="0"' : ""}><b>${esc(p.name)}</b><span>${peso(p.amount)}</span><i class="tcat">${esc(categoryName(p.category_id))}</i>${arranging ? `<button class="tminus" data-action="remove-tile-now" data-id="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">-</button>` : ""}</${arranging ? "div" : "button"}>`;
-  if (!ui.arrange && !S().presets.length) return `<p class="center"><button class="act sm" data-action="arrange-start">Add a quick tile</button></p>`;
+  if (!ui.arrange && !S().presets.length) return `<p><button class="addtile" data-action="arrange-start">+ Add a quick tile</button></p>`;
   if (!ui.arrange) {
     const hint = ledger.settings.tile_hint_done ? "" : `<p class="note small center">Hold a tile to move, change or remove it.</p>`;
     return `<div class="tiles">${S().presets.map((p) => tile(p, false)).join("")}</div>${hint}`;
@@ -1652,8 +1659,8 @@ function viewSetup() {
   const reserveExists = S().accounts.some((a) => a.reserve_for);
   const hosts = activeAccounts().filter((a) => a.class === "asset" && !a.reserve_for);
   const arrA = ui.sortArr === "acct";
-  const rows = orderedAccts(S().accounts.filter((a) => !a.archived)).map((a) => `<div class="row sortrow" data-sort="acct" data-id="${esc(a.id)}"><div class="who"><button class="icobtn" data-action="open-icon" data-id="${esc(a.id)}" aria-label="Choose a picture for ${esc(a.name)}">${iconOf(a, 44)}</button><div>${esc(a.name)}<small>${a.class === "asset" ? (M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet") : "Credit card"}${a.reserve_for ? " · covers " + esc(accountName(a.reserve_for)) : ""}${a.bank && !a.name.toLowerCase().startsWith(M.bankById(a.bank).name.toLowerCase()) ? " · linked to " + esc(M.bankById(a.bank).name) : ""}</small>${a.last4 ? `<small>\u00b7\u00b7${esc(a.last4)}</small>` : ""}</div></div>
-      <div class="amt">${peso(M.naturalBalance(a, M.countedEntries(S())))}${(() => { const cv = reserveCovers().find((x) => x.reserve_id === a.id); return cv ? `<div class="coverwrap">${coverBar(cv.share, coverLabel(cv))}</div>` : ""; })()}<br><button class="act sm" data-action="acct-more" data-id="${esc(a.id)}" aria-label="More for ${esc(a.name)}">More</button></div></div>`).join("");
+  const rows = orderedAccts(S().accounts.filter((a) => !a.archived)).map((a) => `<div class="row sortrow acctrow" data-sort="acct" data-id="${esc(a.id)}"><button class="acctopen" data-action="acct-more" data-id="${esc(a.id)}" aria-label="${esc(a.name)}, ${esc(pesoW(M.naturalBalance(a, M.countedEntries(S()))))}. Tap to change it"><span class="who">${iconOf(a, 44)}<span>${esc(a.name)}<small>${a.class === "asset" ? (M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet") : "Credit card"}${a.reserve_for ? " \u00b7 covers " + esc(accountName(a.reserve_for)) : ""}${a.bank && !a.name.toLowerCase().startsWith(M.bankById(a.bank).name.toLowerCase()) ? " \u00b7 linked to " + esc(M.bankById(a.bank).name) : ""}${a.last4 ? " \u00b7 \u00b7\u00b7" + esc(a.last4) : ""}</small></span></span>
+      <span class="amt">${peso(M.naturalBalance(a, M.countedEntries(S())))}${(() => { const cv = reserveCovers().find((x) => x.reserve_id === a.id); return cv ? `<span class="coverwrap">${coverBar(cv.share, coverLabel(cv))}</span>` : ""; })()}</span>${CHEV}</button></div>`).join("");
   const hiddenAccts = S().accounts.filter((a) => a.archived);
   const hiddenHtml = hiddenAccts.length ? `<h2>Hidden accounts</h2><p class="note">Their entries and history stay. They are left out of pickers and totals.</p>${hiddenAccts.map((a) => `<div class="row"><div class="who">${iconOf(a, 28)}<div>${esc(a.name)}</div></div><div class="amt"><button class="act" data-action="show-account" data-id="${esc(a.id)}">Show again</button></div></div>`).join("")}` : "";
   const keepNote = S().accounts.some((a) => !a.archived && used.has(a.id)) ? `<p class="note">An account with entries cannot be removed. When its balance is zero you can hide it.</p>` : "";
@@ -1887,10 +1894,10 @@ function viewCards() {
     <div class="dots" aria-hidden="true">${seq.length > 6 ? `<span class="dotcount" data-of="${seq.length}">1 of ${seq.length}</span>` : seq.map((_, i) => `<span${i === 0 ? ' class="on"' : ""}></span>`).join("")}</div>`;   // many cards: a count, not a long row of dots
   return `<h1>Cards</h1>${periodStepper(p)}
     ${netCard}${setAside}
-    <div class="actrow"><button class="act" data-action="open-networth">Net worth over time</button><button class="act" data-action="cards-list">${ui.cardsList ? "Show as cards" : "Show as a list"}</button></div>
+    <div class="h2row"><h2>Accounts</h2><button class="iconbtn" data-action="cards-list" aria-label="${ui.cardsList ? "Show as cards" : "Show as a list"}">${ui.cardsList ? GRIDICO : LISTICO}</button></div>
     ${ui.cardsList ? listView : cardView}
     ${why(`Paying a card bill is not spending: the purchases were counted when you made them. The amounts spent and paid are for ${esc(periodLabel(p))}.`)}
-    <div class="actrow"><button class="act" data-action="open-move">Move money</button><button class="act" data-action="tab" data-tab="setup" data-page="accounts">Add or change accounts</button></div>`;
+    ${navCard([navRow({ action: "open-move", text: "Move money between accounts" }), navRow({ action: "open-networth", text: "Net worth over time" }), navRow({ action: "tab", attrs: 'data-tab="setup" data-page="accounts"', text: "Add or change accounts" })])}`;
 }
 
 // Who the money went to in the period (Trends): one row per person, the biggest first, one bar each. A person with several accounts (a GCash number and a bank
