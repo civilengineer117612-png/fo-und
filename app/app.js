@@ -378,7 +378,7 @@ function renderNav() {
   const pic = { log: '<path d="M7 17 17 7M8 7h9v9"/>', verify: '<path d="M20 6 9 17l-5-5"/>' };   // money going out, and a tick
   const tab = (id, label) => `<button data-action="tab" data-tab="${id}" data-howto="${id}"${ui.tab === id ? ' aria-current="page"' : ""}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${pic[id]}</svg>${label}</button>`;   // hold for its how-to
   // The scanner sits at the bottom centre, raised, as in most bank apps; it is an outlined ring (the filled button on Log stays the only filled one).
-  const scan = device.allowEntry ? `<button class="navscan" data-action="open-scan-pick" data-howto="scan" aria-label="Scan a receipt or payment screen: take a photo or choose from photos or files"><span class="ring"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.scan}</svg></span>Scan</button>` : "";
+  const scan = device.allowEntry ? `<button class="navscan" data-action="open-scan-pick" data-howto="scan" aria-label="Scan a receipt or payment screen: take a photo or choose from photos or files"><span class="ring"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.scan}</svg></span></button>` : "";
   $("nav").classList.toggle("has-scan", !!scan);
   $("nav").innerHTML = tab("log", M.SCREEN_NAMES.log) + scan + tab("verify", n ? `${M.SCREEN_NAMES.verify} (${n})` : M.SCREEN_NAMES.verify);   // photo and audio will join these two
 }
@@ -492,15 +492,17 @@ function viewLog() {
   const shown = ui.dayPick && ui.dayPick !== today() ? ui.dayPick : today();   // the list follows the day chosen with "Select date"
   const todays = S().transactions.filter((t) => t.date === shown && !isGenerated(t)).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const age = M.daysSinceBackup(ledger.settings, today());
-  const backupLink = age === null || age >= BACKUP_NOTE_DAYS ? navRow({ action: "tab", attrs: 'data-tab="setup" data-page="backup"', text: age === null ? "No backup yet" : "Last backup " + age + " days ago" }) : "";   // said only when a backup is due
-  const dueNote = due ? navRow({ action: "tab", attrs: 'data-tab="verify"', text: `${due} earlier ${due === 1 ? "entry" : "entries"} to verify` }) : "";
+  // Two quiet reminders, shown as ONE floating notification at a time (owner, Nov 11): it is not a button row, it can be sent away (this session only), and the other one follows.
+  const notes = [due ? { id: "verify", text: `${due} earlier ${due === 1 ? "entry" : "entries"} to verify`, go: 'data-action="tab" data-tab="verify"' } : null,
+    age === null || age >= BACKUP_NOTE_DAYS ? { id: "backup", text: age === null ? "No backup yet" : "Last backup " + age + " days ago", go: 'data-action="tab" data-tab="setup" data-page="backup"' } : null].filter((n) => n && !ui.noteOff?.[n.id]);
+  const floatNote = notes.length ? `<div class="floatnote" role="status"><button class="fn-go" ${notes[0].go}><span class="fn-dot" aria-hidden="true"></span>${esc(notes[0].text)}</button><button class="fn-x" data-action="dismiss-note" data-id="${notes[0].id}" aria-label="Dismiss this reminder"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>` : "";
   const trip = S().tags.find((t) => t.id === ledger.settings.active_tag_id);
   const tripNote = trip ? `<p class="note">Tagging new entries: ${esc(trip.name)}. <button class="act" data-action="stop-trip">Stop</button></p>` : "";
   const waitingPhotos = scanQueue().filter((q) => !q.needs).length, needLook = scanQueue().filter((q) => q.needs).length;
   const photoNote = (ui.scan?.busy ? `<p class="note" id="scan-msg" role="status">${esc(ui.scan.msg)}</p>` : ui.scan?.error ? `<p class="note" role="alert">${esc(ui.scan.error)}</p>` : "")
     + (needLook ? `<p class="note"><button class="act" data-action="open-queue">${needLook} photo${needLook === 1 ? " needs" : "s need"} a look</button></p>` : "")
     + (waitingPhotos && !ui.scan?.busy ? `<p class="note">${waitingPhotos} photo${waitingPhotos === 1 ? " is" : "s are"} kept, waiting to be read. <button class="act" data-action="read-queue">Read now</button></p>` : "");
-  return `<h1>Log</h1><div class="logmeta">${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal" aria-label="${esc(longDate(today()))}. Tap to choose another day">${CAL}<span>${esc(longDate(today()))}</span></button>`}</div>${navCard([dueNote, backupLink], "compact")}${photoNote}${tripNote}
+  return `<h1>Log</h1><div class="logmeta">${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal" aria-label="${esc(longDate(today()))}. Tap to choose another day">${CAL}<span>${esc(longDate(today()))}</span></button>`}</div>${floatNote}${photoNote}${tripNote}
     ${dayCard()}
     ${tilesHtml()}
     <div class="logbtns"><button class="primary" data-action="open-other">Add expense</button><button class="act" data-action="open-move"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-4-4M20 16H6l4 4"/></svg>Move money</button></div>
@@ -4650,6 +4652,7 @@ async function onClick(el) {
     case "add-tile": ui.confirmRemoveTile = false; ui.sheet = { type: "tile", id: null }; ui.form = { name: "", amount: "", category_id: expenseCategories()[0]?.id }; renderSheet(); break;
     case "arrange-done": ui.arrange = false; renderScreen(); break;
     case "sort-done": ui.sortArr = null; renderScreen(); break;
+    case "dismiss-note": (ui.noteOff ??= {})[el.dataset.id] = true; renderScreen(); break;
     case "arrange-start": enterArrange(); break;
     case "remove-tile-now": {   // like taking an app off a phone's home screen: it shrinks away, the others slide over
       const r = M.removePreset(S(), id);

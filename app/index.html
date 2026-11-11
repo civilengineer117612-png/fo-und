@@ -748,10 +748,20 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .gcard .ico { border: 0; padding: 0; border-radius: 10px; }
   .logbtns { display: flex; gap: 10px; margin: 14px 0 0; } .logbtns > button { margin: 0; min-height: 52px; font-size: 16px; } .logbtns > button.primary { flex: 3 1 0; width: auto; } .logbtns > button.act { flex: 2 1 0; }
   #nav.has-scan { grid-template-columns: 1fr 84px 1fr; }
-  #nav button.navscan { min-height: 52px; padding: 0 0 6px; margin-top: -22px; overflow: visible; color: var(--accent); font-weight: 600; }
-  #nav button.navscan .ring { display: flex; align-items: center; justify-content: center; width: 60px; height: 60px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); color: var(--accent); }
-  #nav button.navscan:active .ring { background: var(--track); }
+  #nav button.navscan { min-height: 52px; padding: 0; margin-top: -24px; overflow: visible; color: var(--accent); }
+  #nav button.navscan .ring { display: flex; align-items: center; justify-content: center; width: 62px; height: 62px; border-radius: 50%; color: var(--accent); border: 2px solid var(--accent);
+    background: linear-gradient(180deg, var(--surface), var(--track)); box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 28%, transparent), 0 1px 2px color-mix(in srgb, var(--ink) 18%, transparent); }
+  #nav button.navscan:active .ring { background: var(--track); box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 24%, transparent); }
   .navcard.compact { padding: 0 14px; margin: 8px 0; } .navcard.compact button.navrow { min-height: 44px; padding: 6px 0; font-size: 14px; }
+  body { padding-bottom: calc(108px + env(safe-area-inset-bottom)); }
+  /* ONE floating reminder (verify or backup): a pill that rides above the content, not a row of buttons */
+  .floatnote { position: sticky; top: 8px; z-index: 3; display: flex; align-items: center; margin: 8px 0 14px; min-height: 44px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line);
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 14%, transparent); }
+  .floatnote button { background: none; border: 0; border-radius: 0; min-height: 44px; color: var(--ink); font-size: 14px; }
+  .floatnote button:active { background: none; transform: none; opacity: .6; }
+  .floatnote .fn-go { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 4px 0 16px; text-align: left; }
+  .floatnote .fn-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .floatnote .fn-x { flex: none; width: 44px; padding: 0; color: var(--muted); display: flex; align-items: center; justify-content: center; }
 </style>
 </head>
 <body>
