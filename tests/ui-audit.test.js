@@ -21,3 +21,16 @@ test("a row with several actions has ONE More button, not scattered ones (Setup 
   const row = app.slice(app.indexOf("const rows = orderedAccts("), app.indexOf("const rows = orderedAccts(") + 2600);
   for (const a of ["edit-last4", "remove-account", "hide-account"]) assert.ok(!row.includes(`data-action="${a}"`), a + " is inside the More window, not on the row");
 });
+
+test("the rendered audit (e2e/ui-audit.mjs) checks both rules on every screen, in light and dark, and runs in both browser jobs", () => {
+  const audit = readFileSync(new URL("../e2e/ui-audit.mjs", import.meta.url), "utf8");
+  assert.match(audit, /button\.link, a\[href\]/, "rule A looks for link-styled actions");
+  assert.match(audit, /textDecorationLine\.includes\("underline"\)/, "rule A also finds an underlined tappable thing of any class");
+  assert.match(audit, /querySelectorAll\("button\.primary"\)/);
+  assert.match(audit, /filled\.length <= 1/, "rule B: at most one filled main button");
+  assert.match(audit, /for \(const scheme of \["light", "dark"\]\)/);
+  assert.ok((audit.match(/^  \[?"/gm) ?? []).length > 20 || (audit.match(/\["[A-Z][^"]*", \[/g) ?? []).length >= 25, "the screen list covers the whole app");
+  for (const f of [".github/workflows/test.yml", ".github/workflows/webkit.yml"]) assert.match(readFileSync(new URL("../" + f, import.meta.url), "utf8"), /ui-audit/, f + " runs it");
+  assert.match(css, /\.modebar button \{ display: inline-flex;[^}]*text-decoration: none/, "the list and chart switch is an icon with no underline");
+  assert.ok(app.includes("ui.asList ? CHARTICO : LISTICO"), "and it draws a picture, not the word List");
+});

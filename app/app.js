@@ -290,6 +290,7 @@ const navRow = ({ action, attrs = "", text, sub = "", right = "" }) => `<button 
 const navCard = (rows, cls = "") => (rows.filter(Boolean).length ? `<div class="navcard ${cls}">${rows.filter(Boolean).join("")}</div>` : "");
 const CAL = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
 const LISTICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>';
+const CHARTICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>';
 const GRIDICO = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
 const why = (html, label = "Why?") => `<details class="why"><summary>${label}</summary><p class="note">${html}</p></details>`;
 // Setup normally shows a short list of pages. The tests ask for the old one long page with a flag in sessionStorage.
@@ -378,7 +379,7 @@ function renderNav() {
   const pic = { log: '<path d="M7 17 17 7M8 7h9v9"/>', verify: '<path d="M20 6 9 17l-5-5"/>' };   // money going out, and a tick
   const tab = (id, label) => `<button data-action="tab" data-tab="${id}" data-howto="${id}"${ui.tab === id ? ' aria-current="page"' : ""}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${pic[id]}</svg>${label}</button>`;   // hold for its how-to
   // The scanner sits at the bottom centre, raised, as in most bank apps; it is an outlined ring (the filled button on Log stays the only filled one).
-  const scan = device.allowEntry ? `<button class="navscan" data-action="open-scan-pick" data-howto="scan" aria-label="Scan a receipt or payment screen: take a photo or choose from photos or files"><span class="ring"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.scan}</svg></span></button>` : "";
+  const scan = device.allowEntry ? `<button class="navscan" data-action="open-scan-pick" data-howto="scan" aria-label="Scan a receipt or payment screen: take a photo or choose from photos or files"><span class="navring"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.scan}</svg></span></button>` : "";
   $("nav").classList.toggle("has-scan", !!scan);
   $("nav").innerHTML = tab("log", M.SCREEN_NAMES.log) + scan + tab("verify", n ? `${M.SCREEN_NAMES.verify} (${n})` : M.SCREEN_NAMES.verify);   // photo and audio will join these two
 }
@@ -439,13 +440,13 @@ function renderScreen() {
   hydratePhotos();
 }
 
-// The big number on the Log screen is the total for the day being looked at: today, or the day picked with "Select date".
+// The big number on the Log screen is the total for the day being looked at: today, or the day picked with the date button.
 // "Today" returns to today. The date box is the phone's own picker, hidden under the link so nothing crowds the screen.
 function dayCard() {
   const picked = ui.dayPick && ui.dayPick !== today() ? ui.dayPick : null;
   const d = M.dayTotal(S(), picked ?? today());
   const words = (picked ? longDate(picked) : "Today") + " " + peso(d.verified) + (d.drafts ? ". " + peso(d.draft) + " more is waiting in Verify" : "");
-  // One quiet link at a time: "Select date" on today; on another day the date itself (tap it to pick another) and a single "Today".
+  // One control: the date button (a calendar icon and the date) opens the calendar; on another day the date itself (tap it to pick another) and a single "Today".
   return `<p class="spentlabel" aria-hidden="true">${picked ? "Spent that day" : "Spent today"}</p><div class="daytotal" role="status" aria-label="${esc(words)}">${peso(d.verified)}</div>
     ${waitingLine(d.draft, d.drafts)}
     ${picked ? `<p class="center daycap"><button class="daycapbtn datelink" data-action="open-cal" aria-label="${esc(longDate(picked))}, tap to choose another day">${esc(longDate(picked))}</button></p>
@@ -489,7 +490,7 @@ function viewLog() {
       <p class="note">New here? <button class="act" data-action="tab" data-tab="help">Read the quick notes first</button>.</p>`;
   }
   const due = dueDrafts().length;
-  const shown = ui.dayPick && ui.dayPick !== today() ? ui.dayPick : today();   // the list follows the day chosen with "Select date"
+  const shown = ui.dayPick && ui.dayPick !== today() ? ui.dayPick : today();   // the list follows the day chosen with the date button
   const todays = S().transactions.filter((t) => t.date === shown && !isGenerated(t)).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const age = M.daysSinceBackup(ledger.settings, today());
   // Two quiet reminders, shown as ONE floating notification at a time (owner, Nov 11): it is not a button row, it can be sent away (this session only), and the other one follows.
@@ -1821,7 +1822,7 @@ const periodWords = (p) => (p.kind === "range" ? "from " + fullDate(p.from) + " 
 const MONTH3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const pendingNote = (n) => (n > 0 ? `<p class="note"><button class="act" data-action="tab" data-tab="verify">plus ${peso(n)} not verified yet</button></p>` : "");
 // One small switch at the top, the same on every view: chart or list.
-const modeBar = () => `<div class="modebar"><button data-action="chart-mode" data-mode="${ui.asList ? "chart" : "list"}" aria-label="${ui.asList ? "Show as a chart" : "Show as a list"}">${ui.asList ? "Chart" : "List"}</button></div>`;
+const modeBar = () => `<div class="modebar"><button data-action="chart-mode" data-mode="${ui.asList ? "chart" : "list"}" aria-label="${ui.asList ? "Show as a chart" : "Show as a list"}">${ui.asList ? CHARTICO : LISTICO}</button></div>`;   // a view switch is an icon on the line it controls, not an underlined word
 const moneyViews = () => `<div class="seg" role="group" aria-label="What to show">${[["category", "Category"], ["budget", "Budget"], ["account", "Accounts"], ["month", "Trends"]].map(([v, t]) => `<button data-action="chart-view" data-view="${v}" aria-pressed="${ui.view === v}">${t}</button>`).join("")}</div>`;
 
 // ONE row for every list that shows a share or a spend (owner, Oct 17): the name at the left with an optional small line under it, the figure at the right, and ONE thin

@@ -36,9 +36,9 @@ test("Cards: the net on top, swipe cards with a debit account right before the c
   assert.match(app, /const net = M\.netPosition\(o\.held, o\.owe\), covers = reserveCovers\(\);/);
   assert.match(app, /for \(const c of o\.cards\) \{ for \(const m of sorted\) if \(acct\(m\.account_id\)\?\.reserve_for === c\.account_id\) \{ seq\.push\(\{ m \}\); used\.add\(m\.account_id\); \} seq\.push\(\{ c \}\); \}/, "the account that backs a card sits right before it");
   assert.match(app, /\$\{ui\.cardsList \? listView : cardView\}/);
-  assert.match(app, /data-action="cards-list">\$\{ui\.cardsList \? "Show as cards" : "Show as a list"\}/);
+  assert.match(app, /data-action="cards-list">\$\{ui\.cardsList \? "Show fewer accounts" : "See all accounts"\}/);
   assert.match(app, /case "cards-list": ui\.cardsList = !ui\.cardsList; renderScreen\(\); break;/);
-  assert.ok(app.includes("Move money between accounts") && app.includes('data-page="accounts">Add or change accounts'), "the two actions stay at the bottom");
+  assert.ok(app.includes('data-action="cards-more">More</button>') && app.includes('data-action="open-move" style="width:100%">Move money between accounts') && app.includes('data-page="accounts" style="width:100%">Add or change accounts') && app.includes('data-action="open-networth" style="width:100%">Net worth over time'), "one More button opens the three actions");
 });
 
 test("the bar: ink on the track colour, never red, with words only for a screen reader, in Setup, under Paid from and on Cards", () => {
@@ -48,7 +48,7 @@ test("the bar: ink on the track colour, never red, with words only for a screen 
   assert.match(app, /const paidChips = \(selected, pockets = false, extra = \[\]\) => \{[^\n]*accountPicker\(cur \? \[\.\.\.list, cur\] : list, selected\) \+ reserveStrip\(\); \};/);
   assert.ok((app.match(/paidChips\(/g) ?? []).length >= 8, "every Paid from, Arrived in and Take it from row carries the strip");
   assert.match(app, /return a && !a\.archived \? `<div class="coverrow">\$\{iconOf\(a, 20\)\}\$\{coverBar\(c\.share, a\.name \+ ": " \+ coverLabel\(c\)\)\}<\/div>` : "";/, "a picture and a bar for each reserve account, not for an archived one");
-  assert.match(app, /<div class="coverwrap">\$\{coverBar\(cv\.share, coverLabel\(cv\)\)\}<\/div>/, "Setup's account row");
+  assert.match(app, /<span class="coverwrap">\$\{coverBar\(cv\.share, coverLabel\(cv\)\)\}<\/span>/, "Setup's account row");
 });
 
 test("a savings pocket is switched on in the add form and in Setup, kept out of Paid from, folded on Cards, and found by its digits on a statement", () => {

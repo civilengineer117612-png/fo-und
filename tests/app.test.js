@@ -71,9 +71,10 @@ test("Ledger Paper: every colour is a token written once; red is only for over b
   assert.equal(fetches.length, 1, "exactly one fetch() in the app: " + fetches.length);
   assert.ok(fetches[0].includes("https://en.wikipedia.org/w/api.php") && fetches[0].includes("gsrsearch="), "and it is the Wikipedia logo lookup");
 });
-test("the bottom bar holds only Log and Verify; everything else is in the menu", () => {
+test("the bottom bar holds Log, the scanner in the middle, and Verify; everything else is in the menu", () => {
   const js = read("app/app.js");
-  assert.match(js, /\$\("nav"\)\.innerHTML = tab\("log", M\.SCREEN_NAMES\.log\) \+ tab\("verify"/);
+  assert.match(js, /\$\("nav"\)\.innerHTML = tab\("log", M\.SCREEN_NAMES\.log\) \+ scan \+ tab\("verify"/);
+  assert.ok(js.includes('class="navscan" data-action="open-scan-pick"') && !js.includes('class="camicon" data-action="open-scan-pick"'), "the scanner sits at the bottom centre, not in the Log header");
   assert.ok(!/tab\("(money|setup|budget)"/.test(js), "no menu screen is on the bottom bar");
   assert.match(js, /const MENU = M\.MENU_GROUPS\.map/);
   const menu = readFileSync(new URL("../src/model/names.js", import.meta.url), "utf8").match(/MENU_GROUPS = (\[\[.*\]\]);/)[1];
@@ -143,7 +144,7 @@ test("tidy-up: the menu has no one-row groups, the notice has one answer, an emp
   assert.match(js, /"Spent that day" : "Spent today"/, "the big number says what it is");
   assert.ok(!js.includes('id="menu-backup"'), "the backup line is not repeated in the menu: Log says it when it is due, Setup has the button");
   assert.match(js, /<span>\$\{list\.length\} \$\{list\.length === 1 \? "entry" : "entries"\}<\/span>/, "the folded heading says only how many: the day's total is the big number above");
-  assert.match(js, /<span class="sub">\$\{ui\.dayPick && ui\.dayPick !== today\(\) \? "" : esc\(longDate\(today\(\)\)\)\}<\/span>/, "the date is written once: the top date hides when another day is picked");
+  assert.ok(js.includes('${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal"') && js.includes("<span>${esc(longDate(today()))}</span>"), "the date is written once: the top date hides when another day is picked");
   assert.match(js, /<span class="mn wn"><small>\$\{esc\(longDate\(c\.date\)\)\}<\/small>/, "a change's date sits on its own line");
   assert.ok(js.includes("downloads the reader (about 30 MB)") && !js.includes("about 7 MB"), "the reader's size is stated once, correctly");
 });
@@ -173,7 +174,7 @@ test("signs, folded entries, Budget bars, one date link: money out has a minus, 
   assert.match(js, /const logOpen = \(\) => \{ try \{ return sessionStorage\.getItem\("logOpen"\) === "1"; \} catch \{ return false; \} \};/, "closed by default, even if storage fails");
   assert.match(js, /case "toggle-entries":/);
   assert.match(js, /pic = \{ log: '<path d="M7 17 17 7M8 7h9v9"\/>'/, "the Log icon is an arrow going out (money out), not a plus");
-  assert.ok(js.includes('data-action="open-cal">Select date</button>') && js.includes('<div class="logmeta"><span class="sub">${ui.dayPick && ui.dayPick !== today() ? "" : esc(longDate(today()))}</span>${backupLink}</div>') && !js.includes('class="link topdate"'), "one date link (Select date); the date at the top is plain text");
+  assert.ok(js.includes('class="datebtn" data-action="open-cal"') && !js.includes('>Select date</button>') && !js.includes('class="link topdate"'), "the date at the top is the one control that opens the calendar (a calendar icon and the date); no 'Select date' link");
 });
 
 test("motion and icons: taps press, bars grow, the folded list drops in only on the tap, everything stops for Reduce Motion; Goals is a flag", () => {
@@ -230,12 +231,13 @@ test("round 3: the Setup form waits behind a button once there are accounts, goa
   assert.match(js, /const flatBar = \(pct, label, over = false, mark = null\) => `<span class="flatbar/);
   assert.ok(js.includes("Math.max(0, Math.min(100, pct))"), "a flat bar never runs past full or below empty");
   assert.match(js, /pct: ef\.percent, label: ef\.percent \+ "% of the target"/); assert.match(js, /pct: p\.percent, label: p\.percent \+ "% of the goal"/);
-  assert.ok(!js.includes('class="ring"'), "goals draw a thin flat bar, no ring");
+  assert.ok(!js.includes('class="ring"'), "goals draw a thin flat bar, no ring (the scanner's own ring is called navring)");
   assert.match(js, /if \(dx > 90 && Math\.abs\(dy\) < 40 && dx > Math\.abs\(dy\) \* 2\.5\) \{ s0\.c\.querySelector\('button\[data-action="verify-ok"\]'\)\?\.click\(\); \}/, "only a clear swipe to the right counts");
   assert.ok(!js.includes('verify-delete"]\')?.click'), "a swipe never deletes");
   assert.match(help, /Swipe an entry to the right to mark it Correct\./);
   assert.match(js, /const why = \(html, label = "Why\?"\) => `<details class="why"><summary>\$\{label\}<\/summary><p class="note">\$\{html\}<\/p><\/details>`;/);
-  assert.ok((js.match(/\$\{why\(/g) ?? []).length >= 3, "the long notes on Cards, Weekly review and Setup are folded");
+  assert.ok((js.match(/\$\{why\(/g) ?? []).length >= 2, "the long notes on Weekly review and Setup are folded");
+  assert.ok(!js.slice(js.indexOf("function viewCards()"), js.indexOf("function viewMoney()")).includes("why("), "Cards carries no Why? fold (owner, Nov 11: not needed there)");
   assert.match(css, /\.seg\[aria-label="What to show"\] button\[aria-pressed="true"\]::after/, "Cash flow's views are tabs with a line under the current one");
   assert.ok(!/\.ring \{/.test(css), "the ring is gone with the old Goals look");
 });
@@ -270,7 +272,7 @@ test("pictures and signs instead of little sentences under figures: Cards", () =
 
 test("the Log says earlier entries are waiting for you to verify, and the scan chip is simply Payment", () => {
   const js = read("app/app.js"), scan = read("src/model/scan.js");
-  assert.ok(js.includes('earlier ${due === 1 ? "entry is" : "entries are"} waiting for you to verify'), "the Log line is plain about what is waiting");
+  assert.ok(js.includes('earlier ${due === 1 ? "entry" : "entries"} to verify'), "the Log reminder is plain about what is waiting");
   assert.ok(!js.includes("from before today ${due"), "the old awkward wording is gone");
   assert.match(scan, /id: "gcash", label: "Payment"/, "the e-wallet kind is shown as Payment (its id and reading rules stay)");
 });
