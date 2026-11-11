@@ -14,6 +14,8 @@ const require = createRequire(import.meta.url);
 
 const BASE = process.env.BASE ?? "http://localhost:8124/app/index.html";
 const SHOTS = process.env.SHOTS ?? "";
+// Setup's account rows open ONE window (P1-9): its actions (last four digits, picture, Remove, Hide) are buttons inside it. acctAct opens a row by its name (or id) and taps one.
+async function acctAct(page, who, action, { id = false } = {}) { await page.click(id ? `button[data-action="acct-more"][data-id="${who}"]` : `button[data-action="acct-more"][aria-label^="${who}"] >> nth=0`); await page.click(`#sheet button[data-action="${action}"]`); }
 // Cards keeps Move money, Net worth over time and Add or change accounts behind its "More" button (P1-9). Open that window first when the button is not on screen (Log also shows Move money).
 async function clickAct(page, action) { const sel = `button[data-action="${action}"]`; if (!(await page.locator(sel).count())) await page.click('button[data-action="cards-more"]'); await page.click(sel); }
 const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
@@ -364,9 +366,9 @@ await addAccount(page, "Test Cash", "asset", "500");
 await seen(page, "#screen", "Test Cash");
 await addAccount(page, "Spare", "asset", "10");
 await seen(page, "#screen", "Spare");
-await page.click('.row:has-text("Spare") button:has-text("Remove")');
-check(await seen(page, "#screen", "Tap again to remove"), "removing an account asks for a second tap");
-await page.click('.row:has-text("Spare") button:has-text("Tap again to remove")');
+await acctAct(page, "Spare", "remove-account");
+check(await seen(page, "#sheet", "Tap again to remove"), "removing an account asks for a second tap");
+await page.click('#sheet button[data-action="remove-account"]');
 check(await gone(page, "#screen", "Spare"), "the second tap removes it");
 await page.waitForFunction(async () => { const r = await new Promise((res) => { const q = indexedDB.open("financialTracker"); q.onsuccess = () => { const g = q.result.transaction("kv").objectStore("kv").get("ledger"); g.onsuccess = () => res(g.result); }; q.onerror = () => res(null); }); return !!r; });
 // The spare copy (localStorage) cleared: not a loss. Entry stays on and the spare is refilled by itself.
@@ -589,7 +591,7 @@ await addAccount(page, "Wallet", "asset", "1000"); await seen(page, "#toast", "A
 await addAccount(page, "Bank", "asset", "5000"); await seen(page, "#toast", "Added Bank");
 var monoN = await page.locator("#screen .row .mono").count(); if (monoN !== 2) console.log("   mono count:", monoN, JSON.stringify((await text(page, "#screen")).slice(0, 300)));
 check(monoN === 2, "until a picture is chosen, each account shows its first letter");
-await page.click('.icobtn[aria-label="Choose a picture for Wallet"]');
+await acctAct(page, "Wallet", "open-icon");
 check((await text(page, "#sheet")).includes("zoom and drag"), "tapping the tile opens the picture chooser, with plain instructions");
 check(await page.locator("#f-save").isDisabled(), "saving is off until a picture is chosen");
 await page.setInputFiles("#i-file", join(dir, "icon.png"));
@@ -603,7 +605,7 @@ var walletIcon = ledgerNow.state.accounts.find((a) => a.name === "Wallet").icon;
 check(/^data:image\/(png|jpeg);base64,/.test(walletIcon) && walletIcon.length < 40000, "it is stored inside the account as a small embedded image");
 check(red(await pixel(walletIcon, 24, 48)) && blue(await pixel(walletIcon, 72, 48)), "an uncropped picture is centred: the red half left, the blue half right");
 
-await page.click('.icobtn[aria-label="Choose a picture for Bank"]');
+await acctAct(page, "Bank", "open-icon");
 await page.setInputFiles("#i-file", join(dir, "icon.png"));
 await page.waitForFunction(() => !document.getElementById("i-img").hidden);
 var stageBox = await page.locator("#i-stage").boundingBox();
@@ -613,7 +615,7 @@ await page.click("#f-save"); await seen(page, "#toast", "Picture saved");
 var bankIcon = JSON.parse((await stored(page)).local).state.accounts.find((a) => a.name === "Bank").icon;
 check(red(await pixel(bankIcon, 72, 48)), "dragging the picture moves what is cropped: the blue half is out of the square");
 check((await page.locator("#screen .row img.ico").count()) === 2, "both accounts now show their picture in Setup");
-await page.click('.icobtn[aria-label="Choose a picture for Bank"]');
+await acctAct(page, "Bank", "open-icon");
 check((await text(page, "#sheet")).includes("Remove the picture"), "a picture can be removed");
 await page.click('#sheet button:has-text("Cancel")');
 
@@ -1133,21 +1135,21 @@ ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.settings.bankLogos.gotyme.icon.startsWith("data:image/") && ledgerNow.settings.bankLogos.landbank.icon_url.endsWith("/apple-touch-icon.png") && !ledgerNow.settings.bankLogos.unionbank, "the logos live in the phone's settings, one per bank");
 check(ledgerNow.state.accounts.every((a) => !a.icon_url), "nothing is copied onto the accounts themselves");
 // a wrong logo can be removed, and stays removed
-await page.click('#screen .row:has-text("GoTyme") .icobtn >> nth=0');
+await acctAct(page, "GoTyme", "open-icon");
 await page.click('#sheet button:has-text("Remove the picture")');
 ledgerNow = JSON.parse((await stored(page)).local);
 check(!ledgerNow.settings.bankLogos.gotyme && ledgerNow.settings.bankLogosBlocked.gotyme === true, "Remove the picture drops the bank's logo and marks it so it is not fetched again");
 check((await page.locator("#screen .row", { hasText: "GoTyme" }).locator("img.ico").count()) === 0, "the accounts go back to a letter tile");
 // linking an account to a bank from its picture window
 await addAccount(page, "Euf", "asset", "10"); await seen(page, "#toast", "Added Euf");
-await page.click('#screen .row:has-text("Euf") .icobtn');
+await acctAct(page, "Euf", "open-icon");
 await page.click("#i-bank");
 await page.click('#sheet .bankrow:has-text("MariBank")');
 ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.state.accounts.find((a) => a.name === "Euf").bank === "maribank" && (await text(page, "#sheet")).includes("Picture for Euf"), "an account with its own name can be linked to a bank, and the picture window comes back");
 await page.click('#sheet button:has-text("Cancel")');
 // a stray tap must not give an account another bank's logo, and a wrong link can be put right
-await page.click('#screen .row:has-text("Landbank") .icobtn');
+await acctAct(page, "Landbank", "open-icon");
 await page.click("#i-bank"); await page.click('#sheet .bankrow:has-text("GCash")');
 check((await text(page, "#toast")).includes("Tap GCash again"), "choosing a different bank than the account's name asks for a second tap");
 ledgerNow = JSON.parse((await stored(page)).local);
@@ -1345,17 +1347,17 @@ await page.click('button:has-text("Delete")'); await page.click('button:has-text
   const led0 = JSON.parse((await stored(page)).local), mine = led0.state.accounts.filter((a) => a.class === "asset" && !a.reserve_for && !a.archived);
   const [a1, a2] = mine;
   await menuGo(page, "Setup");
-  const l4 = async (acct, digits) => { await page.click(`button[data-action="edit-last4"][data-id="${acct.id}"]`); await page.fill("#l4", digits); await page.click("#f-save"); };
+  const l4 = async (acct, digits) => { await acctAct(page, acct.id, "edit-last4", { id: true }); await page.fill("#l4", digits); await page.click("#f-save"); };
   // the savings pocket switch lives in the same window as the digits: turned on and saved it marks the account, and it can be turned off again
-  await page.click(`button[data-action="edit-last4"][data-id="${a1.id}"]`);
+  await acctAct(page, a1.id, "edit-last4", { id: true });
   check(await page.locator("#l4-pocket").getAttribute("aria-pressed") === "false", "an ordinary account starts with the Savings pocket switch off");
   await page.click("#l4-pocket"); await page.fill("#l4", ""); await page.click("#f-save"); await page.waitForTimeout(300);
   check(JSON.parse((await stored(page)).local).state.accounts.find((a) => a.id === a1.id).role === "pocket", "turned on and saved, the account becomes a savings pocket");
-  await page.click(`button[data-action="edit-last4"][data-id="${a1.id}"]`);
+  await acctAct(page, a1.id, "edit-last4", { id: true });
   check(await page.locator("#l4-pocket").getAttribute("aria-pressed") === "true", "and the switch shows it is on");
   await page.click("#l4-pocket"); await page.click("#f-save"); await page.waitForTimeout(300);
   check(JSON.parse((await stored(page)).local).state.accounts.find((a) => a.id === a1.id).role === "", "turned off again it is an ordinary account");
-  await page.click(`button[data-action="edit-last4"][data-id="${a1.id}"]`); await page.click("#l4"); await page.keyboard.type("12345");
+  await acctAct(page, a1.id, "edit-last4", { id: true }); await page.click("#l4"); await page.keyboard.type("12345");
   check(await page.inputValue("#l4") === "1234" && await page.getAttribute("#l4", "maxlength") === "4", "the box takes four digits and no more");
   await page.fill("#l4", "12a4"); await page.click("#f-save");
   check((await seen(page, "#l4-msg", "exactly the last 4")) && !JSON.parse((await stored(page)).local).state.accounts.find((a) => a.id === a1.id).last4, "letters are refused, with words, and nothing is saved");
@@ -2582,14 +2584,17 @@ console.log("Correct a verified entry");
   const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acct, acctZ], transactions: [slip, ...mvs.map((m) => m[0])], entries: [...slipEntries, ...mvs.flatMap((m) => m[1])] } };
   ({ ctx, page, errors } = await open({ blockSw: true, seed }));
   await menuGo(page, "Setup");
-  check(await page.locator('button[data-action="hide-account"][data-id="z"]').count() === 1 && await page.locator('button[data-action="hide-account"][data-id="w"]').count() === 0, "an account with entries and a zero balance can be hidden; one that still holds money cannot");
+  await page.click('button[data-action="acct-more"][data-id="z"]'); const canHideZ = await page.locator('#sheet button[data-action="hide-account"]').count(); await page.click('#sheet button[data-action="close-sheet"]');
+  await page.click('button[data-action="acct-more"][data-id="w"]'); const canHideW = await page.locator('#sheet button[data-action="hide-account"]').count(); await page.click('#sheet button[data-action="close-sheet"]');
+  check(canHideZ === 1 && canHideW === 0, "an account with entries and a zero balance can be hidden; one that still holds money cannot");
   check((await text(page, "#screen")).includes("cannot be removed. When its balance is zero you can hide it"), "and the screen says why Remove is missing");
-  await page.click('button[data-action="hide-account"][data-id="z"]');
+  await acctAct(page, "z", "hide-account", { id: true });
   check(await seen(page, "#toast", "Old Wallet is hidden") && (await text(page, "#screen")).toLowerCase().includes("hidden accounts") && await page.locator('#screen .row:has-text("Old Wallet") button[data-action="show-account"]').count() === 1, "hiding keeps it under Hidden accounts, with Show again");
   const lh = JSON.parse((await stored(page)).local);
   check(lh.state.accounts.find((a) => a.id === "z").archived === true && lh.state.entries.length === 2 + 4 && lh.state.transactions.length === 3, "only the hidden flag changed; every entry is still there");
   await page.click('button[data-action="show-account"][data-id="z"]');
-  check(await seen(page, "#toast", "Shown again") && await page.locator('button[data-action="hide-account"][data-id="z"]').count() === 1, "Show again brings it back");
+  await page.click('button[data-action="acct-more"][data-id="z"]');
+  check(await seen(page, "#toast", "Shown again") && await page.locator('#sheet button[data-action="hide-account"]').count() === 1, "Show again brings it back"); await page.click('#sheet button[data-action="close-sheet"]');
   await menuGo(page, "Weekly review");
   check((await text(page, "#screen")).includes("A verified entry is final"), "the Weekly review says a verified entry is final");
   check(!(await page.locator('button[data-action="open-correct"]').isDisabled()) && (await text(page, "#screen")).includes("1 can be put right"), "and offers the one entry that can still be put right");
@@ -3893,14 +3898,14 @@ console.log("\n-- Arrange categories and accounts by holding and dragging --");
   const seed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acc2("w", "Test Wallet", "asset", { opening_balance: 250000 }), acc2("d", "Alpha Debit", "asset", { opening_balance: 1000000 }), acc2("z", "Zeta Savings", "asset", { opening_balance: 500000 }), acc2("c", "Test Card", "liability")] } };
   const { ctx, page, errors } = await open({ blockSw: true, setupFlat: false, seed });
   await page.click("#menuBtn"); await page.click('#menu .item[data-tab="setup"]'); await page.waitForFunction(() => !document.querySelector("#menu .drawer")); await page.waitForTimeout(250);
-  const names = (sel) => page.$$eval(sel, (els) => els.map((e) => (e.querySelector(".who > div") ?? e.querySelector(":scope > div")).firstChild.textContent.trim()));
+  const names = (sel) => page.$$eval(sel, (els) => els.map((e) => (e.querySelector(".acctopen .who > span:last-child") ?? e.querySelector(".who > div") ?? e.querySelector(":scope > div")).firstChild.textContent.trim()));
   const hold = async (row) => { const b = await row.boundingBox(); await page.mouse.move(b.x + 60, b.y + b.height / 2); await page.mouse.down(); await page.waitForTimeout(650); return b; };
   const dragBy = async (b, dy, shotPath) => { for (let i = 1; i <= 8; i++) { await page.mouse.move(b.x + 60, b.y + b.height / 2 + (dy * i) / 8); await page.waitForTimeout(25); } if (shotPath) await page.screenshot({ path: shotPath }); await page.mouse.up(); await page.waitForTimeout(500); };
   // accounts: A to Z with Cash-like first not applicable here; nothing arranged = A to Z
   await page.click('.setrow:has-text("Accounts")'); await page.waitForTimeout(300);
   const a0 = await names('.sortlist .row[data-sort="acct"]');
   check(a0.join("|") === "Alpha Debit|Test Card|Test Wallet|Zeta Savings", "accounts show A to Z until you arrange them: " + a0.join(", "));
-  { const t = await text(page, "#screen"); check(!/tap the tile|Bank, wallet or cash|add last 4 digits/.test(t) && /Bank or wallet/.test(t) && /add last 4/.test(t) && !/Cash\s+add last 4/.test(t) && !/ends in/.test(t), "the line under an account name is short: its kind and the last four digits, no picture hint"); }
+  { const t = await text(page, "#screen"); check(!/tap the tile|Bank, wallet or cash|add last 4 digits/.test(t) && /Bank or wallet/.test(t) && !/add last 4/.test(t) && !/Cash\s+add last 4/.test(t) && !/ends in/.test(t), "the line under an account name is short: its kind and the last four digits, no picture hint"); }
   const zeta = page.locator('.sortlist .row[data-sort="acct"]').filter({ hasText: "Zeta Savings" });
   const b = await hold(zeta);
   check(await page.locator(".sortlist.arranging").count() === 1, "holding an account starts arranging");
