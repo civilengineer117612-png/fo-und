@@ -1663,8 +1663,9 @@ function viewSetup() {
   const reserveExists = S().accounts.some((a) => a.reserve_for);
   const hosts = activeAccounts().filter((a) => a.class === "asset" && !a.reserve_for);
   const arrA = ui.sortArr === "acct";
-  const rows = orderedAccts(S().accounts.filter((a) => !a.archived)).map((a) => `<div class="row sortrow acctrow" data-sort="acct" data-id="${esc(a.id)}"><button class="acctopen" data-action="acct-more" data-id="${esc(a.id)}" aria-label="${esc(a.name)}, ${esc(pesoW(M.naturalBalance(a, M.countedEntries(S()))))}. Tap to change it"><span class="who">${iconOf(a, 44)}<span>${esc(a.name)}<small>${a.class === "asset" ? (M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet") : "Credit card"}${a.reserve_for ? " \u00b7 covers " + esc(accountName(a.reserve_for)) : ""}${a.bank && !a.name.toLowerCase().startsWith(M.bankById(a.bank).name.toLowerCase()) ? " \u00b7 linked to " + esc(M.bankById(a.bank).name) : ""}${a.last4 ? " \u00b7 \u00b7\u00b7" + esc(a.last4) : ""}</small></span></span>
-      <span class="amt">${peso(M.naturalBalance(a, M.countedEntries(S())))}${(() => { const cv = reserveCovers().find((x) => x.reserve_id === a.id); return cv ? `<span class="coverwrap">${coverBar(cv.share, coverLabel(cv))}</span>` : ""; })()}</span>${CHEV}</button></div>`).join("");
+  const rows = orderedAccts(S().accounts.filter((a) => !a.archived)).map((a) => `<div class="row sortrow" data-sort="acct" data-id="${esc(a.id)}"><div class="who"><button class="icobtn" data-action="open-icon" data-id="${esc(a.id)}" aria-label="Choose a picture for ${esc(a.name)}">${iconOf(a, 44)}</button><div>${esc(a.name)}<small>${a.class === "asset" ? (M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet") : "Credit card"}${a.reserve_for ? " · covers " + esc(accountName(a.reserve_for)) : ""}${a.bank && !a.name.toLowerCase().startsWith(M.bankById(a.bank).name.toLowerCase()) ? " · linked to " + esc(M.bankById(a.bank).name) : ""}</small>${isCash(a) && !a.last4 ? "" : `<small><button class="link" data-action="edit-last4" data-id="${esc(a.id)}" aria-label="${a.last4 ? "Last four digits " + esc(a.last4) + ", tap to change" : "Add the last four digits"}">${a.last4 ? "\u00b7\u00b7" + esc(a.last4) : "add last 4"}</button></small>`}</div></div>
+      <div class="amt">${peso(M.naturalBalance(a, M.countedEntries(S())))}${(() => { const cv = reserveCovers().find((x) => x.reserve_id === a.id); return cv ? `<div class="coverwrap">${coverBar(cv.share, coverLabel(cv))}</div>` : ""; })()}${!used.has(a.id) ? `<br><button class="link" data-action="remove-account" data-id="${esc(a.id)}">${ui.confirmRemove === a.id ? "Tap again to remove" : "Remove"}</button>`
+        : M.naturalBalance(a, M.countedEntries(S())) === 0 ? `<br><button class="link" data-action="hide-account" data-id="${esc(a.id)}">Hide</button>` : ""}</div></div>`).join("");
   const hiddenAccts = S().accounts.filter((a) => a.archived);
   const hiddenHtml = hiddenAccts.length ? `<h2>Hidden accounts</h2><p class="note">Their entries and history stay. They are left out of pickers and totals.</p>${hiddenAccts.map((a) => `<div class="row"><div class="who">${iconOf(a, 28)}<div>${esc(a.name)}</div></div><div class="amt"><button class="act" data-action="show-account" data-id="${esc(a.id)}">Show again</button></div></div>`).join("")}` : "";
   const keepNote = S().accounts.some((a) => !a.archived && used.has(a.id)) ? `<p class="note">An account with entries cannot be removed. When its balance is zero you can hide it.</p>` : "";
@@ -1889,7 +1890,7 @@ function viewCards() {
     const id = (it.c ?? it.m).account_id, a = acct(id), cv = covers.find((x) => x.reserve_id === id);
     const amount = amt(it.c ? `${peso(it.c.owe)}<span class="sr"> you owe</span>` : peso(it.m.balance));
     const open = it.c ? `data-action="open-card" aria-label="${esc(a.name)}: pay this card"` : `data-action="open-register" aria-label="${esc(a.name)}: its history"`;
-    return `<div class="gcard" role="button" tabindex="0" ${open} data-id="${esc(id)}"><div class="gtop">${iconOf(a, 38)}<span class="gname">${esc(a.name)}${a.last4 ? `<span class="l4" aria-label="ends in ${esc(a.last4)}"> \u00b7\u00b7${esc(a.last4)}</span>` : ""}</span></div><div class="gamt">${amount}</div><div class="gtype">${kindOf(it, a)}</div>${cv ? (shown ? coverBar(cv.share, coverLabel(cv)) : `<span class="cover" role="img" aria-label="Amounts are hidden"><span style="width:0%"></span></span>`) : ""}</div>`;
+    return `<div class="gcard" role="button" tabindex="0" ${open} data-id="${esc(id)}"><div class="gtop">${iconOf(a, 38)}<span class="gname">${esc(a.name)}${a.last4 ? `<span class="l4" aria-label="ends in ${esc(a.last4)}"> \u00b7\u00b7${esc(a.last4)}</span>` : ""}</span></div><div class="gamt">${amount}</div><div class="gtype">${kindOf(it, a)}</div>${ptoggle(id)}${cv ? (shown ? coverBar(cv.share, coverLabel(cv)) : `<span class="cover" role="img" aria-label="Amounts are hidden"><span style="width:0%"></span></span>`) : ""}</div>`;
   };
   const netCard = `<div class="netcard" role="group" aria-label="${shown ? `Free ${esc(peso(net.free))}: in your accounts ${esc(peso(o.held))}, owed on cards ${esc(peso(o.owe))}` : "Amounts are hidden"}"><div class="netbigrow"><div class="netbig">${shown ? `${net.free < 0 ? "-" : ""}${peso(Math.abs(net.free))}` : `<span aria-label="Amount hidden">${DOTS}</span>`}</div>${eyeButton("cards-eye", shown)}</div>${shown ? coverBar(net.share, "Owed on cards is " + Math.round(net.share * 100) + "% of what is in your accounts") : `<span class="cover" role="img" aria-label="Amounts are hidden"><span style="width:0%"></span></span>`}<div class="netsides"><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.buffer}</svg>${amt(peso(o.held))}</span><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.cards}</svg>${amt(peso(o.owe))}</span></div></div>`;
   const setAside = (() => { const w = M.setAsideForSpending(M.sinkingFunds(S(), ledger.settings, { month: M.monthOf(today()), asOf: today() })); return w > 0 ? `<p class="note" id="cards-setaside">${shown ? peso(w) : veil(peso(w))} of this is set aside for planned spending, not savings.</p>` : ""; })();
@@ -2976,13 +2977,6 @@ function renderSheet() {
       <p><button data-action="open-move" style="width:100%">Move money between accounts</button></p>
       <p><button data-action="open-networth" style="width:100%">Net worth over time</button></p>
       <p><button data-action="tab" data-tab="setup" data-page="accounts" style="width:100%">Add or change accounts</button></p>`;
-  } else if (sh.type === "acct-more") {
-    // ONE "More" per account (docs/UI.md): its actions are outlined buttons in one window, never scattered under the row.
-    const a = S().accounts.find((x) => x.id === sh.id), usedIds = new Set(S().entries.map((e) => e.account_id)), zero = a && M.naturalBalance(a, M.countedEntries(S())) === 0;
-    body = !a ? `<p class="note">This account is gone.</p>` : `<h3>${esc(a.name)}</h3>
-      ${isCash(a) && !a.last4 ? "" : `<p><button data-action="edit-last4" data-id="${esc(a.id)}" style="width:100%">${a.last4 ? "Change the last four digits" : "Add the last four digits"}</button></p>`}
-      <p><button data-action="open-icon" data-id="${esc(a.id)}" style="width:100%">Choose a picture</button></p>
-      ${!usedIds.has(a.id) ? `<p><button data-action="remove-account" data-id="${esc(a.id)}" style="width:100%">${ui.confirmRemove === a.id ? "Tap again to remove" : "Remove"}</button></p>` : zero ? `<p><button data-action="hide-account" data-id="${esc(a.id)}" style="width:100%">Hide</button></p>` : `<p class="note small">An account with entries cannot be removed. At a zero balance it can be hidden.</p>`}`;
   } else if (sh.type === "goal-account") {
     const g = S().goals.find((x) => x.id === sh.id);
     body = `<h3>Where does ${esc(g.name)} sit?</h3><p class="note">Choose the account that holds this goal's money. Its balance is the goal's balance.</p>${paidChips(ui.form.account_id)}
@@ -4624,7 +4618,6 @@ async function onClick(el) {
     }
     case "open-icon": ui.sheet = { type: "icon", id, goal: el.dataset.goal === "1" }; ui.form = {}; renderSheet(); break;
     case "cards-more": ui.sheet = { type: "cards-more" }; ui.form = {}; renderSheet(); break;
-    case "acct-more": ui.confirmRemove = null; ui.sheet = { type: "acct-more", id }; ui.form = {}; renderSheet(); break;
     case "edit-last4": ui.sheet = { type: "last4", id }; ui.form = { last4: S().accounts.find((a) => a.id === id)?.last4 ?? "", pocket: M.isPocket(S().accounts.find((a) => a.id === id)) }; renderSheet(); break;
     case "save-last4": {
       const r = M.setAccountLast4(S(), ui.sheet.id, ui.form.last4);
@@ -5252,7 +5245,6 @@ async function onClick(el) {
       const a = S().accounts.find((x) => x.id === id);
       if (!a || M.naturalBalance(a, M.countedEntries(S())) !== 0) { showToast("Only an account with a zero balance can be hidden."); break; }
       if (S().accounts.some((x) => !x.archived && x.reserve_for === id) || (a.reserve_for && !S().accounts.find((x) => x.id === a.reserve_for)?.archived) || ledger.settings.reserve_source_id === id) { showToast("This account is part of a card reserve. Change the reserve first."); break; }
-      if (ui.sheet?.type === "acct-more") { ui.sheet = null; renderSheet(); }
       await commit({ ...S(), accounts: S().accounts.map((x) => (x.id === id ? { ...x, archived: true } : x)) });
       showToast(a.name + " is hidden. Setup keeps it under Hidden accounts.");
       break;
@@ -5263,8 +5255,8 @@ async function onClick(el) {
       break;
     case "remove-account": {
       if (S().entries.some((e) => e.account_id === id)) break;
-      if (ui.confirmRemove !== id) { ui.confirmRemove = id; renderScreen(); if (ui.sheet?.type === "acct-more") renderSheet(); break; }
-      ui.confirmRemove = null; if (ui.sheet?.type === "acct-more") { ui.sheet = null; renderSheet(); }
+      if (ui.confirmRemove !== id) { ui.confirmRemove = id; renderScreen(); break; }
+      ui.confirmRemove = null;
       // A reserve that covered the removed card stays as an ordinary account, with its link cleared.
       const rest = S().accounts.filter((a) => a.id !== id).map(({ reserve_for, ...a }) => (reserve_for === id ? a : { ...a, ...(reserve_for ? { reserve_for } : {}) }));
       const settings = { ...ledger.settings }; if (settings.reserve_source_id === id) delete settings.reserve_source_id;

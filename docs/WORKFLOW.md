@@ -197,6 +197,7 @@ STATE ON NOV 8 (owner asked for a week of rest; supersedes the older WebKit line
 P2 (wait for "next"): voice entry disclosure in Help and the first-run notice; library licence note; trim
 contradictions in CLAUDE.md; Android block decision; custom domain plan; Trips year grouping and period picker; ratchet screen;
 splitting `app/app.js`.
+P2 (Nov 11) isolate the long shared-ledger e2e blocks: blocks of `e2e/run.mjs` that run one after another on the SAME ledger (5, 5e, 5f, 5g, 5m ...) make one early failure or timeout (a click that waits 30 seconds) knock out the blocks after it, and a block's result then depends on what an earlier block left behind. Give each long block its own seeded invented ledger and its own page, so a block can be run alone, fails alone and is read alone; keep the `// =====` try/catch rule and the WebKit rules.
 
 Open decisions (do not assume): 1 Income Trends by payment date; 2 a cash advance as borrowed money; 3 payroll loan repayments shown
 as already deducted; 4 zero and negative net pay; 5 phone-local mappings in backups; 6 budget order of funding and the wants cap;
