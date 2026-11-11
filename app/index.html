@@ -723,6 +723,12 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .card .eyebrow { font-size: 12px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; font-weight: 600; }
   .flatbig .flatof { font-size: 18px; font-weight: 400; } .bval .pair + small { display: block; margin-top: 6px; }
   .hub + .note, .hub ~ .note:first-of-type { margin-top: 16px; }
+  /* ACTIONS ARE BUTTONS (owner, Nov 11, docs/UI.md): every action that used to be an underlined word is an outlined button. Underlined links stay only inside Help. */
+  button.act { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: auto; min-height: 48px; margin: 0; padding: 10px 14px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; font-size: 15px; font-weight: 400; font-style: normal; text-decoration: none; }
+  button.act:active { background: var(--track); transform: none; }
+  .entrylink > button.act { width: 100%; }
+  button.act.sm { min-height: 44px; padding: 8px 12px; font-size: 14px; }
+  .actrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; } .actrow > button.act { flex: 1 1 auto; }
 </style>
 </head>
 <body>

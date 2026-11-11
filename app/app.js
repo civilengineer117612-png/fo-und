@@ -21,16 +21,16 @@ const longDate = (d) => longDateOf(d, (x) => x + "T00:00:00Z");
 const yearDate = (d) => yearDateOf(d, (x) => x + "T00:00:00Z");   // the import window shows the year (a statement spans years)
 // The eye that shows or hides the amounts on a screen (Cards and Goals): an open eye while they are shown, a crossed one while they are hidden.
 const EYE_ATTRS = 'width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
-const eyeButton = (action, shown) => `<button class="link eye" data-action="${action}" aria-pressed="${shown}" aria-label="${shown ? "Hide amounts" : "Show amounts"}">${shown ? `<svg ${EYE_ATTRS}><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>` : `<svg ${EYE_ATTRS}><path d="M2 12s3.6-7 10-7c2 0 3.8.6 5.3 1.5M22 12s-3.6 7-10 7c-2 0-3.8-.6-5.3-1.5"/><path d="M3 3l18 18"/></svg>`}</button>`;
+const eyeButton = (action, shown) => `<button class="act eye" data-action="${action}" aria-pressed="${shown}" aria-label="${shown ? "Hide amounts" : "Show amounts"}">${shown ? `<svg ${EYE_ATTRS}><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>` : `<svg ${EYE_ATTRS}><path d="M2 12s3.6-7 10-7c2 0 3.8.6 5.3 1.5M22 12s-3.6 7-10 7c-2 0-3.8-.6-5.3-1.5"/><path d="M3 3l18 18"/></svg>`}</button>`;
 const badLinesHtml = (st, f) => {
   const n = st.check.bad.length, open = f.open?.__bad;
   const rows = !open ? "" : M.badLineDetails(st.parsed.lines, st.parsed.summary, st.check.bad).map((x) => `<div class="row"><div>${esc(yearDate(x.date))}<small>${esc(x.name)}</small><small>Bank prints ${peso(x.printed)} \u00b7 the lines before give ${x.expected < 0 ? "-" + peso(-x.expected) : peso(x.expected)}</small></div><div class="amt">${peso(x.amount)}</div></div>`).join("");
-  return `<p style="margin:6px 0"><button class="link small" data-action="stm-show" data-id="__bad">${open ? `Hide the ${n} ${n === 1 ? "line" : "lines"}` : `Show the ${n} ${n === 1 ? "line" : "lines"}`}</button></p>${open ? `<p class="note small" style="margin:0 0 4px">A line is usually missing from the statement just before each of these.</p><div class="card" style="padding:4px 14px">${rows}</div>` : ""}`;
+  return `<p style="margin:6px 0"><button class="act small" data-action="stm-show" data-id="__bad">${open ? `Hide the ${n} ${n === 1 ? "line" : "lines"}` : `Show the ${n} ${n === 1 ? "line" : "lines"}`}</button></p>${open ? `<p class="note small" style="margin:0 0 4px">A line is usually missing from the statement just before each of these.</p><div class="card" style="padding:4px 14px">${rows}</div>` : ""}`;
 };
 // A month that does not add up: a quiet link opens the lines that do not follow from the balance before them (what the bank prints, what the lines before give).
 const failingMonthHtml = (lines, open) => {
   const n = lines.length, rows = !open ? "" : lines.map((x) => `<div class="row"><div>${esc(yearDate(x.date))}<small>${esc(x.name)}</small><small>Bank prints ${peso(x.printed)} \u00b7 the lines before give ${x.expected < 0 ? "-" + peso(-x.expected) : peso(x.expected)}</small></div><div class="amt">${peso(x.amount)}</div></div>`).join("");
-  return `<p style="margin:0 0 4px"><button class="link small" data-action="st-fail">${open ? `Hide the ${n} ${n === 1 ? "line" : "lines"}` : `Show the ${n} ${n === 1 ? "line" : "lines"}`}</button></p>${open ? `<p class="note small" style="margin:0 0 4px">A line is usually missing from the statement just before ${n === 1 ? "it" : "each of these"}.</p><div class="card" style="padding:4px 14px;margin:0 0 10px">${rows}</div>` : ""}`;
+  return `<p style="margin:0 0 4px"><button class="act small" data-action="st-fail">${open ? `Hide the ${n} ${n === 1 ? "line" : "lines"}` : `Show the ${n} ${n === 1 ? "line" : "lines"}`}</button></p>${open ? `<p class="note small" style="margin:0 0 4px">A line is usually missing from the statement just before ${n === 1 ? "it" : "each of these"}.</p><div class="card" style="padding:4px 14px;margin:0 0 10px">${rows}</div>` : ""}`;
 };
 const newId = (prefix) => prefix + "-" + crypto.randomUUID();
 const peso = M.formatPesos;
@@ -113,7 +113,7 @@ function planformBody(f) {
       ${custom ? `<label for="pf-n${i}">Name</label><input id="pf-n${i}" data-field="n${i}" value="${esc(f["n" + i] ?? "")}" autocomplete="off" placeholder="Rent"><div class="chips">${Object.entries(M.KIND_NAMES).map(([kk, nm]) => `<button class="chip" data-action="pf-kind" data-id="${kk}" aria-pressed="${(f["k" + i] ?? "expense") === kk}">${nm}</button>`).join("")}</div>` : ""}
       <label for="pf-a${i}">${esc(pfDay(f, 0))}</label><input id="pf-a${i}" data-field="a${i}" inputmode="decimal" placeholder="0" value="${esc(f["a" + i] ?? "")}" autocomplete="off">
       ${f.twice ? `<label for="pf-b${i}">${esc(pfDay(f, 1))}</label><input id="pf-b${i}" data-field="b${i}" inputmode="decimal" placeholder="0" value="${esc(f["b" + i] ?? "")}" autocomplete="off">` : ""}
-      ${row ? `<p class="note small">Suggested ${pesoW(row.first)}${f.twice ? " · " + pesoW(row.second) : ""} <button class="link small" type="button" data-action="pf-use-line" data-id="${i}">Use</button></p>` : ""}
+      ${row ? `<p class="note small">Suggested ${pesoW(row.first)}${f.twice ? " · " + pesoW(row.second) : ""} <button class="act small" type="button" data-action="pf-use-line" data-id="${i}">Use</button></p>` : ""}
       ${done}<p><button data-action="pf-remove" data-id="${i}" style="width:100%">Remove from plan</button></p>`;
   }
   if (view === "pay") {
@@ -139,7 +139,7 @@ function planformBody(f) {
   // the main view
   const rows = pfRowsOf(f, k), max = Math.max(1, ...rows.map((i) => pfVal(f, k, i)));
   const left = cur.left > 0 ? `<button class="pp-left" type="button" data-action="pf-view" data-id="rest">${pesoW(cur.left)} left</button>` : `<span class="pp-left">${cur.left === 0 ? "All placed" : pesoW(-cur.left) + " over"}</span>`;
-  const hint = !sug?.ok && !rows.length ? `<button class="link small" type="button" data-action="pf-view" data-id="pay">${sug?.needsRent ? "Add your rent for suggestions" : cur.pay > 0 ? esc(sug?.message ?? "") : "Type this payday’s pay"}</button>` : "";
+  const hint = !sug?.ok && !rows.length ? `<button class="act small" type="button" data-action="pf-view" data-id="pay">${sug?.needsRent ? "Add your rent for suggestions" : cur.pay > 0 ? esc(sug?.message ?? "") : "Type this payday’s pay"}</button>` : "";
   return `<h3>Pay plan<button class="qmark" type="button" data-action="intro" data-id="plan" aria-label="What is this?">?</button></h3>
     ${f.twice ? `<div class="seg" role="group" aria-label="Which payday">${[0, 1].map((ww) => `<button data-action="pf-which" data-id="${ww}" aria-pressed="${w === ww}">${esc(pfDay(f, ww))}</button>`).join("")}</div>` : ""}
     <div class="pp-big"><button class="pp-pay" type="button" data-action="pf-view" data-id="pay" aria-label="Change the pay and paydays">${pesoW(cur.pay)}</button>${left}</div>
@@ -358,7 +358,7 @@ function renderBanner() {
   const bars = [];
   if (ui.error) bars.push(`<div class="bar" role="alert">${esc(ui.error)}</div>`);
   if (ui.upgrade?.failed) bars.push(`<div class="bar" role="alert">${esc(ui.upgrade.failed)}</div>`);
-  if (device.status === "TRIAL") bars.push(`<div class="trialstrip" role="status"><span>Trial copy. Do not enter real data.</span><button class="link" data-action="reset-trial">${ui.confirmTrial ? "Tap again to erase" : "Start over"}</button></div>`);
+  if (device.status === "TRIAL") bars.push(`<div class="trialstrip" role="status"><span>Trial copy. Do not enter real data.</span><button class="act" data-action="reset-trial">${ui.confirmTrial ? "Tap again to erase" : "Start over"}</button></div>`);
   const showDevice = device.status !== "TRIAL" && device.status !== "OK" && device.status !== "EMPTY";   // an empty phone is explained on Log, next to its Restore button
   if (showDevice) {
     const repair = device.status === "PARTIAL_LOSS" && boot.ledger ? `<p><button data-action="repair">Copy the surviving data into the empty store</button></p>` : "";
@@ -442,8 +442,8 @@ function dayCard() {
     ${waitingLine(d.draft, d.drafts)}
     ${picked ? `<p class="center daycap"><button class="daycapbtn datelink" data-action="open-cal" aria-label="${esc(longDate(picked))}, tap to choose another day">${esc(longDate(picked))}</button></p>
     <p class="note center small">New entries go on this day.</p>
-    <p class="center"><button class="link" data-action="reset-day">Today</button></p>`
-    : `<p class="changedate"><button class="link datelink" data-action="open-cal">Select date</button></p>`}`;
+    <p class="center"><button class="act" data-action="reset-day">Today</button></p>`
+    : `<p class="changedate"><button class="act sm datelink" data-action="open-cal">Select date</button></p>`}`;
 }
 
 // Spent today and This month count VERIFIED entries only (owner, Oct 31); what still waits in Verify is shown apart, in the same words on both.
@@ -478,20 +478,20 @@ function viewLog() {
     const empty = device.status === "EMPTY" ? `<div class="card" id="first-run"><p>${esc(device.message)}</p><p><button data-action="open-restore" style="width:100%">Restore from a backup</button></p></div>` : "";
     return `<h1>Log</h1><p class="sub">${esc(longDate(today()))}</p>${empty}<p class="note">Add the accounts you pay from first.</p>
       <button class="primary" data-action="tab" data-tab="setup" data-page="accounts">Add accounts</button>
-      <p class="note">New here? <button class="link" data-action="tab" data-tab="help">Read the quick notes first</button>.</p>`;
+      <p class="note">New here? <button class="act" data-action="tab" data-tab="help">Read the quick notes first</button>.</p>`;
   }
   const due = dueDrafts().length;
   const shown = ui.dayPick && ui.dayPick !== today() ? ui.dayPick : today();   // the list follows the day chosen with "Select date"
   const todays = S().transactions.filter((t) => t.date === shown && !isGenerated(t)).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   const age = M.daysSinceBackup(ledger.settings, today());
-  const backupLink = age === null || age >= BACKUP_NOTE_DAYS ? `<button class="link" data-action="tab" data-tab="setup" data-page="backup">${age === null ? "No backup yet" : "Last backup " + age + " days ago"}</button>` : "";   // said only when a backup is due
-  const dueNote = due ? `<p class="note"><button class="link" data-action="tab" data-tab="verify">${due} earlier ${due === 1 ? "entry is" : "entries are"} waiting for you to verify</button></p>` : "";
+  const backupLink = age === null || age >= BACKUP_NOTE_DAYS ? `<button class="act sm" data-action="tab" data-tab="setup" data-page="backup">${age === null ? "No backup yet" : "Last backup " + age + " days ago"}</button>` : "";   // said only when a backup is due
+  const dueNote = due ? `<p class="note"><button class="act" data-action="tab" data-tab="verify">${due} earlier ${due === 1 ? "entry is" : "entries are"} waiting for you to verify</button></p>` : "";
   const trip = S().tags.find((t) => t.id === ledger.settings.active_tag_id);
-  const tripNote = trip ? `<p class="note">Tagging new entries: ${esc(trip.name)}. <button class="link" data-action="stop-trip">Stop</button></p>` : "";
+  const tripNote = trip ? `<p class="note">Tagging new entries: ${esc(trip.name)}. <button class="act" data-action="stop-trip">Stop</button></p>` : "";
   const waitingPhotos = scanQueue().filter((q) => !q.needs).length, needLook = scanQueue().filter((q) => q.needs).length;
   const photoNote = (ui.scan?.busy ? `<p class="note" id="scan-msg" role="status">${esc(ui.scan.msg)}</p>` : ui.scan?.error ? `<p class="note" role="alert">${esc(ui.scan.error)}</p>` : "")
-    + (needLook ? `<p class="note"><button class="link" data-action="open-queue">${needLook} photo${needLook === 1 ? " needs" : "s need"} a look</button></p>` : "")
-    + (waitingPhotos && !ui.scan?.busy ? `<p class="note">${waitingPhotos} photo${waitingPhotos === 1 ? " is" : "s are"} kept, waiting to be read. <button class="link" data-action="read-queue">Read now</button></p>` : "");
+    + (needLook ? `<p class="note"><button class="act" data-action="open-queue">${needLook} photo${needLook === 1 ? " needs" : "s need"} a look</button></p>` : "")
+    + (waitingPhotos && !ui.scan?.busy ? `<p class="note">${waitingPhotos} photo${waitingPhotos === 1 ? " is" : "s are"} kept, waiting to be read. <button class="act" data-action="read-queue">Read now</button></p>` : "");
   return `<h1>Log</h1><div class="logmeta"><span class="sub">${ui.dayPick && ui.dayPick !== today() ? "" : esc(longDate(today()))}</span>${backupLink}</div>${photoNote}${dueNote}${tripNote}
     ${dayCard()}
     ${tilesHtml()}
@@ -505,13 +505,13 @@ function viewLog() {
 const TRASH = '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/>';
 function tilesHtml() {
   const tile = (p, arranging) => `<${arranging ? "div" : "button"} class="tile" data-action="${arranging ? "edit-tile" : "open-preset"}" data-id="${esc(p.id)}"${arranging ? ' role="button" tabindex="0"' : ""}><b>${esc(p.name)}</b><span>${peso(p.amount)}</span><i class="tcat">${esc(categoryName(p.category_id))}</i>${arranging ? `<button class="tminus" data-action="remove-tile-now" data-id="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">-</button>` : ""}</${arranging ? "div" : "button"}>`;
-  if (!ui.arrange && !S().presets.length) return `<p class="note center">No quick tiles. <button class="link" data-action="arrange-start">Add one</button></p>`;
+  if (!ui.arrange && !S().presets.length) return `<p class="center"><button class="act sm" data-action="arrange-start">Add a quick tile</button></p>`;
   if (!ui.arrange) {
     const hint = ledger.settings.tile_hint_done ? "" : `<p class="note small center">Hold a tile to move, change or remove it.</p>`;
     return `<div class="tiles">${S().presets.map((p) => tile(p, false)).join("")}</div>${hint}`;
   }
   const add = S().presets.length < M.MAX_PRESETS ? `<div class="tile addtile" data-action="add-tile" data-howto="log" role="button" tabindex="0" aria-label="Add a tile"><b>+</b></div>` : "";
-  return `<div class="tiles arranging">${S().presets.map((p) => tile(p, true)).join("")}${add}</div><p class="center"><button class="link" data-action="arrange-done">Done</button></p>`;
+  return `<div class="tiles arranging">${S().presets.map((p) => tile(p, true)).join("")}${add}</div><p class="center"><button class="act" data-action="arrange-done">Done</button></p>`;
 }
 
 // Money going out is shown with a minus, money coming in with a plus; a move between your own accounts has neither.
@@ -527,7 +527,7 @@ function entriesListHtml() {
   if (all) return `<p class="note">Type something to search every entry you have ever logged.</p>`;
   const list = S().transactions.filter((t) => t.date >= from && t.date <= to && !isGenerated(t)).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.created_at < b.created_at ? 1 : -1));
   const shown = ui.showCancelled ? list : list.filter((t) => !gone.has(t.id)), nGone = list.length - list.filter((t) => !gone.has(t.id)).length;
-  return `${nGone ? `<p class="note"><button class="link" data-action="toggle-cancelled">${ui.showCancelled ? "Hide" : "Show"} ${nGone} cancelled ${nGone === 1 ? "entry" : "entries"}</button></p>` : ""}${shown.length ? shown.map(rowFor).join("") : `<p class="note">Nothing logged in this period.</p>`}`;
+  return `${nGone ? `<p class="note"><button class="act" data-action="toggle-cancelled">${ui.showCancelled ? "Hide" : "Show"} ${nGone} cancelled ${nGone === 1 ? "entry" : "entries"}</button></p>` : ""}${shown.length ? shown.map(rowFor).join("") : `<p class="note">Nothing logged in this period.</p>`}`;
 }
 function rowFor(t, withDate = false, spendingAmount = null) {
   spendingAmount = Number.isFinite(spendingAmount) ? spendingAmount : null;
@@ -633,9 +633,9 @@ function payslipRows(range) {
       <div class="slipsub">${esc(p.employer)} · paid ${esc(fullDate(p.pay_date))}${kept ? `<span class="tchev" aria-hidden="true">\u203A</span>` : ""}</div>`;
     const kv = `<div class="slipkv"><span>Gross</span><span>${peso(t.gross)}</span></div><div class="slipkv"><span>Deductions</span><span>${peso(t.deductions)}</span></div>`;
     const top = kept ? `<details class="slipc" data-keep="s:${esc(p.id)}"${ui.pdet?.["s:" + p.id] ? " open" : ""}><summary class="slipsum">${head}${kv}</summary><div class="slipbody">${printedLines(p)}</div></details>` : `<div class="slipsum">${head}${kv}</div>`;
-    const bar = ui.confirmDelSlip === p.id ? `<p class="note">Remove this payslip and the pay it recorded? <button class="link" data-action="del-slip-yes" data-id="${esc(p.id)}">Yes, remove it</button></p>`
-      : `<div class="slipbar"><button class="link" data-action="edit-slip" data-id="${esc(p.id)}">Change</button><button class="link" data-action="del-slip" data-id="${esc(p.id)}">Remove</button>${kept ? "" : `<button class="link" data-action="add-lines" data-id="${esc(p.id)}">Add the breakdown</button>`}</div>`;
-    return `<div class="card slipcard">${top}${kept ? "" : `<p class="note small">${esc(M.ORIGINAL_NOT_KEPT)}</p>`}${shot ? `<p class="note"><button class="link" data-action="open-photo" data-id="${esc(shot.id)}">View the photo</button></p>` : ""}${flags.map(flagLine).join("")}${M.payslipNotes(S(), p).map((n) => `<p class="note small">${esc(n)}${!(p.version >= M.PAYSLIP_VERSION) && n.startsWith("Saved before") ? ` <button class="link" data-action="check-slip" data-id="${esc(p.id)}">Mark as checked</button>` : ""}</p>`).join("")}${earlierFigures(p)}${t.overtime > 0 && !draft ? `<p class="note"><button class="link" data-action="ot-draft" data-id="${esc(p.id)}">Make the Emergency Fund draft for the overtime</button></p>` : ""}${t.overtime > 0 && !freeDone ? `<p class="note">The free ${peso(t.overtime - Math.round((t.overtime * M.OVERTIME_SHARE.num) / M.OVERTIME_SHARE.den))} of the overtime stays in the account the pay landed in. <button class="link" data-action="open-otfree" data-id="${esc(p.id)}">Move it somewhere else</button></p>` : ""}${bar}</div>`;
+    const bar = ui.confirmDelSlip === p.id ? `<p class="note">Remove this payslip and the pay it recorded? <button class="act" data-action="del-slip-yes" data-id="${esc(p.id)}">Yes, remove it</button></p>`
+      : `<div class="slipbar"><button class="act" data-action="edit-slip" data-id="${esc(p.id)}">Change</button><button class="act" data-action="del-slip" data-id="${esc(p.id)}">Remove</button>${kept ? "" : `<button class="act" data-action="add-lines" data-id="${esc(p.id)}">Add the breakdown</button>`}</div>`;
+    return `<div class="card slipcard">${top}${kept ? "" : `<p class="note small">${esc(M.ORIGINAL_NOT_KEPT)}</p>`}${shot ? `<p class="note"><button class="act" data-action="open-photo" data-id="${esc(shot.id)}">View the photo</button></p>` : ""}${flags.map(flagLine).join("")}${M.payslipNotes(S(), p).map((n) => `<p class="note small">${esc(n)}${!(p.version >= M.PAYSLIP_VERSION) && n.startsWith("Saved before") ? ` <button class="act" data-action="check-slip" data-id="${esc(p.id)}">Mark as checked</button>` : ""}</p>`).join("")}${earlierFigures(p)}${t.overtime > 0 && !draft ? `<p class="note"><button class="act" data-action="ot-draft" data-id="${esc(p.id)}">Make the Emergency Fund draft for the overtime</button></p>` : ""}${t.overtime > 0 && !freeDone ? `<p class="note">The free ${peso(t.overtime - Math.round((t.overtime * M.OVERTIME_SHARE.num) / M.OVERTIME_SHARE.den))} of the overtime stays in the account the pay landed in. <button class="act" data-action="open-otfree" data-id="${esc(p.id)}">Move it somewhere else</button></p>` : ""}${bar}</div>`;
   }).join("")}`;
 }
 
@@ -694,7 +694,7 @@ function viewIncome() {
   const ivar = (v) => v === 0 ? "As planned" : (v > 0 ? "+" : "-") + peso(Math.abs(v)) + (v > 0 ? " more" : " less");
   const pv = plan ? [M.planIncome(S(), plan, today())].map((v) => `<h2>Plan against what arrived</h2><table class="tbl"><tr><th>Payday</th><th class="n">Plan</th><th class="n">Received</th><th class="n">Difference</th></tr><tr><td>${esc(v.label)}<small> ${esc(longDate(v.period.start))}</small></td><td class="n">${peso(v.planned)}</td><td class="n">${peso(v.actual)}</td><td class="n">${esc(ivar(v.variance))}</td></tr></table><p class="note">The plan is never edited; the difference is only shown.</p>`)[0] : "";
   const bodies = {
-    overview: `<h2>Gross, deductions and net, ${esc(label)}</h2><div class="mlist">${mline("Gross", peso(bd.earned))}${mline("Deductions", (bd.deductions ? "-" : "") + peso(bd.deductions))}<div class="mrow mtotal"><span class="mn">Net</span><b class="mv">${peso(y.ytd.total)}</b></div></div>${loose.length ? `<p class="note">${peso(loose.reduce((n, r) => n + r.amount, 0))} of this was added without a payslip (${loose.length} ${loose.length === 1 ? "entry" : "entries"}). <button class="link" data-action="open-payslips">See them</button></p>` : ""}${pv}`,
+    overview: `<h2>Gross, deductions and net, ${esc(label)}</h2><div class="mlist">${mline("Gross", peso(bd.earned))}${mline("Deductions", (bd.deductions ? "-" : "") + peso(bd.deductions))}<div class="mrow mtotal"><span class="mn">Net</span><b class="mv">${peso(y.ytd.total)}</b></div></div>${loose.length ? `<p class="note">${peso(loose.reduce((n, r) => n + r.amount, 0))} of this was added without a payslip (${loose.length} ${loose.length === 1 ? "entry" : "entries"}). <button class="act" data-action="open-payslips">See them</button></p>` : ""}${pv}`,
     earnings: `${categoryBlock(["earning"], range)}<h2>Earnings by month</h2>${monthTable}${paydays}`,
     deductions: categoryBlock(["deduction", "employer"], range) + (dedTable || `<p class="note">No deductions in this period.</p>`),
   };
@@ -967,7 +967,7 @@ function slipFormHtml(f, sh, pm) {
       <label for="p-ptype">Period type (optional)</label><input id="p-ptype" data-field="period_type" value="${esc(f.period_type ?? "")}" autocomplete="off">
     </details>
     <div id="p-flags" role="status"></div>
-    ${f.layoutText ? `<p class="note small"><button class="link" data-action="copy-layout">Copy layout report</button> It hides every digit and every name.</p>` : ""}
+    ${f.layoutText ? `<p class="note small"><button class="act" data-action="copy-layout">Copy layout report</button> It hides every digit and every name.</p>` : ""}
     <p class="note">Do not type any employee, tax or account number.</p>
     ${REQNOTE}
     <div id="p-ask" class="slipask"${sh.askDraft && pm.problems.flags.length ? "" : " hidden"}><p><b id="p-askq">The figures differ${pm.problems.gap ? " by " + esc(peso(pm.problems.gap)) : ""}. Save as a draft to check later?</b></p><p class="note small">It waits in Verify and is not income until it is verified.</p>
@@ -1104,7 +1104,7 @@ const photoButtons = (mode, busy = false) => `<label class="filebtn" aria-disabl
 
 function viewScan() {
   const s = ui.scan, busy = s?.busy === true;
-  const status = busy ? `<p class="note" id="scan-msg" role="status">${esc(s.msg)}</p>` : s?.error ? `<p class="note" role="alert">${esc(s.error)}</p>` : s?.done ? `<p class="note" role="status">${esc(s.done)} <button class="link" data-action="tab" data-tab="verify">Go to Verify</button></p>` : "";
+  const status = busy ? `<p class="note" id="scan-msg" role="status">${esc(s.msg)}</p>` : s?.error ? `<p class="note" role="alert">${esc(s.error)}</p>` : s?.done ? `<p class="note" role="status">${esc(s.done)} <button class="act" data-action="tab" data-tab="verify">Go to Verify</button></p>` : "";
   return `<h1>Scan</h1><p class="sub">A receipt, payslip or payment screenshot</p>
     <p class="note">This phone reads the photo. Nothing is sent anywhere. You check each guess in Verify, with the photo beside it.</p>
     ${photoButtons("1", busy)}
@@ -1629,7 +1629,7 @@ function keptHtml(a) {
   for (const l of S().statementLines ?? []) { if (!monthsOf.has(l.record_id)) monthsOf.set(l.record_id, new Set()); monthsOf.get(l.record_id).add(l.date.slice(0, 7)); }
   const months = (id) => monthsOf.get(id) ?? new Set();
   const frozen = (r) => (S().statementAccepts ?? []).some((x) => x.account_id === a.id && months(r.id).has(x.month));
-  return `<details class="why"${ui.confirmStm && recs.some((r) => r.id === ui.confirmStm) ? " open" : ""}><summary>Statements kept (${recs.length})</summary><div class="card" style="padding:4px 16px">${recs.map((r) => `<div class="row" style="align-items:center"><div>${esc(r.bank ?? "Statement")}<small>${r.period_from && r.period_to ? `${esc(longDate(r.period_from))} to ${esc(longDate(r.period_to))}` : `${r.line_count} lines`}</small></div><div class="amt">${frozen(r) ? `<small>${STM_OK} Accepted</small>` : `<button class="link" data-action="st-remove" data-id="${esc(r.id)}">${ui.confirmStm === r.id ? "Tap again to remove" : "Remove"}</button>`}</div></div>`).join("")}</div><p class="note small">Removing a statement changes no entry and no draft. A statement with an accepted month stays.</p></details>`;
+  return `<details class="why"${ui.confirmStm && recs.some((r) => r.id === ui.confirmStm) ? " open" : ""}><summary>Statements kept (${recs.length})</summary><div class="card" style="padding:4px 16px">${recs.map((r) => `<div class="row" style="align-items:center"><div>${esc(r.bank ?? "Statement")}<small>${r.period_from && r.period_to ? `${esc(longDate(r.period_from))} to ${esc(longDate(r.period_to))}` : `${r.line_count} lines`}</small></div><div class="amt">${frozen(r) ? `<small>${STM_OK} Accepted</small>` : `<button class="act" data-action="st-remove" data-id="${esc(r.id)}">${ui.confirmStm === r.id ? "Tap again to remove" : "Remove"}</button>`}</div></div>`).join("")}</div><p class="note small">Removing a statement changes no entry and no draft. A statement with an accepted month stays.</p></details>`;
 }
 // A transfer out of one of your accounts and the money arriving in another is ONE move (src/model/reconcile.js): shown as a pair, added as a draft by a tap, never by itself.
 function movesHtml() {
@@ -1639,7 +1639,7 @@ function movesHtml() {
   const todo = rows.filter((r) => !r.done).length, pct = rows.length ? Math.round((100 * (rows.length - todo)) / rows.length) : 0;
   return `${pairs.length ? `<div class="card" style="padding:16px"><div class="note" style="margin:0 0 4px">Moves between your accounts</div><div class="stbig">${pairs.length} ${pairs.length === 1 ? "move" : "moves"} found</div>
     <div class="stbar" role="img" aria-label="${rows.length - todo} of ${rows.length} moves are in your ledger"><i style="width:${pct}%"></i></div><div class="note" style="margin:0">${rows.length - todo} in your ledger, ${todo} to add</div></div>
-    <div class="card" style="padding:4px 16px">${rows.map(({ p, done }) => `<div class="row" style="align-items:center"><div>${esc(name(p.from_id))} to ${esc(name(p.to_id))}<small>${esc(longDate(p.out.date))}${p.fee ? ` \u00b7 fee ${peso(p.fee)}` : ""}</small></div><div class="amt">${peso(p.amount)}<br>${done ? `<small>${STM_OK} In your ledger</small>` : `<button class="link" data-action="st-addmove" data-out="${esc(p.out.id)}" data-in="${esc(p.in.id)}">Add as draft</button>`}</div></div>`).join("")}</div>
+    <div class="card" style="padding:4px 16px">${rows.map(({ p, done }) => `<div class="row" style="align-items:center"><div>${esc(name(p.from_id))} to ${esc(name(p.to_id))}<small>${esc(longDate(p.out.date))}${p.fee ? ` \u00b7 fee ${peso(p.fee)}` : ""}</small></div><div class="amt">${peso(p.amount)}<br>${done ? `<small>${STM_OK} In your ledger</small>` : `<button class="act" data-action="st-addmove" data-out="${esc(p.out.id)}" data-in="${esc(p.in.id)}">Add as draft</button>`}</div></div>`).join("")}</div>
     <p class="note">Each pair is one move: sent from one account, arrived in the other. A small difference is a fee. Adding makes a draft in Verify.</p>` : ""}
     ${loneOut.length ? `<div class="card" style="padding:4px 16px">${loneOut.slice(0, 5).map((l) => `<div class="row"><div>Waiting for the other statement<small>${esc(l.payee || l.text)}, ${esc(longDate(l.date))}, no matching money in yet</small></div><div class="amt">${peso(l.amount)}</div></div>`).join("")}${loneOut.length > 5 ? `<div class="row"><div>and ${loneOut.length - 5} more</div></div>` : ""}</div>` : ""}`;
 }
@@ -1652,11 +1652,10 @@ function viewSetup() {
   const reserveExists = S().accounts.some((a) => a.reserve_for);
   const hosts = activeAccounts().filter((a) => a.class === "asset" && !a.reserve_for);
   const arrA = ui.sortArr === "acct";
-  const rows = orderedAccts(S().accounts.filter((a) => !a.archived)).map((a) => `<div class="row sortrow" data-sort="acct" data-id="${esc(a.id)}"><div class="who"><button class="icobtn" data-action="open-icon" data-id="${esc(a.id)}" aria-label="Choose a picture for ${esc(a.name)}">${iconOf(a, 44)}</button><div>${esc(a.name)}<small>${a.class === "asset" ? (M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet") : "Credit card"}${a.reserve_for ? " · covers " + esc(accountName(a.reserve_for)) : ""}${a.bank && !a.name.toLowerCase().startsWith(M.bankById(a.bank).name.toLowerCase()) ? " · linked to " + esc(M.bankById(a.bank).name) : ""}</small>${isCash(a) && !a.last4 ? "" : `<small><button class="link" data-action="edit-last4" data-id="${esc(a.id)}" aria-label="${a.last4 ? "Last four digits " + esc(a.last4) + ", tap to change" : "Add the last four digits"}">${a.last4 ? "\u00b7\u00b7" + esc(a.last4) : "add last 4"}</button></small>`}</div></div>
-      <div class="amt">${peso(M.naturalBalance(a, M.countedEntries(S())))}${(() => { const cv = reserveCovers().find((x) => x.reserve_id === a.id); return cv ? `<div class="coverwrap">${coverBar(cv.share, coverLabel(cv))}</div>` : ""; })()}${!used.has(a.id) ? `<br><button class="link" data-action="remove-account" data-id="${esc(a.id)}">${ui.confirmRemove === a.id ? "Tap again to remove" : "Remove"}</button>`
-        : M.naturalBalance(a, M.countedEntries(S())) === 0 ? `<br><button class="link" data-action="hide-account" data-id="${esc(a.id)}">Hide</button>` : ""}</div></div>`).join("");
+  const rows = orderedAccts(S().accounts.filter((a) => !a.archived)).map((a) => `<div class="row sortrow" data-sort="acct" data-id="${esc(a.id)}"><div class="who"><button class="icobtn" data-action="open-icon" data-id="${esc(a.id)}" aria-label="Choose a picture for ${esc(a.name)}">${iconOf(a, 44)}</button><div>${esc(a.name)}<small>${a.class === "asset" ? (M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet") : "Credit card"}${a.reserve_for ? " · covers " + esc(accountName(a.reserve_for)) : ""}${a.bank && !a.name.toLowerCase().startsWith(M.bankById(a.bank).name.toLowerCase()) ? " · linked to " + esc(M.bankById(a.bank).name) : ""}</small>${a.last4 ? `<small>\u00b7\u00b7${esc(a.last4)}</small>` : ""}</div></div>
+      <div class="amt">${peso(M.naturalBalance(a, M.countedEntries(S())))}${(() => { const cv = reserveCovers().find((x) => x.reserve_id === a.id); return cv ? `<div class="coverwrap">${coverBar(cv.share, coverLabel(cv))}</div>` : ""; })()}<br><button class="act sm" data-action="acct-more" data-id="${esc(a.id)}" aria-label="More for ${esc(a.name)}">More</button></div></div>`).join("");
   const hiddenAccts = S().accounts.filter((a) => a.archived);
-  const hiddenHtml = hiddenAccts.length ? `<h2>Hidden accounts</h2><p class="note">Their entries and history stay. They are left out of pickers and totals.</p>${hiddenAccts.map((a) => `<div class="row"><div class="who">${iconOf(a, 28)}<div>${esc(a.name)}</div></div><div class="amt"><button class="link" data-action="show-account" data-id="${esc(a.id)}">Show again</button></div></div>`).join("")}` : "";
+  const hiddenHtml = hiddenAccts.length ? `<h2>Hidden accounts</h2><p class="note">Their entries and history stay. They are left out of pickers and totals.</p>${hiddenAccts.map((a) => `<div class="row"><div class="who">${iconOf(a, 28)}<div>${esc(a.name)}</div></div><div class="amt"><button class="act" data-action="show-account" data-id="${esc(a.id)}">Show again</button></div></div>`).join("")}` : "";
   const keepNote = S().accounts.some((a) => !a.archived && used.has(a.id)) ? `<p class="note">An account with entries cannot be removed. When its balance is zero you can hide it.</p>` : "";
   // The form comes FIRST so it stays in the same place however many accounts there are: the
   // button never drifts down behind the keyboard. The list of accounts follows it.
@@ -1673,9 +1672,9 @@ function viewSetup() {
     ${f.kind === "asset" ? `<div class="row pocketrow"><div><b>Savings pocket</b><small>Kept out of \u201CPaid from\u201D. Still counted in what you have.</small></div><div><button class="chip" id="a-pocket" data-action="toggle-pocket-form" aria-pressed="${f.pocket ? "true" : "false"}">${f.pocket ? "On" : "Off"}</button></div></div>` : ""}
     ${f.kind === "asset" && cards.length ? `<label for="a-covers">This account is a reserve for a card (optional)</label><select id="a-covers" data-field="covers"><option value="">No</option>${cards.map((c) => `<option value="${esc(c.id)}"${f.covers === c.id ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</select>` : ""}
     ${ui.setupError ? `<p id="a-error" role="alert"><b>${esc(ui.setupError)}</b></p>` : ""}
-    <p><button class="primary" data-action="add-account" style="margin-top:14px">Add account</button></p>${S().accounts.length ? `<p class="center"><button class="link" data-action="toggle-add-account">Cancel</button></p>` : ""}`;
+    <p><button class="primary" data-action="add-account" style="margin-top:14px">Add account</button></p>${S().accounts.length ? `<p class="center"><button class="act" data-action="toggle-add-account">Cancel</button></p>` : ""}`;
   const accountsHtml = `    ${formOpen ? addForm : ""}
-    <div class="h2row${arrA ? " sorthead" : ""}"><h2>Your accounts</h2>${arrA ? `<button class="link done" data-action="sort-done">Done</button>` : ""}</div>
+    <div class="h2row${arrA ? " sorthead" : ""}"><h2>Your accounts</h2>${arrA ? `<button class="act done" data-action="sort-done">Done</button>` : ""}</div>
     ${arrA ? `<p class="note small sortnote">Drag a row to move it. Done when it is right.</p>` : S().accounts.filter((a) => !a.archived).length > 1 ? `<p class="note small">A to Z. Hold an account to arrange your own order.</p>` : ""}
     <div class="sortlist group${arrA ? " arranging" : ""}">${rows || `<p class="note">No accounts yet.</p>`}</div>${keepNote}${hiddenHtml}
     ${formOpen ? "" : `<p><button id="add-account-open" data-action="toggle-add-account" style="width:100%">Add an account</button></p>`}`;
@@ -1689,12 +1688,12 @@ function viewSetup() {
     : `<div class="row sortrow" data-sort="cat" data-id="${esc(c.id)}"><div>${esc(c.name)}<small>${bucketLine(c)}</small></div></div>`;
   const pencilSvg = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
   const hiddenCats = expenseCategories().filter((c) => M.isHiddenCategory(ledger.settings, c.id));
-  const categoriesHtml = `    <div class="h2row${arrC ? " sorthead" : ""}"><h2>Categories</h2>${arrC ? `<button class="link done" data-action="sort-done">Done</button>` : ui.catEdit ? `<button class="link done" data-action="cat-done">Done</button>` : `<button class="iconbtn" data-action="cat-edit" aria-label="Edit categories">${pencilSvg}</button>`}</div>
+  const categoriesHtml = `    <div class="h2row${arrC ? " sorthead" : ""}"><h2>Categories</h2>${arrC ? `<button class="act done" data-action="sort-done">Done</button>` : ui.catEdit ? `<button class="act done" data-action="cat-done">Done</button>` : `<button class="iconbtn" data-action="cat-edit" aria-label="Edit categories">${pencilSvg}</button>`}</div>
     ${ui.catEdit ? `<p class="note small">Tap a category to change it. \u00D7 removes one with no entries; \u2013 hides one that has entries (its history stays).</p>` : ""}
     ${arrC ? `<p class="note small sortnote">Drag a row to move it. Done when it is right.</p>` : ""}
     <div class="sortlist group${arrC ? " arranging" : ""}">${orderedCats(pickCategories()).map(catRow).join("")}</div>
     <p><button data-action="add-cat" style="width:100%">Add a category</button></p>
-    ${hiddenCats.length ? `<h2>Hidden categories</h2><p class="note">Their entries, budgets and history stay. They are left out of the pickers.</p>${hiddenCats.map((c) => `<div class="row"><div>${esc(c.name)}</div><div class="amt"><button class="link" data-action="show-cat" data-id="${esc(c.id)}">Show again</button></div></div>`).join("")}` : ""}`;
+    ${hiddenCats.length ? `<h2>Hidden categories</h2><p class="note">Their entries, budgets and history stay. They are left out of the pickers.</p>${hiddenCats.map((c) => `<div class="row"><div>${esc(c.name)}</div><div class="amt"><button class="act" data-action="show-cat" data-id="${esc(c.id)}">Show again</button></div></div>`).join("")}` : ""}`;
   const pics = (S().attachments ?? []).length;
   // No pictures: only the ledger, so the plain buttons stay. Pictures kept: the two big buttons do everything at once and the single ones fold away.
   // ONE backup = one file (owner, Oct 31): "Back up now" makes the ledger and the pictures into one file (parts only when it would be too big). The single-purpose
@@ -1709,9 +1708,9 @@ function viewSetup() {
     <p><button class="primary" data-action="open-backup" data-howto="backup" data-all="1">Back up now</button></p>
     <p><button data-action="open-restore" data-all="1" style="width:100%">Restore from a backup</button></p>
     <p><button data-action="open-check-backup" style="width:100%">Check a backup file</button></p>
-    ${pics ? `<p><button class="link" data-action="more-backup" aria-expanded="${Boolean(ui.moreBackup)}">${ui.moreBackup ? "Fewer options" : "More: only the ledger, or only the pictures"}</button></p>
+    ${pics ? `<p><button class="act" data-action="more-backup" aria-expanded="${Boolean(ui.moreBackup)}">${ui.moreBackup ? "Fewer options" : "More: only the ledger, or only the pictures"}</button></p>
     ${ui.moreBackup ? singles : ""}` : ""}
-    ${ui.restoreCopies?.[0] ? `<p><button class="link" data-action="undo-restore">${ui.confirmUndo ? "Tap again to put back. What is here now is kept." : ui.restoreCopies[0].kind === "put-back" ? "Undo put back" : "Undo last restore"}</button></p><p class="note small">Saved ${esc(fullDate(ui.restoreCopies[0].at.slice(0, 10)))}, before the data was replaced.</p>` : ""}
+    ${ui.restoreCopies?.[0] ? `<p><button class="act" data-action="undo-restore">${ui.confirmUndo ? "Tap again to put back. What is here now is kept." : ui.restoreCopies[0].kind === "put-back" ? "Undo put back" : "Undo last restore"}</button></p><p class="note small">Saved ${esc(fullDate(ui.restoreCopies[0].at.slice(0, 10)))}, before the data was replaced.</p>` : ""}
     ${ledger.settings.last_pictures_backup_at && pics ? `<p class="note">Pictures last backed up ${esc(longDate(ledger.settings.last_pictures_backup_at.slice(0, 10)))}.</p>` : ""}
     <h2>Spreadsheet</h2>
     <p class="note">A plain list of your entries, to open in Numbers or Excel.</p>
@@ -1753,7 +1752,7 @@ function viewSetup() {
   ];
   if (flat) return `<h1>Setup</h1><p class="sub">Accounts. The ledger is on this phone only.</p>${blocks.accounts}${blocks.categories}${blocks.budget}${blocks.backup}${blocks.about}`;
   const page = ui.setupPage && Object.hasOwn(blocks, ui.setupPage) ? ui.setupPage : null;   // hasOwn does not build the block
-  if (page) return `<h1>${esc(rowsHome.find((r) => r[0] === page)[2])}</h1><p class="back"><button class="link" data-action="setup-page" data-id="">\u2039 Setup</button></p>${blocks[page]}`;
+  if (page) return `<h1>${esc(rowsHome.find((r) => r[0] === page)[2])}</h1><p class="back"><button class="act" data-action="setup-page" data-id="">\u2039 Setup</button></p>${blocks[page]}`;
   return `<h1>Setup</h1><p class="sub">The ledger is on this phone only.</p><div class="setlist">${rowsHome.map(([id, icon, title, sub, chip]) => `<button class="setrow" data-action="${chip ? "lock-toggle" : "setup-page"}" data-id="${id}"${chip ? ` aria-pressed="${chip === "On"}"` : ""}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[icon]}</svg><span class="st"><b>${title}</b><small>${esc(sub)}</small></span>${chip ? `<span class="chipsw${chip === "On" ? " on" : ""}">${chip}</span>` : `<svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>`}</button>`).join("")}</div>`;
 }
 
@@ -1810,7 +1809,7 @@ function periodStepper(p) {
 }
 const periodWords = (p) => (p.kind === "range" ? "from " + fullDate(p.from) + " to " + fullDate(p.to) : "in " + periodLabel(p));
 const MONTH3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const pendingNote = (n) => (n > 0 ? `<p class="note"><button class="link" data-action="tab" data-tab="verify">plus ${peso(n)} not verified yet</button></p>` : "");
+const pendingNote = (n) => (n > 0 ? `<p class="note"><button class="act" data-action="tab" data-tab="verify">plus ${peso(n)} not verified yet</button></p>` : "");
 // One small switch at the top, the same on every view: chart or list.
 const modeBar = () => `<div class="modebar"><button data-action="chart-mode" data-mode="${ui.asList ? "chart" : "list"}" aria-label="${ui.asList ? "Show as a chart" : "Show as a list"}">${ui.asList ? "Chart" : "List"}</button></div>`;
 const moneyViews = () => `<div class="seg" role="group" aria-label="What to show">${[["category", "Category"], ["budget", "Budget"], ["account", "Accounts"], ["month", "Trends"]].map(([v, t]) => `<button data-action="chart-view" data-view="${v}" aria-pressed="${ui.view === v}">${t}</button>`).join("")}</div>`;
@@ -1862,7 +1861,7 @@ function viewCards() {
   // Amounts are hidden behind five fixed dots until the eye is tapped, so the dots say nothing about the size. What would show a proportion (the bars) and the small spent/paid lines hide with them.
   const shown = !!ui.cardsShown, DOTS = "\u20b1\u2022\u2022\u2022\u2022\u2022", amt = (html) => (shown ? html : veil(html)), whenShown = (html) => (shown ? html : html ? ghostLine(html) : "");
   const byCash = [...o.money].sort((x, y) => Number(isCash(acct(y.account_id))) - Number(isCash(acct(x.account_id)))), grouped = pocketsUnder(byCash, acct, ui.pocketsOpen ?? {});
-  const ptoggle = (id) => { const n = grouped.counts.get(id), open = !!ui.pocketsOpen?.[id]; return n ? `<button class="link small" data-action="toggle-pockets" data-id="${esc(id)}" aria-expanded="${open}">${n} savings ${n === 1 ? "pocket" : "pockets"} ${open ? "\u25B4" : "\u25BE"}</button>` : ""; };
+  const ptoggle = (id) => { const n = grouped.counts.get(id), open = !!ui.pocketsOpen?.[id]; return n ? `<button class="act small" data-action="toggle-pockets" data-id="${esc(id)}" aria-expanded="${open}">${n} savings ${n === 1 ? "pocket" : "pockets"} ${open ? "\u25B4" : "\u25BE"}</button>` : ""; };
   // Pictures and signs say what words used to: a small arrow up is spent, an arrow down is paid in; a card's debt has a minus.
   const row = (a, main, small) => `<div class="row${M.isPocket(a) ? " pocket" : ""} tapcard"${a.class === "liability" ? ` role="button" tabindex="0" data-action="open-card" data-id="${esc(a.id)}" aria-label="${esc(a.name)}: pay this card"` : ` role="button" tabindex="0" data-action="open-register" data-id="${esc(a.id)}" aria-label="${esc(a.name)}: its history"`}><div class="who">${iconOf(a, 28)}<div>${esc(a.name)}${a.last4 ? `<span class="l4" aria-label="ends in ${esc(a.last4)}"> \u00b7\u00b7${esc(a.last4)}</span>` : ""}${M.isPocket(a) ? "<small>Savings pocket</small>" : ""}${small ? `<small>${small}</small>` : ""}${ptoggle(a.id)}</div></div><div class="amt">${main}</div></div>`;
   const cards = o.cards.length ? o.cards.map((c) => row(acct(c.account_id), amt(`${c.owe > 0 ? "-" : ""}${peso(c.owe)}<span class="sr"> you owe</span>`), whenShown([c.spent > 0 ? flow(true, c.spent) : "", c.paid > 0 ? flow(false, c.paid) : ""].filter(Boolean).join(" "))) ).join("") : `<p class="note">No credit cards yet. In Setup, add an account and choose "Credit card".</p>`;
@@ -1888,12 +1887,10 @@ function viewCards() {
     <div class="dots" aria-hidden="true">${seq.length > 6 ? `<span class="dotcount" data-of="${seq.length}">1 of ${seq.length}</span>` : seq.map((_, i) => `<span${i === 0 ? ' class="on"' : ""}></span>`).join("")}</div>`;   // many cards: a count, not a long row of dots
   return `<h1>Cards</h1>${periodStepper(p)}
     ${netCard}${setAside}
-    <p class="center" style="margin:6px 0 0"><button class="link" data-action="open-networth">Net worth over time</button></p>
+    <div class="actrow"><button class="act" data-action="open-networth">Net worth over time</button><button class="act" data-action="cards-list">${ui.cardsList ? "Show as cards" : "Show as a list"}</button></div>
     ${ui.cardsList ? listView : cardView}
-    <p class="center"><button class="link" data-action="cards-list">${ui.cardsList ? "Show as cards" : "Show as a list"}</button></p>
     ${why(`Paying a card bill is not spending: the purchases were counted when you made them. The amounts spent and paid are for ${esc(periodLabel(p))}.`)}
-    <p><button data-action="open-move" style="width:100%">Move money between accounts</button></p>
-    <p><button class="link" data-action="tab" data-tab="setup" data-page="accounts">Add or change accounts</button></p>`;
+    <div class="actrow"><button class="act" data-action="open-move">Move money</button><button class="act" data-action="tab" data-tab="setup" data-page="accounts">Add or change accounts</button></div>`;
 }
 
 // Who the money went to in the period (Trends): one row per person, the biggest first, one bar each. A person with several accounts (a GCash number and a bank
@@ -1911,7 +1908,7 @@ function whoHtml(from, to, label) {
     return [head, ...subs];
   };
   return `<h2 id="who">Who, ${esc(label)}</h2><p class="note small">Tap one to name it once; every payment to them follows. Moves between your own accounts are not here.</p>
-    ${barCard(shown.flatMap(one))}${rows.length > shown.length ? `<p class="center"><button class="link" data-action="who-all">Show all ${rows.length}</button></p>` : ""}`;
+    ${barCard(shown.flatMap(one))}${rows.length > shown.length ? `<p class="center"><button class="act" data-action="who-all">Show all ${rows.length}</button></p>` : ""}`;
 }
 // The spending line on Trends: one thin line with a faint gradient under it, cut into days, weeks or months by how far it is zoomed. Quick ranges 1M to All;
 // pinch (or Ctrl and scroll) to zoom; drag a finger across to measure a span; tap for one point. The window is the chart's own (`ui.tl`), the figures above it
@@ -2011,7 +2008,7 @@ function viewMoney() {
   }
 
   if (ui.view === "budget") {
-    if (p.kind !== "month") return hero + `<p class="note">Budgets are set per month. Choose a month at the top.</p><p><button class="link" data-action="period-this-month">Show this month</button></p>`;
+    if (p.kind !== "month") return hero + `<p class="note">Budgets are set per month. Choose a month at the top.</p><p><button class="act" data-action="period-this-month">Show this month</button></p>`;
     return viewBudgets(hero, p.month, maps, asOf, nowM, label);
   }
 
@@ -2020,7 +2017,7 @@ function viewMoney() {
     if (!acc.rows.length) return empty();
     const pct = (a) => (acc.total > 0 && a > 0 ? Math.round((a * 1000) / acc.total) / 10 : 0);
     const rows = acc.rows.map((r) => ({ id: r.account_id, action: "spending-account", label: withIcon(S().accounts.find((a) => a.id === r.account_id) ?? { name: r.name }, 24), plain: accountName(r.account_id), amount: r.amount, percent: pct(r.amount) }));
-    if (ui.asList) return done(listTable(["Account", "Spent", "Share"], rows.map((r) => [`<button class="link" data-action="spending-account" data-id="${esc(r.id)}">${esc(accountName(r.id))}</button>`, peso(r.amount), r.percent + "%"]), "Total", acc.total));
+    if (ui.asList) return done(listTable(["Account", "Spent", "Share"], rows.map((r) => [`<button class="act" data-action="spending-account" data-id="${esc(r.id)}">${esc(accountName(r.id))}</button>`, peso(r.amount), r.percent + "%"]), "Total", acc.total));
     return done(shareBars(rows, acc.total));
   }
 
@@ -2033,7 +2030,7 @@ function viewMoney() {
   // A row below zero (a count that found money) is shown last with its minus and no bar, so the rows add up to the total.
   const minus = rows.filter((r) => r.amount < 0).map((r) => ({ id: r.id, action: "spending-category", name: r.label, sub: "brings the total down", fig: "\u2212" + peso(-r.amount) }));
   return hero + barCard(rows.filter((r) => r.amount > 0).map((r) => ({ id: r.id, action: "spending-category", name: r.label, fig: peso(r.amount), pct: Math.max(2, Math.round((r.amount * 100) / top)), label: `${r.name}: ${Math.round((r.amount * 100) / top)}% of the largest` })).concat(minus)) + `
-    <p class="entrylink"><button class="link" data-action="open-entries">See every entry</button></p>` + gapsHtml;
+    <p class="entrylink"><button class="act" data-action="open-entries">See every entry</button></p>` + gapsHtml;
 }
 
 // Each budget as a meter: how much of it is used, with a mark for how far through the month we are.
@@ -2079,7 +2076,7 @@ function viewBudgets(hero, month, maps, asOf, now, label) {
     .sort((a, b) => b.spent * a.budget - a.spent * b.budget || (a.category_id < b.category_id ? -1 : 1));   // most used first
   const unbudgeted = rows.filter((r) => r.budget === null && r.spent > 0).sort((a, b) => b.spent - a.spent);
   if (!budgeted.length) {
-    return hero + `<p class="note">No budgets for ${esc(label)} yet.</p><p><button class="link" data-action="tab" data-tab="budget">Set a budget</button></p>`;
+    return hero + `<p class="note">No budgets for ${esc(label)} yet.</p><p><button class="act" data-action="tab" data-tab="budget">Set a budget</button></p>`;
   }
   const elapsed = month === now ? M.monthElapsedPercent(month, today()) : null;
   const words = (r) => r.grade.level === "critical" ? "Over by " + peso(r.spent - r.budget) : peso(r.budget - r.spent) + " left";
@@ -2121,7 +2118,7 @@ function viewBuffer() {
     <p><button class="primary" data-action="open-bufund" style="margin-top:8px">Add to the buffer</button></p>
     <p><button data-action="sweep-buffer" style="width:100%">Sweep what is left (month end)</button></p>
     <p class="note">${sweepNames.length ? "The sweep fills " + esc(sweepNames.join(", then ")) + ": each one up to its target, and the last one takes the rest." : "Choose which goals the leftover goes to, in order."} It is saved as a draft for you to verify.</p>
-    <p><button class="link" data-action="open-sweep">Choose where the leftover goes</button></p>`;
+    <p><button class="act" data-action="open-sweep">Choose where the leftover goes</button></p>`;
 }
 
 // ---------- trips ----------
@@ -2161,7 +2158,7 @@ function viewScheduled() {
   }));
   const hints = M.scheduleHints(S(), t, planOf(), { dismissed: ledger.settings.schedule_hints_dismissed ?? [] });
   const hintHtml = hints.length ? `<h2>Maybe add</h2><p class="note">Found in your own history and your Pay plan. Nothing is added until you save it.</p>${hints.map((h) => `<div class="row"><div>${esc(h.name)}<small>${h.approx ? "about " : ""}${peso(h.amount)} around the ${esc(ordinal(h.day))}${h.source === "history" ? " \u00b7 paid in " + h.months + " of the last " + h.of + " months" : " \u00b7 from your Pay plan"}</small></div>
-      <div class="amt"><button data-action="hint-add" data-id="${esc(h.key)}">Add</button><br><button class="link" data-action="hint-no" data-id="${esc(h.key)}">Not this</button></div></div>`).join("")}` : "";
+      <div class="amt"><button data-action="hint-add" data-id="${esc(h.key)}">Add</button><br><button class="act" data-action="hint-no" data-id="${esc(h.key)}">Not this</button></div></div>`).join("")}` : "";
   return `<h1>Scheduled</h1><p class="sub">Rent, subscriptions and installment plans. Each payment waits in Verify on its due day.</p>
     ${hintHtml}${list.some((s) => !M.historyOf(S(), s).removed) ? rows : `<p class="note">Nothing scheduled yet. Add rent, a subscription or an installment plan.</p>`}
     <p><button class="primary" data-action="open-schedule-new" style="margin-top:8px">Add a scheduled payment</button></p>`;
@@ -2220,13 +2217,13 @@ function scheduleDetail(id) {
       <p><button data-action="sch-end" data-id="${esc(id)}" style="width:100%">${key("end") ? "Tap again: stop future payments" : "Stop future payments"}</button></p>` : ""}
       <p><button data-action="sch-remove" data-id="${esc(id)}" style="width:100%">${key("remove") ? "Tap again: remove it" : "Remove this payment"}</button></p>
       <p class="note">Removing takes it off this list and discards its drafts that wait in Verify. What you already verified stays.</p></details>
-    ${M.skippedOf(S(), sc, today()).length ? `<h2>Skipped</h2>${M.skippedOf(S(), sc, today()).map((p) => `<div class="row"><div>${esc(sc.kind === "installment" ? "Payment " + p.key : p.key)}<small>${peso(p.amount)}</small></div><div class="amt"><button class="link" data-action="sch-unskip" data-id="${esc(id)}" data-key="${esc(p.key)}">Bring it back</button></div></div>`).join("")}` : ""}
+    ${M.skippedOf(S(), sc, today()).length ? `<h2>Skipped</h2>${M.skippedOf(S(), sc, today()).map((p) => `<div class="row"><div>${esc(sc.kind === "installment" ? "Payment " + p.key : p.key)}<small>${peso(p.amount)}</small></div><div class="amt"><button class="act" data-action="sch-unskip" data-id="${esc(id)}" data-key="${esc(p.key)}">Bring it back</button></div></div>`).join("")}` : ""}
     ${rows.length ? `<h2>History</h2>${rows.map((c) => `<p class="note">${esc(words[c.kind](c))}</p>`).join("")}` : ""}`;
 }
 // The due soon lines on Log: name, amount, days left. Plain words.
 function dueSoonHtml() {
   const list = M.dueSoon(S(), today(), { days: 7 }); if (!list.length) return "";
-  return `<h2>Due soon</h2>${list.slice(0, 3).map((d) => `<div class="row"><div>${esc(d.name)}<small>${esc(M.daysText(d.days))}</small></div><div class="amt">${peso(d.amount)}</div></div>`).join("")}${list.length > 3 ? `<p class="note"><button class="link" data-action="tab" data-tab="scheduled">See all ${list.length}</button></p>` : ""}`;
+  return `<h2>Due soon</h2>${list.slice(0, 3).map((d) => `<div class="row"><div>${esc(d.name)}<small>${esc(M.daysText(d.days))}</small></div><div class="amt">${peso(d.amount)}</div></div>`).join("")}${list.length > 3 ? `<p class="note"><button class="act" data-action="tab" data-tab="scheduled">See all ${list.length}</button></p>` : ""}`;
 }
 
 function viewTrips() {
@@ -2240,7 +2237,7 @@ function viewTrips() {
     const rows = sum.rows.length ? `<table class="tbl"><tr><th>Category</th><th class="n">Spent</th></tr>${sum.rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="n">${peso(r.amount)}</td></tr>`).join("")}</table>` : `<p class="note">Nothing verified on this trip yet.</p>`;
     const days = M.tripDays(t);
     return `<div class="bcard tripcard"><div class="btop"><span class="bname">${esc(t.name)}</span><span class="bval">${sum.budget != null ? pairFig(sum.spent, sum.budget, { over: "over", label: t.name }) : peso(sum.spent)}</span></div>
-      <p class="note">${days ? esc(days) + ` \u00b7 <button class="link" data-action="open-trip-dates" data-id="${esc(t.id)}">Change dates</button>` : `<button class="link" data-action="open-trip-dates" data-id="${esc(t.id)}">Add dates</button>`}</p>${meter}
+      <p class="note">${days ? esc(days) + ` \u00b7 <button class="act" data-action="open-trip-dates" data-id="${esc(t.id)}">Change dates</button>` : `<button class="act" data-action="open-trip-dates" data-id="${esc(t.id)}">Add dates</button>`}</p>${meter}
       ${sum.pending > 0 ? `<p class="note">plus ${peso(sum.pending)} not verified yet</p>` : ""}${rows}
       <p><button data-action="open-trip-detail" data-id="${esc(t.id)}">See the entries</button></p>
       <p><button data-action="use-trip" data-id="${esc(t.id)}" aria-pressed="${on}">${on ? "Tagging new entries \u2713 (tap to stop)" : "Tag new entries with this trip"}</button></p></div>`;
@@ -2254,9 +2251,9 @@ function viewTripDetail(id) {
   const d = M.tripEntries(S(), id), sum = M.tagSummary(S(), id, { categoryMaps: S().categoryMaps, asOf: today() }), days = M.tripDays(d.tag);
   const row = (r) => { const t = r.transaction;
     return `<div class="row"><div>${esc(t.payee || (S().entries.filter((e) => e.transaction_id === t.id && e.category_id).map((e) => categoryName(e.category_id))[0] ?? "Entry"))}<small>${esc(longDate(t.date))}${r.counted ? "" : " \u00b7 not counted as spending"}${t.status === "verified" ? "" : " \u00b7 not verified yet"}${r.how === "hand" ? " \u00b7 added by hand" : ""}</small></div>
-      <div class="amt">${peso(r.amount)}<br><button class="link" data-action="trip-remove" data-id="${esc(t.id)}">Take off this trip</button></div></div>`; };
+      <div class="amt">${peso(r.amount)}<br><button class="act" data-action="trip-remove" data-id="${esc(t.id)}">Take off this trip</button></div></div>`; };
   return `<h1>${esc(d.tag.name)}</h1><p class="sub">${days ? esc(days) + " (both days included)" : "No dates yet."} Total ${peso(sum.spent)}${sum.pending > 0 ? ", plus " + peso(sum.pending) + " not verified yet" : ""}.</p>
-    <p><button class="link" data-action="trip-back">\u2039 All trips</button> \u00b7 <button class="link" data-action="open-trip-dates" data-id="${esc(id)}">${days ? "Change dates" : "Add dates"}</button></p>
+    <p><button class="act" data-action="trip-back">\u2039 All trips</button> \u00b7 <button class="act" data-action="open-trip-dates" data-id="${esc(id)}">${days ? "Change dates" : "Add dates"}</button></p>
     ${d.rows.length ? d.rows.map(row).join("") : `<p class="note">${days ? "No entries on these days yet." : "Nothing on this trip yet."}</p>`}
     ${d.before.length ? `<h2>Before the trip</h2><p class="note">Added by hand, dated before the first day. They count in the total.</p>${d.before.map(row).join("")}` : ""}
     <p><button data-action="open-trip-pick" style="margin-top:10px">Add an entry by hand</button></p>`;
@@ -2280,7 +2277,7 @@ function viewChecks() {
   const counted = weeks.filter((w) => w.amount !== null);
   const wlabel = (w) => "Week to " + longDate(w.week_end);
   let habit;
-  if (!counted.length) habit = `<p class="note">No weekly count yet. <button class="link" data-action="tab" data-tab="checkin">Do the check-in</button></p>`;
+  if (!counted.length) habit = `<p class="note">No weekly count yet. <button class="act" data-action="tab" data-tab="checkin">Do the check-in</button></p>`;
   else if (ui.asList) habit = `<table class="tbl"><tr><th>Week</th><th class="n">Not accounted for</th></tr>${weeks.map((w) => `<tr><td>${esc(wlabel(w))}</td><td class="n">${w.amount === null ? "Not counted" : w.amount < 0 ? peso(-w.amount) + " found" : peso(w.amount)}</td></tr>`).join("")}</table>`;
   else {
     const top = Math.max(1, ...counted.map((w) => Math.max(0, w.amount)));
@@ -2297,7 +2294,7 @@ function viewChecks() {
   return `<h1>Checks</h1>
     <h2>Card reserve</h2>${reserve}
     <h2>Uncategorized by week</h2><p class="note">Money your counts could not explain.</p>${habit}
-    ${counted.length ? `<p><button class="link" data-action="chart-mode" data-mode="${ui.asList ? "chart" : "list"}">${ui.asList ? "Show as chart" : "Show as list"}</button></p>` : ""}
+    ${counted.length ? `<p><button class="act" data-action="chart-mode" data-mode="${ui.asList ? "chart" : "list"}">${ui.asList ? "Show as chart" : "Show as list"}</button></p>` : ""}
     <h2>Weekly questions</h2>${survey}`;
 }
 
@@ -2379,7 +2376,7 @@ function viewGoals() {
     const hidden = g.hidden_by_default && !ui.reveal;
     const acct = S().accounts.find((x) => x.id === g.account_id);
     const name = `<span class="gname">${goalPic(g, 28)}<span>${esc(g.name)}</span></span>`;
-    const slice = acct ? M.goalSlices(S(), acct).get(g.id) : null, shareLink = slice?.shared ? `<button class="link" data-action="open-goal-share" data-id="${esc(g.id)}">Share</button>` : "", shareSub = slice?.shared ? `${(slice.bps / 100).toFixed(slice.bps % 100 ? 1 : 0)}% of ${esc(acct.name)}` : "";
+    const slice = acct ? M.goalSlices(S(), acct).get(g.id) : null, shareLink = slice?.shared ? `<button class="act" data-action="open-goal-share" data-id="${esc(g.id)}">Share</button>` : "", shareSub = slice?.shared ? `${(slice.bps / 100).toFixed(slice.bps % 100 ? 1 : 0)}% of ${esc(acct.name)}` : "";
     const tap = { action: "view-goal", id: g.id }, subLine = g.account_id ? shareSub : "No account yet";
     if (ef) return { name, sub: ef.yours ? "Your figure" : `${ef.formula.months} \u00d7 (Fixed + Needs)`, fig: pairFig(ef.balance, ef.target, { left: "to go", doneWord: "Target reached", label: g.name }), pct: ef.percent, label: ef.percent + "% of the target", ...tap };
     if (isEf) return { name, sub: "The target is 3 \u00d7 (Fixed + Needs) of your budgets. Set those budgets (Menu, Budget), or type your own figure, and it appears here.", fig: peso(p.balance), pct: null, ...tap };
@@ -2409,7 +2406,7 @@ function repairCardHtml() {
   const twice = p.extraCount ? ` ${p.extraCount === 1 ? "One entry was" : p.extraCount + " entries were"} cancelled twice; that is put right too.` : "";
   return `<div class="card" style="margin-bottom:14px"><p><b>${net < 0 ? "Past counts booked " + peso(-net) + " as spending." : net > 0 ? "Past counts hid " + peso(net) + " of spending." : "Past weekly counts are counted as spending."}</b></p>
     <p class="note small">${p.gapCount ? p.gapCount + " weekly " + (p.gapCount === 1 ? "count" : "counts") + " counted a gap you did not explain as money spent, or as money found. You can put " + (p.gapCount === 1 ? "it" : "them") + " right." : "An old mistake can be put right."}${esc(twice)}</p>
-    ${st.note ? `<p class="note small">${esc(st.note)} <button class="link" data-action="copy-repair-check">Copy the repair check</button></p>` : ""}
+    ${st.note ? `<p class="note small">${esc(st.note)} <button class="act" data-action="copy-repair-check">Copy the repair check</button></p>` : ""}
     <p><button class="primary" data-action="open-repair">Look at the repair</button></p></div>`;
 }
 // Held gaps that look like ONE move between two own accounts (a short and an equal extra, counted within 3 days): one tap makes the move and clears both.
@@ -2470,15 +2467,15 @@ function viewCheckin() {
   const questions = done
     ? `<h2 class="today">Weekly questions</h2><button class="choice" data-action="open-survey"><span>Four quick questions</span><span class="bval">${sv ? "Answered \u2713" : "Not answered"}</span></button>` : "";
   const age = M.daysSinceBackup(ledger.settings, today());
-  const backupLine = age === null || age >= 6 ? `<p class="note"><b>One reminder:</b> back up after this check-in. ${esc(backupAgeText())} ${esc(M.picturesNote((S().attachments ?? []).length))} <button class="link" data-action="tab" data-tab="setup" data-page="backup">Back up now</button></p>` : "";
+  const backupLine = age === null || age >= 6 ? `<p class="note"><b>One reminder:</b> back up after this check-in. ${esc(backupAgeText())} ${esc(M.picturesNote((S().attachments ?? []).length))} <button class="act" data-action="tab" data-tab="setup" data-page="backup">Back up now</button></p>` : "";
   const fixable = M.correctable(S(), today()).length;
   const gapNote = fixable && accts.some((a) => { const c = countedThisWeek(a.id); return (c && c.difference !== 0) || (pend[a.id] && pendingGap(a, pend[a.id]).difference !== 0); })
-    ? `<p class="note">A gap can come from a wrong entry. <button class="link" data-action="open-correct">Look through the last two weeks</button></p>` : "";
+    ? `<p class="note">A gap can come from a wrong entry. <button class="act" data-action="open-correct">Look through the last two weeks</button></p>` : "";
   const heldGaps = M.unexplainedGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }), matchedNote = heldGaps.length ? `<p class="note small">${heldGaps.length === 1 ? "1 gap is" : heldGaps.length + " gaps are"} not yet explained. ${heldGaps.length === 1 ? "It is" : "They are"} not counted as spending. Log what explains ${heldGaps.length === 1 ? "it" : "them"} when you can.</p>` : "";   // a quiet reminder, never a block
   const fix = `<h2 class="today">A mistake in something verified?</h2><p class="note">A verified entry is final. Here, and only here, you can cancel one from the last two weeks and enter it again.</p>
     <button class="choice" data-action="open-correct"${fixable ? "" : " disabled"}><span>Put right a verified entry</span><span class="bval">${fixable ? fixable + " can be put right" : "none to put right"}</span></button>`;
   return `<h1>Weekly review</h1>${repairCardHtml()}${pastMovesHtml()}<p class="sub">Week of ${esc(longDate(w.week_start))} to ${esc(longDate(w.week_end))}</p>
-    <p class="note">Open each account, look at the real balance, and type it in. Count them all first; then you see every gap together. ${accts.length ? pairFig(done, accts.length, { fmt: (n) => String(n), tail: "counted", left: "to count", doneWord: "All counted" }) : ""}</p>${backupLine}${(() => { const l = M.picturesBackupLine((S().attachments ?? []).length, ledger.settings.last_pictures_backup_at ?? "", today()); return l ? `<p class="note">${esc(l)} <button class="link" data-action="tab" data-tab="setup" data-page="backup">Back up pictures</button></p>` : ""; })()}${rows}${reviewGapsHtml(accts, pend)}${gapNote}${matchedNote}${fix}${questions}
+    <p class="note">Open each account, look at the real balance, and type it in. Count them all first; then you see every gap together. ${accts.length ? pairFig(done, accts.length, { fmt: (n) => String(n), tail: "counted", left: "to count", doneWord: "All counted" }) : ""}</p>${backupLine}${(() => { const l = M.picturesBackupLine((S().attachments ?? []).length, ledger.settings.last_pictures_backup_at ?? "", today()); return l ? `<p class="note">${esc(l)} <button class="act" data-action="tab" data-tab="setup" data-page="backup">Back up pictures</button></p>` : ""; })()}${rows}${reviewGapsHtml(accts, pend)}${gapNote}${matchedNote}${fix}${questions}
     ${why("A gap you do not explain is kept apart as Not yet explained and is not counted as spending. It never blocks anything.")}`;
 }
 
@@ -2524,9 +2521,9 @@ function viewBudget() {
   const noBudgetCard = noBudget.length ? `<h4 class="sugh">No budget yet</h4>` + barCard(noBudget.map((c) => ({ id: c.id, action: "open-budget", name: esc(c.name), sub: changeNote(c.id, null), fig: "No budget", pct: null }))) : "";
   const moveBtn = per === "payday" && !block.extra && bvNextReg(v, w) && left < 0 ? `<p><button data-action="bv-move-pick" style="width:100%">Move ${pesoW(-left)} to the next payday?</button></p>` : "";
   const moveCard = !review.done && review.plan && !review.nothing ? `<div class="card" style="margin:10px 0;padding:14px 16px"><div class="ct"><span class="ctn">Your Pay plan moves into Budget<small>Look it over, then move it. Your plan stays in your history.</small></span></div><p style="margin:10px 0 0"><button data-action="open-plan-move" style="width:100%">Look it over</button></p></div>` : "";
-  const hiddenList = v.hidden.length ? `<p class="center"><button class="link" data-action="bv-hidden">Hidden (${v.hidden.length})</button></p>${ui.budgetHidden ? barCard(v.hidden.map((h) => ({ name: esc(h.name), sub: "hidden: not in any figure above", fig: peso(h.amount), pct: null }))) : ""}` : "";
+  const hiddenList = v.hidden.length ? `<p class="center"><button class="act" data-action="bv-hidden">Hidden (${v.hidden.length})</button></p>${ui.budgetHidden ? barCard(v.hidden.map((h) => ({ name: esc(h.name), sub: "hidden: not in any figure above", fig: peso(h.amount), pct: null }))) : ""}` : "";
   const weekNote = per === "week" ? `<p class="note small">A guide: each month x 12 / 52, rounded down to the centavo. Rounding leaves ${peso(v.perWeek.roundedAway)} a month out of these figures.</p>` : "";
-  const noPay = !has ? `<p class="center"><button class="link" data-action="bv-paydays">Set your paydays</button></p><p class="note small">Per payday and Per week need your paydays.</p>` : `<p class="center"><button class="link small" data-action="bv-paydays" style="flex-basis:auto;text-align:center">Change paydays</button></p>`;
+  const noPay = !has ? `<p class="center"><button class="act" data-action="bv-paydays">Set your paydays</button></p><p class="note small">Per payday and Per week need your paydays.</p>` : `<p class="center"><button class="act small" data-action="bv-paydays" style="flex-basis:auto;text-align:center">Change paydays</button></p>`;
   const top = v.income.amount ? `<div class="flathero"><div class="eyebrow">${eyebrow}</div><div class="flatfig"><p class="flatbig">${peso(income)}</p></div>
     <div class="pp-whole" role="img" aria-label="${esc(pesoW(block.placed))} of ${esc(pesoW(income))} placed" style="margin:12px 0 8px"><span style="width:${income > 0 ? Math.max(0, Math.min(100, Math.round((block.placed * 100) / income))) : 0}%"></span></div>
     <div class="ct" style="display:flex;justify-content:space-between;gap:10px"><span class="note small" style="margin:0">${esc(src)}</span><span class="amt" style="white-space:nowrap">${esc(leftLine)}</span></div>${v.income.other ? `<p class="note small">Your payslips say ${peso(v.income.other.amount)}; your own figure is used.</p>` : ""}${payLine ? `<p class="note small" id="pay-line">${payLine}</p>` : ""}${prog ? `<p class="note small">${esc(longDate(prog.start))} to ${esc(longDate(prog.end))}. Only verified spending counts.</p>` : ""}</div>` : `<p class="note">${esc(M.NO_INCOME_PROMPT)}</p>`;
@@ -2581,7 +2578,7 @@ function planBudgetPreview(plan) {
 }
 
 
-const emptyMoney = () => `<p class="note">Nothing verified for this month yet. Verified entries appear here.</p><p><button class="link" data-action="tab" data-tab="verify">Go to Verify</button></p>`;
+const emptyMoney = () => `<p class="note">Nothing verified for this month yet. Verified entries appear here.</p><p><button class="act" data-action="tab" data-tab="verify">Go to Verify</button></p>`;
 
 // The two lines under "Photo reader and space" are filled in after the screen is drawn (the phone answers a moment later), straight into their places.
 async function refreshAbout() {
@@ -2736,7 +2733,7 @@ function renderSheet() {
     // Change a tile (name, amount, category), or add one. Saving logs nothing.
     const f = ui.form ?? {}, isNew = !sh.id;
     body = `<h3 class="paytitle"><span>${isNew ? "Add a tile" : "Change this tile"}</span>${isNew ? "" : `<button class="editbtn" data-action="remove-tile" aria-label="Remove this tile"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TRASH}</svg></button>`}</h3>
-      ${ui.confirmRemoveTile ? `<p class="note">Remove this tile? <button class="link" data-action="remove-tile-yes">Yes, remove it</button></p>` : `<p class="note small">This changes the tile on the Log screen. Nothing is logged.</p>`}
+      ${ui.confirmRemoveTile ? `<p class="note">Remove this tile? <button class="act" data-action="remove-tile-yes">Yes, remove it</button></p>` : `<p class="note small">This changes the tile on the Log screen. Nothing is logged.</p>`}
       <label for="pay-name">Name${REQ}</label><input id="pay-name" data-field="name" value="${esc(f.name ?? "")}" autocomplete="off">
       <label for="f-amount">Amount (\u20B1)${REQ}</label><input id="f-amount" data-field="amount" inputmode="decimal" value="${esc(f.amount ?? "")}" autocomplete="off">
       <label>Category${REQ}</label>${categoryPicker(pickCategoriesWith(f.category_id), f.category_id)}
@@ -2756,7 +2753,7 @@ function renderSheet() {
     const r = M.addSchedule(S(), scheduleInput(sh.input), new Date()), past = r.ok ? M.pastPayments(r.state, r.schedule, today()) : [], ans = sh.ans;
     body = `<h3>Already paid?</h3><p class="note">${esc(r.ok ? r.schedule.name : "This payment")} starts in the past. Say which payments you already made, so Verify only shows what is still waiting.</p>
       <div class="card">${past.map((p) => `<div class="pastrow"><span>${esc(longDate(p.due))}<small>${r.ok && r.schedule.kind === "installment" ? "Payment " + esc(p.key) + " \u00b7 " : ""}${peso(p.amount)}</small></span><span class="seg" role="group" aria-label="${esc(longDate(p.due))}">${[["paid", "Paid"], ["open", "Not yet"]].map(([v, t]) => `<button data-action="sch-past-answer" data-id="${v}" data-key="${esc(p.key)}" aria-pressed="${ans[p.key] === v}">${t}</button>`).join("")}</span></div>`).join("")}</div>
-      <p class="center"><button class="link" data-action="sch-past-all">All already paid</button></p>
+      <p class="center"><button class="act" data-action="sch-past-all">All already paid</button></p>
       <p><button class="primary" data-action="save-sch-past"${past.every((p) => ans[p.key]) ? "" : " disabled"}>Save</button></p>`;
   } else if (sh.type === "schedule") {
     body = scheduleDetail(sh.id);
@@ -2818,7 +2815,7 @@ function renderSheet() {
     body = `<h3>${forAdd ? "Choose a bank" : "Which bank is it?"}</h3><div class="banklist" role="list">${rows}
       <button class="bankrow" data-action="pick-bankrow" data-id=""><span class="ico mono" style="width:32px;height:32px;font-size:16px" aria-hidden="true">+</span><span>${forAdd ? "Not in the list (type a name)" : "No bank"}</span></button></div>
       ${shotOnly.length ? `<p class="note">${esc(shotOnly.join(", "))}: its logo could not be found online. Add it once from a screenshot (tap the account's picture in Setup).</p>` : ""}
-      ${missing.filter((n) => !shotOnly.includes(n)).length ? `<p class="note">${ui.logoBusy ? "Loading logos\u2026" : "No logo found online yet for " + esc(missing.filter((n) => !shotOnly.includes(n)).join(", ")) + ". You can add one from a screenshot: tap that account's picture in Setup."} ${ui.logoBusy ? "" : `<button class="link" data-action="retry-logos">Try again</button>`}</p>` : ""}
+      ${missing.filter((n) => !shotOnly.includes(n)).length ? `<p class="note">${ui.logoBusy ? "Loading logos\u2026" : "No logo found online yet for " + esc(missing.filter((n) => !shotOnly.includes(n)).join(", ")) + ". You can add one from a screenshot: tap that account's picture in Setup."} ${ui.logoBusy ? "" : `<button class="act" data-action="retry-logos">Try again</button>`}</p>` : ""}
       ${ui.logoReport && !ui.logoBusy ? `<p class="note small" id="logo-report">${esc(ui.logoReport)}</p>` : ""}`;
   } else if (sh.type === "period") {
     const d = ui.periodDraft, nowY = Number(today().slice(0, 4)), nowM = M.monthOf(today());
@@ -2888,13 +2885,13 @@ function renderSheet() {
       <p class="note">Entries on these days join the trip, except moves between your accounts, card bill payments and templates. You can add or remove entries by hand.</p>
       ${ui.form.error ? `<p id="f-msg" role="alert"><b>${esc(ui.form.error)}</b></p>` : ""}
       <p><button class="primary" id="f-save" data-action="save-trip-dates" style="margin-top:14px" disabled>Save dates</button></p>
-      ${t?.start ? `<p><button class="link" data-action="clear-trip-dates">Take the dates off (start and stop by hand)</button></p>` : ""}`;
+      ${t?.start ? `<p><button class="act" data-action="clear-trip-dates">Take the dates off (start and stop by hand)</button></p>` : ""}`;
   } else if (sh.type === "trip-pick") {
     const member = M.tripMembership(S()), tripName = (tid) => S().tags.find((x) => x.id === tid)?.name;
     const cands = S().transactions.filter((t) => member.get(t.id)?.tag_id !== sh.id).sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id)).slice(0, 40);
     const rowOf = (t) => { const es = S().entries.filter((e) => e.transaction_id === t.id), spend = es.filter((e) => e.category_id && S().categories.find((c) => c.id === e.category_id)?.kind === "expense"), amt = spend.length ? spend.reduce((n, e) => n + e.amount, 0) : es.filter((e) => e.amount > 0).reduce((n, e) => n + e.amount, 0);
       const other = tripName(member.get(t.id)?.tag_id);
-      return `<div class="row"><div>${esc(t.payee || (spend[0] ? categoryName(spend[0].category_id) : "Entry"))}<small>${esc(listDate(t.date))}${spend.length ? "" : " \u00b7 a move or bill payment"}${other ? " \u00b7 now on " + esc(other) : ""}</small></div><div class="amt">${peso(amt)}<br><button class="link" data-action="trip-add" data-id="${esc(t.id)}">Add</button></div></div>`; };
+      return `<div class="row"><div>${esc(t.payee || (spend[0] ? categoryName(spend[0].category_id) : "Entry"))}<small>${esc(listDate(t.date))}${spend.length ? "" : " \u00b7 a move or bill payment"}${other ? " \u00b7 now on " + esc(other) : ""}</small></div><div class="amt">${peso(amt)}<br><button class="act" data-action="trip-add" data-id="${esc(t.id)}">Add</button></div></div>`; };
     body = `<h3>Add an entry to this trip</h3><p class="note">The latest 40 entries that are not on it. Adding one works on any date.</p>${cands.map(rowOf).join("") || `<p class="note">Every entry is already on this trip.</p>`}<p><button data-action="close-sheet">Done</button></p>`;
   } else if (sh.type === "income") {
     body = `<h3>Money received</h3>
@@ -2964,6 +2961,13 @@ function renderSheet() {
       <p class="note small">A figure you type is used everywhere, and is called your figure.</p>
       <p><button class="primary" id="f-save" data-action="save-goal-target" style="margin-top:14px" disabled>Save</button></p>
       ${ef?.yours ? `<p><button data-action="clear-goal-target" style="width:100%">Use the formula</button></p>` : ""}`;
+  } else if (sh.type === "acct-more") {
+    // ONE "More" per account (docs/UI.md): its actions are outlined buttons in one window, never scattered under the row.
+    const a = S().accounts.find((x) => x.id === sh.id), usedIds = new Set(S().entries.map((e) => e.account_id)), zero = a && M.naturalBalance(a, M.countedEntries(S())) === 0;
+    body = !a ? `<p class="note">This account is gone.</p>` : `<h3>${esc(a.name)}</h3>
+      ${isCash(a) && !a.last4 ? "" : `<p><button data-action="edit-last4" data-id="${esc(a.id)}" style="width:100%">${a.last4 ? "Change the last four digits" : "Add the last four digits"}</button></p>`}
+      <p><button data-action="open-icon" data-id="${esc(a.id)}" style="width:100%">Choose a picture</button></p>
+      ${!usedIds.has(a.id) ? `<p><button data-action="remove-account" data-id="${esc(a.id)}" style="width:100%">${ui.confirmRemove === a.id ? "Tap again to remove" : "Remove"}</button></p>` : zero ? `<p><button data-action="hide-account" data-id="${esc(a.id)}" style="width:100%">Hide</button></p>` : `<p class="note small">An account with entries cannot be removed. At a zero balance it can be hidden.</p>`}`;
   } else if (sh.type === "goal-account") {
     const g = S().goals.find((x) => x.id === sh.id);
     body = `<h3>Where does ${esc(g.name)} sit?</h3><p class="note">Choose the account that holds this goal's money. Its balance is the goal's balance.</p>${paidChips(ui.form.account_id)}
@@ -3035,7 +3039,7 @@ function renderSheet() {
         <p class="note">It stays in your list, marked corrected, and a second entry cancels it. Nothing is erased or edited.</p>
         <p class="note">${pc.redo ? "A new draft with the same details waits in Verify. Fix the amount there and verify it." : pick.source === "reconciliation" ? "A count is cancelled only. Log what explains it, like a card payment, then count again." : "This kind of entry is cancelled only. Log the right one again by hand."}</p>
         <p><button class="primary" data-action="do-correct" data-id="${esc(pick.id)}" style="margin-top:14px">Cancel it${pc.redo ? " and enter it again" : ""}</button></p>
-        <p class="center"><button class="link" data-action="back-correct">Back to the list</button></p>`
+        <p class="center"><button class="act" data-action="back-correct">Back to the list</button></p>`
       : `<h3>Which entry was wrong?</h3><p class="note">Verified in the last two weeks.</p>
         ${list.length ? M.groupByDay(list).map((g) => `<h4 class="dayhead">${esc(yearDate(g[0].date))}</h4>${g.map((t) => { const d = describe(t); return `<button class="choice dayrow" data-action="pick-correct" data-id="${esc(t.id)}"><span>${esc(d.title)}</span><span class="bval">${signed(d)}</span></button>`; }).join("")}`).join("") : `<p class="note">Nothing verified in the last two weeks.</p>`}`;   // one heading per day, its entries indented under it
   } else if (sh.type === "survey") {
@@ -3137,12 +3141,12 @@ function renderSheet() {
       ]);
       const max = Math.max(1, ...r.rows.map((x) => sugAmt(x)));
       const list = barCard(r.rows.map((x) => { const why = rowWhy(x), cur = sugAmt(x); return { name: esc(x.name), sub: why ? esc(why) : "", fig: `<b>${x.suggested === null ? "none" : peso(x.suggested)}</b>`, pct: Math.round((cur * 100) / max), label: `${x.name}: suggested ${x.suggested === null ? "none" : peso(x.suggested)}`,
-        extra: !f.sugEdit ? "" : `<div class="sugyours"><label for="y_${esc(x.category_id)}">Yours</label><input id="y_${esc(x.category_id)}" data-field="y_${esc(x.category_id)}" inputmode="decimal" value="${esc(yoursOf(x, f))}" placeholder="\u20B1 a month" autocomplete="off">${x.suggested === null ? "" : `<button class="link" data-action="use-sug" data-id="${esc(x.category_id)}">Use</button>`}</div>` }; }));
+        extra: !f.sugEdit ? "" : `<div class="sugyours"><label for="y_${esc(x.category_id)}">Yours</label><input id="y_${esc(x.category_id)}" data-field="y_${esc(x.category_id)}" inputmode="decimal" value="${esc(yoursOf(x, f))}" placeholder="\u20B1 a month" autocomplete="off">${x.suggested === null ? "" : `<button class="act" data-action="use-sug" data-id="${esc(x.category_id)}">Use</button>`}</div>` }; }));
       const saved = r.saved.length ? barCard(r.saved.map((x) => ({ name: esc(x.name), sub: x.kind === "buffer" ? "overrun buffer, never savings" : x.need ? `Needs ${peso(x.need)} a month` : "", fig: peso(x.amount), pct: null, ...(x.goal_id ? { action: "open-goal-monthly", id: x.goal_id } : {}) }))) : "";
-      body = `<h3>Suggest a budget</h3><p class="note">Nothing is saved until you confirm. Suggestions are rounded to the nearest \u20B150; typing a figure pins it as yours.${r.history.used === "starter" && ledger.settings.starter_rent != null ? ` Rent: ${peso(ledger.settings.starter_rent)} <button class="link" data-action="change-rent">Change</button>` : ""}</p>
-        ${top}<p class="center"><button class="link" data-action="open-targets">Change the 50 / 30 / 20 split</button></p>
-        <h4 class="sugh">Spending, each a month</h4>${list}<p class="center"><button class="link" data-action="sug-edit">${f.sugEdit ? "Hide my own figures" : "Type my own figures"}</button></p>
-        ${saved ? `<h4 class="sugh">Saved and set aside</h4>${saved}<p class="center"><button class="link" data-action="open-shares">Percentages for Add to savings</button></p>` : ""}
+      body = `<h3>Suggest a budget</h3><p class="note">Nothing is saved until you confirm. Suggestions are rounded to the nearest \u20B150; typing a figure pins it as yours.${r.history.used === "starter" && ledger.settings.starter_rent != null ? ` Rent: ${peso(ledger.settings.starter_rent)} <button class="act" data-action="change-rent">Change</button>` : ""}</p>
+        ${top}<p class="center"><button class="act" data-action="open-targets">Change the 50 / 30 / 20 split</button></p>
+        <h4 class="sugh">Spending, each a month</h4>${list}<p class="center"><button class="act" data-action="sug-edit">${f.sugEdit ? "Hide my own figures" : "Type my own figures"}</button></p>
+        ${saved ? `<h4 class="sugh">Saved and set aside</h4>${saved}<p class="center"><button class="act" data-action="open-shares">Percentages for Add to savings</button></p>` : ""}
         <p class="note" id="sug-left">${r.short > 0 ? `<b>Short by ${peso(r.short)}.</b> Fixed, needs and savings floor: ${peso(r.income.amount + r.short)}. Income: ${peso(r.income.amount)}.` : `Funded in order: fixed, needs, savings floor, buffer, then wants (up to ${peso(r.funding.wantsCap)}). Left: <b>${peso(r.unallocated)}</b>.`}${r.trimmed.length ? ` Rounding would have gone over your income, so ${esc(r.trimmed.map((t) => `${t.name} was lowered by ${peso(t.by)}`).join(", "))}.` : ""}</p>
         <p><button data-action="use-all-sug" style="width:100%">Use all suggestions</button></p>
         <p><button class="primary" data-action="review-sug">Confirm</button></p>`;
@@ -3165,7 +3169,7 @@ function renderSheet() {
     const pm = payslipMarks(f);
     body = f.items ? slipFormHtml(f, sh, pm) : `<h3>${sh.editId ? "Change this payslip" : "Add a payslip"}</h3>
       ${sh.scanBlob ? `${f.fromPdf ? `<details class="pagepeek" data-keep="pg"${ui.pdet?.pg === false ? "" : " open"}><summary><span class="pg-show">Show the page</span><span class="pg-hide">Hide the page</span></summary><button class="shotbtn enlarge" data-action="view-shot" aria-label="Open the page full size to compare it with the figures"><img class="shot" src="${esc(pendingPhoto?.url ?? "")}" alt="Your payslip, every page" style="max-height:32vh;object-fit:contain"></button></details>` : `<button class="shotbtn enlarge" data-action="view-shot" aria-label="Open the photo full size to compare it with the figures"><img class="shot" src="${esc(pendingPhoto?.url ?? "")}" alt="Your payslip photo" style="max-height:18vh;object-fit:contain"></button>`}${(f.notes ?? []).map((n) => `<p class="note small">${esc(n)}</p>`).join("")}` : ""}
-      <p id="p-match" hidden><button class="link" data-action="open-lines">Matches paper. Tap to open.</button></p>
+      <p id="p-match" hidden><button class="act" data-action="open-lines">Matches paper. Tap to open.</button></p>
       <div id="p-lines">
       <details class="tot" data-keep="e"${open("e")}><summary><span class="tl">Total earnings<small>Tap to see the lines</small></span><b id="p-tot-e" class="tv"></b><span class="tchev" aria-hidden="true">\u203A</span></summary>
         <p class="note small" id="chk-e" hidden></p>
@@ -3190,8 +3194,8 @@ function renderSheet() {
         <label for="p-words">Net pay in words, if written (optional)</label><input id="p-words" data-field="words" value="${esc(f.words ?? "")}" autocomplete="off" autocapitalize="off">
       </details>
       <div id="p-flags" role="status"></div>
-      <p id="p-fold" hidden><button class="link" data-action="fold-lines">Checked against the photo? Fold the fields.</button></p>
-      ${f.layoutText ? `<p class="note small"><button class="link" data-action="copy-layout">Copy layout report</button> It hides every digit and every name.</p>` : ""}
+      <p id="p-fold" hidden><button class="act" data-action="fold-lines">Checked against the photo? Fold the fields.</button></p>
+      ${f.layoutText ? `<p class="note small"><button class="act" data-action="copy-layout">Copy layout report</button> It hides every digit and every name.</p>` : ""}
       <p class="note">Do not type any employee, tax or account number.</p>
       ${REQNOTE}
       <div id="p-ask" class="slipask"${sh.askDraft && pm.problems.flags.length ? "" : " hidden"}><p><b id="p-askq">The figures differ${pm.problems.gap ? " by " + esc(peso(pm.problems.gap)) : ""}. Save as a draft to check later?</b></p><p class="note small">It waits in Verify and is not income until it is verified.</p>
@@ -3247,11 +3251,11 @@ function renderSheet() {
         ${ownBlock}${needAcct}${notInBlock}${proofBlock}${st.leftOut.moves + st.leftOut.moneyIn ? `<p class="note small" id="stm-left">${[st.leftOut.moves ? `${st.leftOut.moves} ${st.leftOut.moves === 1 ? "move" : "moves"} between your own accounts` : "", st.leftOut.moneyIn ? `${st.leftOut.moneyIn} money in` : ""].filter(Boolean).join(" and ")} left out: not spending.</p>` : ""}
         ${unsure.length ? `<label>Which is it?</label><p class="note small">Money out that does not say what it was, one row per person. Each waits until you choose.</p>${M.unsureByPerson(unsure).map((g) => { const all = (v) => g.ids.every((i) => f.choice?.[i] === v), n = g.ids.length;
           return `<div class="mrow mimp ask"><span class="mn">${esc(g.name)}<small>${n} ${n === 1 ? "line" : "lines"} \u00b7 ${peso(g.total)}</small></span><span class="chips"><button class="chip" data-action="stm-choose" data-id="${esc(g.key)}" data-pick="spending" aria-pressed="${all("spending")}">Spending</button><button class="chip" data-action="stm-choose" data-id="${esc(g.key)}" data-pick="not" aria-pressed="${all("not")}">Not spending</button></span>
-          ${n > 1 ? `<button class="link small" data-action="stm-show" data-id="${esc(g.key)}">${f.open?.[g.key] ? "Hide the lines" : `Show the ${n} lines`}</button>${f.open?.[g.key] ? `<div class="stmlines">${g.lines.map((x) => `<div class="mrow mline mimp"><span class="mn">${esc(yearDate(x.dateRaw))}</span><span class="mv">${peso(x.amount)}</span></div>`).join("")}</div>` : ""}` : `<small class="hiddennote">${esc(yearDate(g.lines[0].dateRaw))}</small>`}</div>`; }).join("")}` : ""}` : "";
+          ${n > 1 ? `<button class="act small" data-action="stm-show" data-id="${esc(g.key)}">${f.open?.[g.key] ? "Hide the lines" : `Show the ${n} lines`}</button>${f.open?.[g.key] ? `<div class="stmlines">${g.lines.map((x) => `<div class="mrow mline mimp"><span class="mn">${esc(yearDate(x.dateRaw))}</span><span class="mv">${peso(x.amount)}</span></div>`).join("")}</div>` : ""}` : `<small class="hiddennote">${esc(yearDate(g.lines[0].dateRaw))}</small>`}</div>`; }).join("")}` : ""}` : "";
       body = `<h3>Multiple transactions at once</h3>${stBlock}${st ? `<p><button class="chip wide" data-action="stm-keep" aria-pressed="${f.keep !== false}">Keep this statement to prove your months</button></p><p class="note small">It stays on this phone, in Setup, Statements.</p>` : ""}${orderLine}
         ${f.statement?.pocket ? `<p class="note" id="stm-pocket"><b>This is a Go Save pocket, not your main ${esc(f.statement.bank ?? "bank")} account.</b> ${f.newPocket ? `A pocket called \u201C${esc(newPocketAccount(f.newPocket).name.replace(" (new)", ""))}\u201D is made for it when you tap Add. Rename it in Setup once you know which pocket it is.` : "Choose the savings pocket it is from."}</p>` : ""}<label>${f.statement ? "Which account is this statement from?" : "Paid from"}${f.autoAccount && f.account_id === f.autoAccount ? ` <span class="labelnote">chosen for you</span>` : ""}${REQ}</label>${paidChips(f.account_id, !!f.statement, f.newPocket ? [newPocketAccount(f.newPocket)] : [])}${REQNOTE}${f.statement && f.linkedCount > 1 && !f.account_id ? `<p class="note small">More than one of your accounts is linked to ${esc(f.statement.bank ?? "this bank")}. Choose the one this statement is from.</p>` : ""}
         ${p ? `<p class="note" id="imp-count"><b>${p.lines.length} ${p.lines.length === 1 ? "line" : "lines"}</b> to add as drafts${waiting ? `. <b>${waiting} ${waiting === 1 ? "line needs" : "lines need"} your choice</b>: left out until you choose` : ""}${p.duplicates.length ? `; ${p.duplicates.length} already logged, left out${f.statement && f.keep !== false ? " and marked on statement" : ""}` : ""}${p.undated.length + f.notRead.length ? `; ${p.undated.length + f.notRead.length} not read` : ""}.</p>
-          ${p.repeats.length ? `<p class="note small" id="imp-repeats">${p.repeats.length} repeated ${p.repeats.length === 1 ? "line" : "lines"} ${f.repeatsIn ? "added" : "left out"} \u00b7 <button class="link small" data-action="imp-repeats">${f.repeatsIn ? "Leave out" : p.repeats.length === 1 ? "Add it" : "Add them"}</button></p>` : ""}
+          ${p.repeats.length ? `<p class="note small" id="imp-repeats">${p.repeats.length} repeated ${p.repeats.length === 1 ? "line" : "lines"} ${f.repeatsIn ? "added" : "left out"} \u00b7 <button class="act small" data-action="imp-repeats">${f.repeatsIn ? "Leave out" : p.repeats.length === 1 ? "Add it" : "Add them"}</button></p>` : ""}
           <div class="mlist" id="imp-lines">${p.lines.slice(0, 12).map((l) => `<div class="mrow mline mimp"><span class="mn">${esc(listDate(l.date))} \u00b7 ${esc(l.name)}<small>${esc(categoryName(l.category_id))} (${esc(l.how)})</small></span><span class="mv">${peso(l.amount)}</span></div>`).join("")}${p.lines.length > 12 ? `<div class="mrow mline mimp"><span class="mn">and ${p.lines.length - 12} more</span></div>` : ""}</div>
           ${f.notRead.length ? `<details><summary>Not read (${f.notRead.length})</summary>${f.notRead.slice(0, 20).map((l) => `<p class="note">${esc(l)}</p>`).join("")}</details>` : ""}
           ${acct && acct.id !== NEW_POCKET ? `<p class="note">Lines dated before you added ${esc(acct.name)} are history only: they do not change its balance.</p>` : ""}
@@ -3292,7 +3296,7 @@ function renderSheet() {
       <label for="f-date">Date</label><input id="f-date" data-field="date" type="date" value="${esc(f.date)}">
       <label for="f-payee">${move ? "Name" : into ? "From" : "Paid to"} (optional)</label><input id="f-payee" data-field="payee" value="${esc(f.payee ?? "")}" autocomplete="off">
       ${move ? moveFields(f) : `<label>Category${REQ}</label>${into ? categoryPicker(incomeCategories(), f.category_id, "cat", "pick-cat", "Choose what it is") : categoryPicker(pickCategoriesWith(f.category_id), f.category_id)}`}
-      ${into || move ? "" : `<p><button class="link" data-action="toggle-split" aria-pressed="${f.split === true}">${f.split ? "Do not split" : "Split receipt"}</button></p>
+      ${into || move ? "" : `<p><button class="act" data-action="toggle-split" aria-pressed="${f.split === true}">${f.split ? "Do not split" : "Split receipt"}</button></p>
       ${f.split ? `<p class="note small">One receipt, two kinds of spending, like groceries and cleaning supplies.</p><label>Second category</label>${categoryPicker(pickCategories().filter((c) => c.id !== f.category_id), f.split_cat, "split", "pick-split", "Choose a second category")}
         <label for="f-split">Its amount (\u20B1)</label><input id="f-split" data-field="split_amt" inputmode="decimal" value="${esc(f.split_amt ?? "")}" autocomplete="off">
         <p class="note" id="split-note" role="status"></p>` : ""}`}
@@ -3312,14 +3316,14 @@ function renderSheet() {
       const rows = [["Date", fullDate(t.date)], ["Status", t.status === "draft" ? "Draft, waiting in Verify" : "Verified"], ["How it was entered", source],
         ...(d.kind === "split" ? d.parts.map((x) => [x.name, peso(x.amount)]) : d.category_id ? [["Category", categoryName(d.category_id)]] : []),
         ...(d.kind === "transfer" ? [["Between", d.detail], ...(M.feeOf(S(), t.id).amount ? [["Fee", peso(M.feeOf(S(), t.id).amount)]] : []), ...(M.foreignOf(S(), t.id) ? [["Foreign amount", foreignText(M.foreignOf(S(), t.id))]] : [])] : []), ...(t.memo ? [["What was said or noted", "\u201C" + t.memo + "\u201D"]] : [])];
-      body = `${sh.back ? `<p><button class="link" data-action="spending-back">Back to the spending list</button></p>` : ""}<h3>${esc(d.title)}</h3><p class="bigamt">${peso(d.amount)}</p>
+      body = `${sh.back ? `<p><button class="act" data-action="spending-back">Back to the spending list</button></p>` : ""}<h3>${esc(d.title)}</h3><p class="bigamt">${peso(d.amount)}</p>
         <dl class="txdl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}${acct ? `<dt>${d.kind === "income" ? "Arrived in" : "Paid from"}</dt><dd class="who">${withIcon(acct, 22)}</dd>` : ""}</dl>
         ${shot ? `<p><button class="primary" data-action="open-photo" data-id="${esc(shot.id)}">See the photo</button></p>` : ""}`;
     }
   } else if (sh.type === "payslips") {
     const [pf, pt] = periodBounds(period());
     const loose = M.incomeWithoutPayslip(S(), { from: pf, to: pt });
-    body = `<h3>Payslips, ${esc(periodLabel(period()))}</h3>${payslipRows({ from: pf, to: pt })}${loose.length ? `<h3>Added without a payslip</h3><p class="note">These count as income but have no payslip, for example a payslip photo saved as plain pay. Remove one if it is a double.</p>${loose.map((r) => `<div class="row"><div>${esc(r.payee || "Pay received")}<small>${esc(fullDate(r.date))}${r.account_id ? " · into " + esc(accountName(r.account_id)) : ""}</small></div><div class="amt">${peso(r.amount)}</div></div>${ui.confirmDelInc === r.transaction_id ? `<p class="note">Remove this entry? ${peso(r.amount)} also comes out of ${esc(r.account_id ? accountName(r.account_id) : "the account")}. <button class="link" data-action="del-inc-yes" data-id="${esc(r.transaction_id)}">Yes, remove it</button></p>` : `<p class="note"><button class="link" data-action="del-inc" data-id="${esc(r.transaction_id)}">Remove this entry</button></p>`}`).join("")}` : ""}`;
+    body = `<h3>Payslips, ${esc(periodLabel(period()))}</h3>${payslipRows({ from: pf, to: pt })}${loose.length ? `<h3>Added without a payslip</h3><p class="note">These count as income but have no payslip, for example a payslip photo saved as plain pay. Remove one if it is a double.</p>${loose.map((r) => `<div class="row"><div>${esc(r.payee || "Pay received")}<small>${esc(fullDate(r.date))}${r.account_id ? " · into " + esc(accountName(r.account_id)) : ""}</small></div><div class="amt">${peso(r.amount)}</div></div>${ui.confirmDelInc === r.transaction_id ? `<p class="note">Remove this entry? ${peso(r.amount)} also comes out of ${esc(r.account_id ? accountName(r.account_id) : "the account")}. <button class="act" data-action="del-inc-yes" data-id="${esc(r.transaction_id)}">Yes, remove it</button></p>` : `<p class="note"><button class="act" data-action="del-inc" data-id="${esc(r.transaction_id)}">Remove this entry</button></p>`}`).join("")}` : ""}`;
   } else if (sh.type === "payee") {
     const key = sh.id, months = M.payeeMonths(S(), key, { endMonth: M.monthOf(today()), months: 6 }), n = M.payeeCount(S(), key), max = Math.max(1, ...months.map((x) => x.amount));
     const year = M.spendingByPayee(S(), {}, { from: today().slice(0, 4) + "-01-01", to: today() }).find((r) => r.members.some((m) => m.key === key));
@@ -3331,7 +3335,7 @@ function renderSheet() {
       <label>Category${REQ}</label>${categoryPicker(cats, ui.form.category_id)}${REQNOTE}
       <p class="note small">Give two numbers the same name and they show as one person. ${n > 1 ? `All ${n} payments` : "This payment"} to ${esc(sh.label)} leave Uncategorized, and the next statement does the same by itself.</p>
       <p><button class="primary" id="f-save" data-action="payee-save"${ui.form.category_id ? "" : " disabled"}>${n > 1 ? `Save for all ${n}` : "Save"}</button></p>
-      <p class="center"><button class="link" data-action="close-sheet">Not now</button></p>`;
+      <p class="center"><button class="act" data-action="close-sheet">Not now</button></p>`;
   } else if (sh.type === "register") {
     const a = S().accounts.find((x) => x.id === sh.id), r = M.accountRegister(S(), sh.id), shown = !!ui.cardsShown, DOTS = "\u20b1\u2022\u2022\u2022\u2022\u2022", m = (c) => (shown ? peso(c) : DOTS), card = a?.class === "liability";
     if (!r) { body = `<p class="note">This account is gone.</p>`; }
@@ -3339,9 +3343,9 @@ function renderSheet() {
       const newest = [...r.rows].reverse(), more = newest.length > (sh.limit ?? 40), list = newest.slice(0, sh.limit ?? 40), onStm = M.onStatementIds(S());
       body = `<h3 style="margin:0">${esc(a.name)}</h3><p class="note" style="margin:2px 0 0">${card ? "You owe now" : "Balance now"}</p>
         <div class="hero" style="margin:0 0 6px">${shown ? peso(r.closing) : `<span aria-label="Amount hidden">${DOTS}</span>`}</div>
-        ${shown ? "" : `<p class="center"><button class="link" data-action="cards-eye">Show amounts</button></p>`}
+        ${shown ? "" : `<p class="center"><button class="act" data-action="cards-eye">Show amounts</button></p>`}
         <div class="regl">${list.length ? list.map((x) => { const d = describe(x.transaction); return `<div class="row"><div>${esc(d.title)}<small>${esc(listDate(x.transaction.date))}${x.transaction.status === "draft" ? " · draft" : ""}${x.pending ? " · pending" : ""}${onStm.has(x.transaction.id) ? " · on statement" : ""}</small></div><div class="amt">${x.change < 0 ? "-" : "+"}${shown ? peso(Math.abs(x.change)) : DOTS}<small>${m(x.balance)}</small></div></div>`; }).join("") : `<p class="note">Nothing on this account yet.</p>`}
-        ${more ? `<p class="center"><button class="link" data-action="register-more">Show older entries</button></p>` : `<div class="row"><div>Opening balance<small>${esc(listDate(r.opening_date))}</small></div><div class="amt">${m(r.opening)}</div></div>`}</div>
+        ${more ? `<p class="center"><button class="act" data-action="register-more">Show older entries</button></p>` : `<div class="row"><div>Opening balance<small>${esc(listDate(r.opening_date))}</small></div><div class="amt">${m(r.opening)}</div></div>`}</div>
         <p class="note small">${card ? "A purchase raises what you owe; a payment lowers it." : "Each line shows how the balance moved and what it was right after."}</p>`;
     }
   } else if (sh.type === "cardpay") {
@@ -3356,17 +3360,17 @@ function renderSheet() {
         <p class="note small" style="margin:0 0 12px">${st?.from === "statement" ? `A statement you kept shows ${shown ? peso(st.balance) : DOTS}; it is used instead of what you type.` : "A statement you keep fills this by itself and wins over what you type."}</p>
         <p id="cd-msg" class="note" role="alert"></p>
         <p style="margin:6px 0 8px"><button class="primary" id="f-save" data-action="card-details-save" style="width:100%">Save</button></p>
-        <p style="text-align:center;margin:0"><button class="link" data-action="card-back">Back</button></p>`;
+        <p style="text-align:center;margin:0"><button class="act" data-action="card-back">Back</button></p>`;
     } else {
       const sdate = M.lastStatementDate(card?.statement_day, today()), sword = sdate ? `Statement ${MONTH3[Number(sdate.slice(5, 7)) - 1]} ${Number(sdate.slice(8, 10))}` : "";
       const facts = [st ? (sword ? `${sword} ${shown ? peso(st.balance) : DOTS}` : `Last statement ${shown ? peso(st.balance) : DOTS}`) : sword, due ? dueWords(due) : ""].filter(Boolean).join(" · ");
       body = `<h3 style="margin:0 0 2px">${esc(card?.name ?? "")}</h3><p class="note" style="margin:0 0 10px">You owe now</p><div class="hero" style="margin:0 0 4px">${shown ? peso(owe) : `<span aria-label="Amount hidden">${DOTS}</span>`}</div>
-        <p class="note small" style="margin:0 0 12px">${facts ? `${esc(facts)} · ` : ""}<button class="link small" data-action="card-details">${facts ? "Change" : "Add the statement and due days"}</button> · <button class="link small" data-action="open-register" data-id="${esc(sh.id)}">History</button></p>
+        <p class="note small" style="margin:0 0 12px">${facts ? `${esc(facts)} · ` : ""}<button class="act small" data-action="card-details">${facts ? "Change" : "Add the statement and due days"}</button> · <button class="act small" data-action="open-register" data-id="${esc(sh.id)}">History</button></p>
         <label>Paid from${REQ}</label>${accountPicker(accountsFor(null).filter((a) => a.class === "asset"), ui.form.from_id, "pick-from", "from", "Choose an account")}${ui.form.from_id && ui.form.from_id === M.payerFor(S(), sh.id) ? `<p class="note small" style="margin:4px 0 8px">This account backs this card.</p>` : ""}
         <label for="f-amount">Amount (₱)${REQ}</label><input id="f-amount" data-field="amount" inputmode="decimal" autocomplete="off" value="${esc(ui.form.amount ?? "")}" placeholder="How much you paid" style="margin-bottom:10px">
         ${REQNOTE}<p class="note small" style="margin:0 0 6px">This is a payment to your card, not spending. It waits in Verify.</p>
         <p style="margin:6px 0 8px"><button class="primary" id="f-save" data-action="card-pay" style="width:100%" disabled>Pay this card</button></p>
-        <p style="text-align:center;margin:0"><button class="link" data-action="close-sheet">Not now</button></p>`;
+        <p style="text-align:center;margin:0"><button class="act" data-action="close-sheet">Not now</button></p>`;
     }
   } else if (sh.type === "last4") {
     const a = S().accounts.find((x) => x.id === sh.id);
@@ -3422,7 +3426,7 @@ function renderSheet() {
     body = `<h3>Net worth over time</h3>
       <p class="note">What is in your accounts minus what the cards are owed, at the end of each month.</p>
       ${last ? `<div class="flathero"><div class="eyebrow">Today</div><div class="flatfig"><span class="flatbig">${fig(last.net)}</span></div></div>${series.change != null ? `<p class="note">${shown ? `${sign(series.change)} since ${esc(mlabel(pts[0].date))}` : "Amounts are hidden."}</p>` : ""}` : `<p class="note">No accounts yet.</p>`}
-      ${shown ? "" : `<p class="center"><button class="link" data-action="nw-show">Show amounts</button></p>`}
+      ${shown ? "" : `<p class="center"><button class="act" data-action="nw-show">Show amounts</button></p>`}
       <div class="seg" role="group" aria-label="How far back">${[["6", "6M"], ["12", "1Y"], ["all", "All"]].map(([v, t]) => `<button data-action="nw-range" data-id="${v}" aria-pressed="${range === v}">${t}</button>`).join("")}</div>
       ${pts.length < 2 ? `<p class="note">Not enough history yet: it fills in as months pass.</p>` : chart}
       ${pts.length ? `<table class="tbl"><thead><tr><th>Month</th><th>You have</th><th>Cards owed</th><th>Net</th></tr></thead><tbody>${[...pts].reverse().map((p, i) => `<tr><td>${esc(i === 0 ? "Today" : mlabel(p.date))}</td><td>${fig(p.assets)}</td><td>${fig(p.owed)}</td><td>${fig(p.net)}</td></tr>`).join("")}</tbody></table>` : ""}`;
@@ -3501,7 +3505,7 @@ function renderSheet() {
       <p><button data-action="welcome-skip" style="width:100%">Skip for now</button></p>`;
   } else if (sh.type === "stmonth") {
     const acct = S().accounts.find((a) => a.id === sh.account_id), m = M.monthSummary(S(), sh.account_id, sh.month);
-    if (!m) body = `<h3>${monthLabel(sh.month)}</h3><p class="note">No statement for this month.</p><p style="text-align:center"><button class="link" data-action="close-sheet">Close</button></p>`;
+    if (!m) body = `<h3>${monthLabel(sh.month)}</h3><p class="note">No statement for this month.</p><p style="text-align:center"><button class="act" data-action="close-sheet">Close</button></p>`;
     else {
       const r = m.row, ok = stmGood(r), card = acct?.class === "liability";
       body = `<h3 style="margin:0 0 4px">${monthLabel(sh.month)}</h3><p class="note" style="margin:0 0 10px">${esc(acct?.name ?? "")}</p>
@@ -3514,11 +3518,11 @@ function renderSheet() {
         <div class="row"><div>Left out for now<small>${[m.leftOut.moves ? `${m.leftOut.moves} ${m.leftOut.moves === 1 ? "move" : "moves"}` : "", m.leftOut.moneyIn ? `${m.leftOut.moneyIn} money in` : "", m.leftOut.unsure ? `${m.leftOut.unsure} unsure` : ""].filter(Boolean).join(", ") || "nothing"}</small></div><div class="amt">${peso(m.leftOut.total)}</div></div>
         ${(() => { const slips = M.matchPayslips(S()).filter((x) => x.line.account_id === sh.account_id && x.line.date.slice(0, 7) === sh.month), prs = M.pairMoves(S()).pairs.filter((q) => (q.out.account_id === sh.account_id && q.out.date.slice(0, 7) === sh.month) || (q.in.account_id === sh.account_id && q.in.date.slice(0, 7) === sh.month)); const t = [slips.length ? `${slips.length} of the money in ${slips.length === 1 ? "is" : "are"} your payslip` : "", prs.length ? `${prs.length} ${prs.length === 1 ? "move is" : "moves are"} paired with another account` : ""].filter(Boolean).join(". "); return t ? `<p class="note small" style="margin:8px 0 0">${STM_OK} ${esc(t)}.</p>` : ""; })()}
         <p style="margin:16px 0 8px"><button class="primary" id="f-save" data-action="st-accept" style="width:100%">Accept this month</button></p>` : ""}
-        <p style="margin:${ok && !r.accepted ? 0 : 14}px 0 0;text-align:center"><button class="link" data-action="close-sheet">${ok && !r.accepted ? "Not now" : "Close"}</button></p>`;
+        <p style="margin:${ok && !r.accepted ? 0 : 14}px 0 0;text-align:center"><button class="act" data-action="close-sheet">${ok && !r.accepted ? "Not now" : "Close"}</button></p>`;
     }
   } else if (sh.type === "stcompare") {
     const d = M.statementDifference(S(), sh.account_id, sh.month), acct = S().accounts.find((a) => a.id === sh.account_id);
-    if (!d.ok) body = `<h3>${monthLabel(sh.month)}</h3><p class="note">${esc(d.reason)}</p><p style="text-align:center"><button class="link" data-action="close-sheet">Close</button></p>`;
+    if (!d.ok) body = `<h3>${monthLabel(sh.month)}</h3><p class="note">${esc(d.reason)}</p><p style="text-align:center"><button class="act" data-action="close-sheet">Close</button></p>`;
     else {
       const firstMonth = M.proveMonths(S(), sh.account_id)[0]?.month === sh.month, st = firstMonth && d.carried !== 0 ? M.startFromStatement(S(), sh.account_id) : null;
       const same = Math.sign(d.explained) === Math.sign(d.difference), pct = d.difference === 0 || !same ? 0 : Math.max(0, Math.min(100, Math.round((100 * Math.abs(d.explained)) / Math.abs(d.difference))));
@@ -3528,13 +3532,13 @@ function renderSheet() {
         <div class="row"><div><b>Difference</b><small>${d.difference === 0 ? "they agree" : d.card ? (d.difference < 0 ? "your ledger owes more" : "your ledger owes less") : d.difference > 0 ? "your ledger is higher" : "your ledger is lower"}</small></div><div class="amt"><b>${peso(Math.abs(d.difference))}</b></div></div></dl>
         ${d.difference === 0 ? "" : `<div class="stbar" role="img" aria-label="${pct} percent of the difference is explained by the lines"><i style="width:${pct}%"></i></div><p class="note small" style="margin:0 0 6px">${d.carried === 0 ? "The lines below explain all of it." : d.explained === 0 ? "None of it comes from lines in this month: it is carried from before." : `The lines below explain ${peso(Math.abs(d.explained))} of it. ${peso(Math.abs(d.carried))} is carried from before this month.`}</p>`}
         <p class="note" style="margin:10px 0 2px"><b>In the statement, not in your ledger</b></p>
-        ${d.missing.map((m) => `<div class="row" style="align-items:center"><div>${esc(m.line.payee || m.line.text)}<small>${esc(listDate(m.line.date))}${tail(m)}</small></div><div class="amt">${peso(m.line.amount)}${m.action !== "move" && m.action !== "payment" ? `<br><button class="link" data-action="st-adddraft" data-line="${esc(m.line.id)}">Add as draft</button>` : ""}</div></div>`).join("") || `<div class="row"><div>Nothing</div></div>`}
+        ${d.missing.map((m) => `<div class="row" style="align-items:center"><div>${esc(m.line.payee || m.line.text)}<small>${esc(listDate(m.line.date))}${tail(m)}</small></div><div class="amt">${peso(m.line.amount)}${m.action !== "move" && m.action !== "payment" ? `<br><button class="act" data-action="st-adddraft" data-line="${esc(m.line.id)}">Add as draft</button>` : ""}</div></div>`).join("") || `<div class="row"><div>Nothing</div></div>`}
         <p class="note" style="margin:10px 0 2px"><b>In your ledger, not in the statement</b></p>
         ${d.extra.map((m) => `<div class="row"><div>${esc(m.payee || "Entry")}<small>${esc(listDate(m.date))}</small></div><div class="amt">${peso(Math.abs(m.amount))}</div></div>`).join("") || `<div class="row"><div>Nothing</div></div>`}
         ${st?.ok ? `<p class="note small" style="margin:10px 0 4px">The rest is the starting balance. This statement opens at ${peso(st.opening)} on ${esc(longDate(st.from))}. ${esc(acct?.name ?? "The account")} started at ${peso(acct?.opening_balance ?? 0)}.</p>
           <p style="margin:12px 0 8px"><button class="primary" id="f-save" data-action="st-start" style="width:100%">${ui.confirmStart ? `Tap again: ${esc(acct?.name ?? "it")} will start at ${peso(st.opening)}` : "Start this account from its statement"}</button></p>
           ${st.ignored ? `<p class="note small" style="margin:0 0 6px">${st.ignored} ${st.ignored === 1 ? "entry" : "entries"} dated before ${esc(longDate(st.from))} become history only: they stop counting in the balance.</p>` : ""}` : ""}
-        <p style="margin:14px 0 0;text-align:center"><button class="link" data-action="close-sheet">Close</button></p>`;
+        <p style="margin:14px 0 0;text-align:center"><button class="act" data-action="close-sheet">Close</button></p>`;
     }
   } else if (sh.type === "slip-verify") {
     const slip = (S().payslips ?? []).find((p) => p.transaction_id === sh.id);
@@ -4604,6 +4608,7 @@ async function onClick(el) {
       break;
     }
     case "open-icon": ui.sheet = { type: "icon", id, goal: el.dataset.goal === "1" }; ui.form = {}; renderSheet(); break;
+    case "acct-more": ui.confirmRemove = null; ui.sheet = { type: "acct-more", id }; ui.form = {}; renderSheet(); break;
     case "edit-last4": ui.sheet = { type: "last4", id }; ui.form = { last4: S().accounts.find((a) => a.id === id)?.last4 ?? "", pocket: M.isPocket(S().accounts.find((a) => a.id === id)) }; renderSheet(); break;
     case "save-last4": {
       const r = M.setAccountLast4(S(), ui.sheet.id, ui.form.last4);
@@ -5230,6 +5235,7 @@ async function onClick(el) {
       const a = S().accounts.find((x) => x.id === id);
       if (!a || M.naturalBalance(a, M.countedEntries(S())) !== 0) { showToast("Only an account with a zero balance can be hidden."); break; }
       if (S().accounts.some((x) => !x.archived && x.reserve_for === id) || (a.reserve_for && !S().accounts.find((x) => x.id === a.reserve_for)?.archived) || ledger.settings.reserve_source_id === id) { showToast("This account is part of a card reserve. Change the reserve first."); break; }
+      if (ui.sheet?.type === "acct-more") { ui.sheet = null; renderSheet(); }
       await commit({ ...S(), accounts: S().accounts.map((x) => (x.id === id ? { ...x, archived: true } : x)) });
       showToast(a.name + " is hidden. Setup keeps it under Hidden accounts.");
       break;
@@ -5240,8 +5246,8 @@ async function onClick(el) {
       break;
     case "remove-account": {
       if (S().entries.some((e) => e.account_id === id)) break;
-      if (ui.confirmRemove !== id) { ui.confirmRemove = id; renderScreen(); break; }
-      ui.confirmRemove = null;
+      if (ui.confirmRemove !== id) { ui.confirmRemove = id; renderScreen(); if (ui.sheet?.type === "acct-more") renderSheet(); break; }
+      ui.confirmRemove = null; if (ui.sheet?.type === "acct-more") { ui.sheet = null; renderSheet(); }
       // A reserve that covered the removed card stays as an ordinary account, with its link cleared.
       const rest = S().accounts.filter((a) => a.id !== id).map(({ reserve_for, ...a }) => (reserve_for === id ? a : { ...a, ...(reserve_for ? { reserve_for } : {}) }));
       const settings = { ...ledger.settings }; if (settings.reserve_source_id === id) delete settings.reserve_source_id;
@@ -5801,7 +5807,7 @@ function lockHtml() {
   const dis = wait > 0 || lockBusy ? " disabled" : "";
   const keys = `<div class="keypad">${["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", ""].map((k) => k ? `<button data-lock="key" data-k="${k}" aria-label="${k}"${dis}>${k}</button>` : "<span></span>").join("")}</div>`;
   return `<div class="lockmid"><p class="locktext" id="lock-title">${off ? "Enter PIN to turn off" : "Enter PIN"}</p>${dots}${lockRec?.cred ? `<button class="lockquiet" data-lock="face">${esc(line)}</button>` : `<p class="lockquiet">${esc(line)}</p>`}${keys}</div>
-    <div class="lockfoot split"><span>${off ? `<button class="link" data-lock="cancel">Cancel</button>` : ""}</span><button class="link" data-lock="del"${pin ? "" : " disabled"}>Delete</button></div>`;
+    <div class="lockfoot split"><span>${off ? `<button class="act" data-lock="cancel">Cancel</button>` : ""}</span><button class="act" data-lock="del"${pin ? "" : " disabled"}>Delete</button></div>`;
 }
 function drawLock() {
   const el = lockEl(); if (!el) return;
