@@ -25,6 +25,7 @@ import { reportingCategory } from "./rules.js";
 import { heldIds } from "./held.js";
 import { bucketOf, BUCKET_LABELS } from "./buckets.js";
 import { UNLOGGED_CATEGORY_ID } from "./seed.js";
+import { fixedMap, FIXED_LABEL } from "./fixed.js";
 
 const whole = (n) => Number.isSafeInteger(n) && n >= 0;
 const sum = (list) => list.reduce((a, b) => a + b, 0);
@@ -110,14 +111,15 @@ export function paydayIncomes(state, settings, month) {
 // ---------- the lines of a month ----------
 // Every line with a monthly figure: spending categories (not Uncategorized, not hidden), goals with a monthly amount, the buffer. Hidden categories are listed
 // apart and never take part in a payday or a total.
-export function budgetLines(state, settings, month) {
-  const hiddenIds = new Set(settings.hidden_categories ?? []), overrides = settings.bucket_overrides ?? {}, lines = [], hidden = [];
+// A Fixed category (fixed.js: rent or a subscription, a scheduled payment, or one the owner chose) is listed in its own group, "Fixed", ahead of the buckets.
+export function budgetLines(state, settings, month, today = month + "-01") {
+  const hiddenIds = new Set(settings.hidden_categories ?? []), overrides = settings.bucket_overrides ?? {}, lines = [], hidden = [], fixed = fixedMap(state, settings, today);
   for (const c of state.categories) {
     if (c.kind !== "expense" || c.id === UNLOGGED_CATEGORY_ID) continue;
     const amount = budgetFor(state.rules ?? [], c.id, month) ?? 0;
     if (!(amount > 0)) continue;
     if (hiddenIds.has(c.id)) { hidden.push({ key: c.id, id: c.id, name: c.name, amount }); continue; }
-    lines.push({ key: c.id, kind: "category", id: c.id, name: c.name, group: BUCKET_LABELS[bucketOf(c, overrides)] ?? "Other", amount });
+    lines.push({ key: c.id, kind: "category", id: c.id, name: c.name, group: fixed.has(c.id) ? FIXED_LABEL : BUCKET_LABELS[bucketOf(c, overrides)] ?? "Other", ...(fixed.has(c.id) ? { fixed: fixed.get(c.id) } : {}), amount });
   }
   for (const g of state.goals ?? []) { const amount = settings.goal_monthly?.[g.id]; if (whole(amount) && amount > 0) lines.push({ key: "goal:" + g.id, kind: "goal", id: g.id, name: g.name, group: "Savings", amount }); }
   if (whole(settings.buffer_monthly) && settings.buffer_monthly > 0) lines.push({ key: "buffer", kind: "buffer", id: "buffer", name: "Buffer", group: "Buffer", amount: settings.buffer_monthly });
@@ -137,8 +139,8 @@ export function paydayShares(settings, line, incomes) {
 }
 
 // The whole Budget of a month in its three views.
-export function budgetPlan(state, settings, month) {
-  const { lines, hidden } = budgetLines(state, settings, month), { paydays, income, incomes, regularIncomes, total } = paydayIncomes(state, settings, month);
+export function budgetPlan(state, settings, month, today = month + "-01") {
+  const { lines, hidden } = budgetLines(state, settings, month, today), { paydays, income, incomes, regularIncomes, total } = paydayIncomes(state, settings, month);
   const placed = sum(lines.map((l) => l.amount)), shares = new Map(lines.map((l) => [l.key, paydayShares(settings, l, regularIncomes)]));
   let reg = 0;
   const perPayday = paydays.map((p, i) => {

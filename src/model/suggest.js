@@ -206,8 +206,9 @@ export function suggestPlan(input) {
     // Rent and fixed needs come first, but the everyday needs keep at least their floor of the needs part; what the fixed needs take past that comes out of
     // the wants part (and, when wants run out, out of savings, which only gets what is left).
     const needsPart = Math.floor((monthIncome * S.starter.needs) / 10000), keep = Math.floor((needsPart * S.needs_variable_floor) / 10000);
-    const overFixed = Math.max(0, fixedNeeds - (needsPart - keep));
-    const needsPool = Math.max(0, needsPart - fixedNeeds + overFixed), wantsPool = Math.max(0, Math.floor((monthIncome * S.starter.wants) / 10000) - fixedWants - overFixed);
+    // FIXED COUNTS INSIDE THE 50 (owner, Nov 8): rent, scheduled payments AND Fixed subscriptions all come out of the needs part, with Needs.
+    const fixedAll = fixedNeeds + fixedWants, overFixed = Math.max(0, fixedAll - (needsPart - keep));
+    const needsPool = Math.max(0, needsPart - fixedAll + overFixed), wantsPool = Math.max(0, Math.floor((monthIncome * S.starter.wants) / 10000) - overFixed);
     const loggedAny = wantsList.some((c) => (logged.get(c.id) ?? 0) > 0);
     const groups = [["needs", needsList, needsPool, needWeight, loggedNeeds ? "after the rent and fixed payments, shared by what you have logged so far" : "after the rent and fixed payments, shared by typical weights for its role"],
       ["wants", wantsList, wantsPool, loggedAny ? (c) => logged.get(c.id) ?? 0 : () => 1, loggedAny ? "shared by what you have logged so far" : "shared evenly because nothing is logged yet"]];
@@ -284,14 +285,15 @@ export function suggestPlan(input) {
     why = saving === floorAmt && floorAmt > 0 && left === 0 ? "Your savings floor; there is not enough room for more." : `A cautious start: what is left after your costs, up to ${pct(S.starter.savings)} of pay (a rule of thumb), never below your savings floor.`;
   }
   const funding = { income: monthIncome, fixed: fixedTotal, needs: needTotal, floor: floorAmt, buffer: bufferAmt, wants: wantsTotal, wantsCap, saving, shortBy };
-  // The money set aside is shared between the goals by one rule (savings.js): typed amounts first, finish dates, the emergency fund until its target, then percentages.
+  // The money set aside is shared between the goals by one rule (savings.js): typed amounts first, then each goal's monthly need (the emergency fund first when the money is short, the rest pro rata to need), then the percentages for what is left.
   const goals = state.goals ?? [], progress = new Map(goals.map((g) => [g.id, goalProgress(state, g)]));
-  const shared = splitSavings({ goals, progress, month, total: saving, pins: input.goalPins ?? {}, shares: input.goalShares ?? {} });
+  const shared = splitSavings({ goals, progress, month, total: saving, pins: input.goalPins ?? {}, shares: input.goalShares ?? {}, emergencyTarget: input.emergencyTarget ?? null });
   for (const part of shared.parts) {
     const [a, b] = splitBy(part.amount, income[0], inc1);
     put(part.name, "goal", [a, b], part.pinned ? part.why : `${why} ${part.why}`, input.ratchet || learn ? "history" : "starter");
     const l = lines.get(part.name.trim().toLowerCase());
     if (part.goal_id) l.goal_id = part.goal_id;
+    if (part.need) l.need = part.need;   // what the goal needs each month, so the screen can say it
     if (part.pinned) l.pinned = true;
   }
   applyPins();
@@ -299,7 +301,7 @@ export function suggestPlan(input) {
   // 7. Per payday: the lines, and the exact gap to the income. Nothing is cut.
   const rows = [...lines.values()];
   const out = paydays.map((p, i) => {
-    const key = i === 0 ? "first" : "second", list = rows.map((l) => ({ name: l.name, kind: l.kind, amount: l[key], reason: l.reason, source: l.source, ...(l.nudged ? { nudged: l.nudged } : {}), ...(l.category_id ? { category_id: l.category_id } : {}), ...(l.goal_id ? { goal_id: l.goal_id } : {}), ...(l.pinned ? { pinned: true } : {}) })).filter((l) => l.amount > 0 || l.pinned);
+    const key = i === 0 ? "first" : "second", list = rows.map((l) => ({ name: l.name, kind: l.kind, amount: l[key], reason: l.reason, source: l.source, ...(l.nudged ? { nudged: l.nudged } : {}), ...(l.category_id ? { category_id: l.category_id } : {}), ...(l.goal_id ? { goal_id: l.goal_id } : {}), ...(l.need ? { need: l.need } : {}), ...(l.pinned ? { pinned: true } : {}) })).filter((l) => l.amount > 0 || l.pinned);
     const sum = list.reduce((n, l) => n + l.amount, 0);
     return { id: p.id ?? (i === 0 ? "first" : "second"), label: p.label ?? (i === 0 ? "1st payday" : "2nd payday"), day: p.day, income: income[i], incomeReason: incomeOf(i), lines: list, total: sum, unallocated: Math.max(0, income[i] - sum), short: Math.max(0, sum - income[i]) };
   });

@@ -66,13 +66,14 @@ export function starterFromTargets(targets, buffer) {
 // Savings = Goals + spending categories in Savings (shown together as "Invest in yourself"). The buffer is NOT savings. Unclear names are counted in Other and
 // flagged (amount and how many) until the owner answers.
 // Percent is tenths of a percent of the income (1000 = 100.0%), plainly rounded; nothing here ever says red.
-export function bucketRows({ categories, overrides, targets, budgets, goals = 0, buffer = 0, income, skipId }) {
+// fixedIds (fixed.js): a Fixed category is counted INSIDE the Needs part (owner, Nov 8), so rent and a Fixed subscription both come out of the 50.
+export function bucketRows({ categories, overrides, targets, budgets, goals = 0, buffer = 0, income, skipId, fixedIds = null }) {
   const t = resolveTargets(targets), sum = { need: 0, want: 0, savings: 0, other: 0 };
   let invested = 0;
   const unsure = [];   // unclear names with a budget, not yet answered: counted in Other and flagged
   for (const c of categories) {
     if (c.kind !== "expense") continue;
-    const amount = budgets[c.id] ?? 0, b = bucketOf(c, overrides);
+    const amount = budgets[c.id] ?? 0, b = fixedIds?.has(c.id) ? "need" : bucketOf(c, overrides);
     sum[b] += amount;
     if (b === "savings") invested += amount;
     if (c.id !== skipId && amount > 0 && !CHOICES.includes(overrides?.[c.id]) && readBucket(c.name).bucket === null) unsure.push({ id: c.id, name: c.name, amount });

@@ -1,6 +1,7 @@
 // End-to-end check of the app in an iPhone-like Home Screen browser. Run by hand:
 //   python3 -m http.server 8124 &   node e2e/run.mjs
 // It is not part of `npm test`; CI runs it as its own job, "e2e", in the Tests workflow (.github/workflows/test.yml).
+import { EF_EXPECT, EF_RULES } from "./ef-expect.mjs";
 import { createRequire } from "node:module";
 import { protectionChecks } from "./protection.mjs";
 import { appLockChecks } from "./applock.mjs";
@@ -1199,15 +1200,16 @@ check(ledgerNow.settings.plans.length === 1 && ledgerNow.settings.plans[0].lines
 await menuGo(page, "Goals");
 if (await page.locator('button[data-action="toggle-reveal"][aria-pressed="false"]').count()) await page.click('button[data-action="toggle-reveal"][aria-pressed="false"]');
 await openGoal(page, "Apartment");
-check(/At your plan's pace\s*about \d+ months?/.test(await text(page, "#sheet")), "a goal's window shows how long the plan takes");
+{ const gt = await text(page, "#sheet");   // P0-6 PR 4: a saved Pay plan no longer feeds any goal figure; the window shows the goal's own account and no plan pace
+  check(/Account\s*\S/.test(gt) && !/plan's pace/.test(gt), "a goal's window shows its account and no pace taken from a saved plan"); }
 await page.click('#sheet button[data-action="close-sheet"]');
 await page.click('button:has-text("Add a goal")'); await page.fill("#g-name", "Emergency Fund"); await page.click('#sheet button[data-action="pick-goal-role"]'); await page.fill("#f-amount", "999"); await page.click("#sheet .chip >> nth=0"); await page.click("#f-save");
 await seen(page, "#screen", "Emergency Fund");
 if (await page.locator('button[data-action="toggle-reveal"][aria-pressed="false"]').count()) await page.click('button[data-action="toggle-reveal"][aria-pressed="false"]');
 await openGoal(page, "Emergency Fund");
 var efText = await text(page, "#sheet");
-check(/Target\s*₱24,000\.00/.test(efText) && efText.includes("3 months of Rent, Food from your plan"), "the Emergency Fund target is worked out from the plan (3 x Rent + Food), not the 999 typed when the goal was made");
-check(/Months to target\s*Not known yet/.test(efText) && /Monthly contribution\s*none in your plan/.test(efText), "with no contribution line in the plan, months to target says it is not known");
+check(/Target\s*₱999\.00\s*·\s*your figure/.test(efText), "the Emergency Fund target is the 999 typed when the goal was made, called your figure (a saved plan is not read)");
+check(/Months to target\s*Not known yet/.test(efText) && /Monthly contribution\s*not set/.test(efText), "with no monthly amount typed for the goal, months to target says it is not known");
 check(!efText.includes("Your plan suggests") && !efText.includes("Use it"), "there is no 'use it' button that would freeze the target as a typed number");
 await shot(page, "41-emergency-target");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
@@ -2264,7 +2266,7 @@ var FIX = { v: 3, rev: 1, saved_at: "2026-10-01T08:00:00.000+08:00", settings: {
   await flipRole(1); await seen(page, "#toast", "is your emergency fund");
   check(await roles() === 1, "the role moves: one goal at most is the emergency fund");
   await flipRole(2);
-  check(await roles() === 1 && (await text(page, "#screen")).includes("from your budgets"), "choosing the goal makes it the emergency fund: its status card appears");
+  check(await roles() === 1 && (await text(page, "#screen")).includes("3 × (Fixed + Needs) of your budgets"), "choosing the goal makes it the emergency fund: its row says the target is 3 × (Fixed + Needs) of the budgets until a figure is typed");
   await flipRole(2);
   check(await roles() === 0, "the same switch takes the role away again");
   // overtime with no emergency fund chosen: the message says to choose, never a name
@@ -3951,10 +3953,10 @@ console.log("\n-- Goals in the flat look --");
     t = await text(page, "#screen");
     check(/saved toward goals/i.test(t) && t.includes("15,000.00") && t.includes("across 2 goals"), "Goals opens with the total saved");
     check(await page.locator("#screen .catbar").count() === 2 && !(await page.locator("#screen svg.ring").count()), "each goal has a thin bar, no ring");
-    { const aria = (await page.locator("#screen .catbar").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).join(" | "); check(aria.includes("28%") && aria.includes("37%") && /12,000\.00\s*\/\s*.*42,000\.00/.test(t), "each goal says its percent (to a screen reader, on its bar) and reads saved / target: " + aria); }
+    { const aria = (await page.locator("#screen .catbar").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")))).join(" | "); check(aria.includes("40%") && aria.includes("37%") && /12,000\.00\s*\/\s*.*30,000\.00/.test(t), "each goal says its percent (to a screen reader, on its bar) and reads saved / target; the Emergency Fund uses the 30,000.00 typed on it (your figure), 12,000.00 saved is 40%: " + aria); }
     await page.click("#screen .pair >> nth=0"); await page.waitForTimeout(300);
     t = await text(page, "#screen");
-    check(t.includes("30,000.00 to go") && t.includes("5,000.00 to go") && !/\d \/ \u20B1/.test(t), "one tap on a figure turns every goal into what is to go");
+    check(t.includes("18,000.00 to go") && t.includes("5,000.00 to go") && !/\d \/ \u20B1/.test(t), "one tap on a figure turns every goal into what is to go (30,000.00 typed target less 12,000.00 saved is 18,000.00)");
     await page.click("#screen .pair >> nth=0"); await page.waitForTimeout(300);
     t = await text(page, "#screen");
     check(!t.includes("Monthly contribution") && await page.locator("#screen details.goaldet").count() === 0, "the list keeps one plain row per goal; the emergency fund's table is not folded into it");
@@ -4062,6 +4064,25 @@ console.log("\n-- Goals sharing an account --");
   await page.click("#sheet .gpic"); await page.click('#sheet button[data-action="clear-icon"]'); await page.waitForTimeout(400);
   check(JSON.parse((await stored(page)).local).state.goals[0].icon === undefined && await page.locator("#sheet .gview").count() === 1, "removing the picture goes back to the goal window with the letter tile");
   check(errors.length === 0, "no script errors in goal sharing: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
+
+// Its own window and ledger (the sample ledger's own Food and Rent categories, invented budgets): every other budget is absent, so the formula has exactly two parts. Rent 20,000.00 is Fixed by its role, Food 8,000.00 is a Need: 3 x 28,000.00 = 84,000.00.
+// ===== P0-6 PR 4: the Emergency target is exactly 3 x (Fixed + Needs), or the typed figure =====
+try { blockName = "P0-6 PR 4: the Emergency target is exactly 3 x (Fixed + Needs), or the typed figure";
+console.log("\n-- The Emergency target --");
+{ const mkA = (id, name, ob) => ({ id, name, class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-03-01" });
+  const rr = ([cat, amount], i) => ({ id: "ef-r" + i, kind: "budget", subject_id: cat, amount, effective_from: "2020-01-01", created_at: "2020-01-01T08:00:00.000+08:00" });
+  const efSeed = (typed) => ({ ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [mkA("b", "Test Bank", 1000000)], transactions: [], entries: [], attachments: [], rules: EF_RULES.map(rr),
+    goals: [{ id: "ef", name: "Emergency Fund", account_id: "b", role: "emergency", hidden_by_default: false, ...(typed ? { target: 99900 } : {}) }] } });
+  const efWindow = async (typed) => { ({ ctx, page, errors } = await open({ blockSw: true, seed: efSeed(typed) }));
+    await menuGo(page, "Goals"); await page.waitForTimeout(400); if (await page.locator('button[data-action="intro-done"]').count()) await page.click('button[data-action="intro-done"]');
+    await openGoal(page, "Emergency Fund"); return text(page, "#sheet"); };
+  var efTypedText = await efWindow(true);
+  check(EF_EXPECT.typedTarget.test(efTypedText) && EF_EXPECT.typedNote.test(efTypedText), "a typed Emergency target (999.00) wins and is called your figure; the window names the formula it would give, 3 \u00d7 (Food 8,000.00 + Rent 20,000.00) = 3 \u00d7 28,000.00 = 84,000.00");
+  check(errors.length === 0, "no script errors with a typed Emergency target: " + errors.join("; ")); await ctx.close();
+  var efFormulaText = await efWindow(false);
+  check(EF_EXPECT.formulaTarget.test(efFormulaText) && EF_EXPECT.formulaNote.test(efFormulaText), "with no typed figure the Emergency target is exactly 3 \u00d7 (Fixed + Needs): \u20b184,000.00 from Rent 20,000.00 (Fixed) and Food 8,000.00 (a Need), the parts shown");
+  check(errors.length === 0, "no script errors with the formula target: " + errors.join("; ")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
 // ===== Scheduled: a status on every row, Edit, Remove, and your own entry linked instead of doubled =====

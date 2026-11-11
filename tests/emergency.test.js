@@ -136,9 +136,9 @@ test("with no plan the target is 3 x this month's budgets for the rent, food and
   assert.equal(full, null, "that ledger has no budgets");
   const big = ledger(3000000); big.rules = s.rules; assert.equal(emergencyFundFromBudgets(big, big.goals[0], { month: "2026-10" }).reached, true);
 });
-test("the Goals screen uses the plan when there is one and the budgets when there is not", async () => {
+test("the Goals screen, the goal window and the Log card all read the ONE emergency target (P0-6 PR 4): the old plan-based status is model code only", async () => {
   const { readFileSync } = await import("node:fs");
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
-  assert.match(app, /ef = !isEf \? null : planOf\(\) \? M\.emergencyFundStatus\(S\(\), planOf\(\), g\) : M\.emergencyFundFromBudgets\(S\(\), g, \{ month: M\.monthOf\(today\(\)\) \}\);/);
-  assert.match(app, /from \$\{f\.ef\.source === "budgets" \? "your budgets" : "your plan"\}/);
+  assert.equal((app.match(/M\.emergencyFund\(S\(\), ledger\.settings, /g) ?? []).length >= 4, true, "Log card, Goals row, goal window and the target window");
+  assert.doesNotMatch(app, /emergencyFundStatus|emergencyFundFromBudgets/);
 });
