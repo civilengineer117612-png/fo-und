@@ -82,10 +82,11 @@ test("the bottom bar holds Log, the scanner in the middle, and Verify; everythin
   assert.match(js, /item\("setup", M\.SCREEN_NAMES\.setup\)/, "Setup is pinned at the bottom of the menu");
 });
 
-test("the icon lookup asks for 'not found' instead of a placeholder picture when a bank has no icon", () => {
+test("the icon lookup never gets a placeholder picture from the Google icon service: that service is not asked at all (logo privacy, Nov 12)", () => {
+  // Before Nov 12 this checked that the Google icon address asked for 'not found' (nfrp=2) instead of a placeholder. A show-only source is no longer used
+  // at all (its picture could only be linked, and a linked picture is asked for again every time an account is drawn), so no placeholder can come from it.
   const js = read("app/app.js");
-  const line = js.split("\n").find((l) => l.includes("t2.gstatic.com/faviconV2"));
-  assert.ok(line && line.includes("nfrp=2") && !line.includes("fallback_opts"), "the Google icon address must not request a placeholder");
+  assert.ok(!js.includes("t2.gstatic.com") && !js.includes("faviconV2") && !js.includes("fallback_opts"), "the Google icon service is never asked, with or without a placeholder");
 });
 
 test("the photo reader is a set of files of this site, deployed with it, and never loaded from another address", () => {

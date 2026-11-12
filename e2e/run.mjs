@@ -1111,7 +1111,7 @@ iconServe = (r) => {
   const u = r.request().url();
   if (u === "https://icon.horse/icon/gotyme.com.ph") return r.fulfill(pngReply(pngB64, true));          // copyable
   if (u === "https://icon.horse/icon/unionbankph.com") return r.fulfill(pngReply(tileB64, true));       // a placeholder: must be refused
-  if (u === "https://landbank.com/apple-touch-icon.png") return r.fulfill(pngReply(pngB64, false));     // the bank's own site icon: showable only
+  if (u === "https://icon.horse/icon/landbank.com") return r.fulfill(pngReply(pngB64, true));           // copyable (a bank's own site is never asked: logo privacy, Nov 12)
   if (u.startsWith("https://en.wikipedia.org/w/api.php")) return r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ query: { pages: [{ title: "Maya", thumbnail: { source: "https://upload.wikimedia.org/wikipedia/commons/thumb/maya-logo.png" } }] } }) });   // Maya's Wikipedia picture
   if (u === "https://upload.wikimedia.org/wikipedia/commons/thumb/maya-logo.png") return r.fulfill(pngReply(pngB64, true));
   return r.abort();
@@ -1122,25 +1122,26 @@ await page.click('#sheet button:has-text("Try again")');
 await page.waitForFunction(() => !document.getElementById("sheet").innerText.includes("Loading logos"), null, { timeout: 15000 });
 var gotymeImg = await page.locator('#sheet .bankrow:has-text("GoTyme") img.ico').getAttribute("src");
 check(gotymeImg?.startsWith("data:image/"), "a copyable logo is copied and kept on the phone");
-check((await page.locator('#sheet .bankrow:has-text("Landbank") img.ico').getAttribute("src")) === "https://landbank.com/apple-touch-icon.png", "a bank's own site icon is shown from there");
+check((await page.locator('#sheet .bankrow:has-text("Landbank") img.ico').getAttribute("src"))?.startsWith("data:image/") && !iconAsked.some((u) => new URL(u).hostname.endsWith("landbank.com") || u.includes("apple-touch-icon")), "Landbank's logo is a copy on the phone too, and the bank's own site is never asked");
+check((await page.locator("#sheet img").evaluateAll((els) => els.every((el) => el.src.startsWith("data:") || el.src.startsWith("blob:") || new URL(el.src).origin === location.origin))), "no picture in the list is drawn from an outside address");
 check((await page.locator('#sheet .bankrow:has-text("UnionBank") img').count()) === 0, "a generated grey placeholder is refused, so UnionBank keeps its letter");
 check(!iconAsked.some((u) => /maya|paymaya/.test(u) && !/wiki/.test(u)), "Maya is never asked of the icon services (they only return a grey arrow for it)");
 check((await page.locator('#sheet .bankrow:has-text("Maya") img.ico').getAttribute("src"))?.startsWith("data:image/") && iconAsked.some((u) => u.includes("wikipedia.org")), "Maya's logo is found through Wikipedia and copied onto the phone, with nothing to tap");
 var rep = await text(page, "#logo-report");
-check(rep.includes("UnionBank") && rep.includes("only a generated placeholder came back") && rep.includes("GCash") && rep.includes("its website: could not be loaded") && !rep.includes("Maya"), "and the reasons are listed for each bank and source");
+check(rep.includes("UnionBank") && rep.includes("only a generated placeholder came back") && rep.includes("GCash") && rep.includes("gcash.com Icon Horse: could not be loaded") && rep.includes("gcash.com Favicon Kit: could not be loaded") && !rep.includes("its website") && !rep.includes("Maya"), "and the reasons are listed for each bank and source");
 await shot(page, "31-logos");
 await page.click('#sheet button:has-text("Cancel")');
 check((await page.locator("#screen .row", { hasText: "GoTyme" }).locator("img.ico").count()) === 2, "every GoTyme account shows the bank's logo without anything being set on it");
 await addAccount(page, "Landbank", "asset", "5"); await seen(page, "#toast", "Added Landbank");
 check((await page.locator('#screen .row:has-text("Landbank") img.ico').count()) === 1, "an account typed as 'Landbank' shows Landbank's logo too");
 ledgerNow = JSON.parse((await stored(page)).local);
-check(ledgerNow.settings.bankLogos.gotyme.icon.startsWith("data:image/") && ledgerNow.settings.bankLogos.landbank.icon_url.endsWith("/apple-touch-icon.png") && !ledgerNow.settings.bankLogos.unionbank, "the logos live in the phone's settings, one per bank");
+check(ledgerNow.settings.bankLogos.gotyme.icon.startsWith("data:image/") && ledgerNow.settings.bankLogos.landbank.icon.startsWith("data:image/") && Object.values(ledgerNow.settings.bankLogos).every((l) => !l.icon_url) && !ledgerNow.settings.bankLogos.unionbank, "the logos live in the phone's settings, one per bank");
 check(ledgerNow.state.accounts.every((a) => !a.icon_url), "nothing is copied onto the accounts themselves");
 // a wrong logo can be removed, and stays removed
 await acctAct(page, "GoTyme", "open-icon");
 await page.click('#sheet button:has-text("Remove the picture")');
 ledgerNow = JSON.parse((await stored(page)).local);
-check(!ledgerNow.settings.bankLogos.gotyme && ledgerNow.settings.bankLogosBlocked.gotyme === true, "Remove the picture drops the bank's logo and marks it so it is not fetched again");
+check(ledgerNow.settings.bankLogos.gotyme.icon.startsWith("data:image/") && ledgerNow.settings.bankLogosBlocked.gotyme === true, "Remove the picture hides the bank's logo and marks it; the copy stays on the phone, so it is never asked for again");
 check((await page.locator("#screen .row", { hasText: "GoTyme" }).locator("img.ico").count()) === 0, "the accounts go back to a letter tile");
 // linking an account to a bank from its picture window
 await addAccount(page, "Euf", "asset", "10"); await seen(page, "#toast", "Added Euf");

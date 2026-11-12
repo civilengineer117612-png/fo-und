@@ -122,3 +122,12 @@ export function dropPlaceholderAddresses(state) {
   if (!state.accounts.some((a) => isPlaceholderAddress(a.icon_url))) return state;
   return { ...state, accounts: state.accounts.map((a) => { if (!isPlaceholderAddress(a.icon_url)) return a; const { icon_url, ...rest } = a; return rest; }) };
 }
+
+// LOGO PRIVACY (owner, Nov 12, P1): which banks' logos the phone asks the outside services for. It is every listed bank that has no COPY kept on this phone
+// yet (a data: picture in `have`) and was not tried in the last 7 days (or all of those, when forced). The answer depends ONLY on the list of banks, on what
+// was already copied and on when it was last tried: never on the owner's accounts, never on a logo he removed or hid. So what the services are asked is the
+// same for every user at the same point, and tells them nothing about which banks this one uses.
+export function logosToFetch(banks, have = {}, tried = {}, today, force = false) {
+  const due = (d) => !d || (Date.parse(today) - Date.parse(d)) / 86400000 >= 7;
+  return banks.filter((b) => !(typeof have?.[b.id]?.icon === "string" && have[b.id].icon.startsWith("data:image/")) && (force || due(tried?.[b.id])));
+}

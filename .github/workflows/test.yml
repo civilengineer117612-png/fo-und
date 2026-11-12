@@ -49,6 +49,7 @@ jobs:
           node e2e/reader-fixture.mjs
           node e2e/tap-safety.mjs
           node e2e/two-windows.mjs
+          node e2e/logo-privacy.mjs
           node e2e/run.mjs 2>&1 | tee e2e.log
       - name: Pass count
         if: always()
