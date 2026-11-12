@@ -75,6 +75,6 @@ test("staging publishes exactly the site tree, including nested fonts and the re
 test("staging keeps the commit stamps, Manila date and offline cache names", () => {
   const { inputs, output } = stageExample();
   assert.equal(output["app/sw.js"], inputs["app/sw.js"].replace("__VERSION__", stamp.slice(0, 12)));
-  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new (globalThis.RealDate ?? Date)());   // the staging step runs the system `date`, which the date guard cannot move: compare with the same real day
   assert.equal(output["src/model/version.js"], inputs["src/model/version.js"].replace("__BUILD__", stamp.slice(0, 7)).replace("__BUILT_ON__", day));
 });
