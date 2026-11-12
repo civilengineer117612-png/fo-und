@@ -2436,11 +2436,10 @@ function amountCheckHtml() {
   if (!list.length) return "";
   const cats = new Map(S().categories.map((c) => [c.id, c.name])), SHOWN = 12;
   return `<div class="card" id="amount-check" style="margin-bottom:14px"><p><b>Check ${list.length === 1 ? "this amount" : "these " + list.length + " amounts"}.</b></p>
-    <p class="note small">Before this update, a comma typed in an amount was dropped: 1,5 was saved as 15.00. ${list.length === 1 ? "This typed entry is" : "These typed entries are"} at least ten times the usual amount for the same thing. Nothing was changed.</p>
+    <p class="note small">A comma used to be dropped: 1,5 was saved as 15.00. ${list.length === 1 ? "This typed entry is" : "These typed entries are"} ten times the usual or more. Nothing was changed.</p>
     <div class="rsum">${list.slice(0, SHOWN).map((r) => `<div class="rs" data-id="${esc(r.id)}"><span class="rs-l">${esc(listDate(r.date))} \u00b7 ${esc(r.payee.trim() || cats.get(r.category_id) || "")}${r.status === "draft" ? " \u00b7 draft" : ""}</span><b>${peso(r.amount)}</b><small>Usually about ${peso(r.usual)}</small><button class="act" data-action="amount-ok" data-id="${esc(r.id)}">This amount is right</button></div>`).join("")}</div>
     ${list.length > SHOWN ? `<p class="note small">And ${list.length - SHOWN} more, older.</p>` : ""}
-    <p class="note small">If one is wrong: a draft can be edited in Verify; a verified entry is put right below, under "Put right a verified entry".</p>
-    <p class="note small">This card stays until each one is put right or marked right.</p></div>`;
+    <p class="note small">Wrong one? Edit a draft in Verify, or use "Put right a verified entry" below. This card stays until each is done.</p></div>`;
 }
 function repairCardHtml() {
   const st = M.repairStatus(S());
