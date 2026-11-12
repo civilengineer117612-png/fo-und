@@ -1,0 +1,4 @@
+# Graphify (a private developer tool; owner, Nov 12): its output is never committed.
+graphify-out/
+.graphifyignore
+.graphifyrc
