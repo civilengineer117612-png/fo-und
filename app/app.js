@@ -2429,17 +2429,18 @@ function viewGoals() {
 // "counts" when only weekly counts are put right, "entries" once an entry cancelled twice is part of it
 const repairUnit = (plan, n) => (plan.extraCount ? (n === 1 ? "entry" : "entries") : (n === 1 ? "count" : "counts"));
 // CHECK THESE AMOUNTS (owner, Nov 12): typed entries that look like a comma was dropped from the amount. Read-only: the owner corrects them himself.
+// The card stays (after a reload too) until every listed entry is corrected or marked "This amount is right"; the count goes down as each is done.
+// The old mark `amount_check_seen` (the first version's "Got it") is no longer read and never deleted.
 function amountCheckHtml() {
-  if (ledger.settings.amount_check_seen) return "";
-  const list = M.suspectAmounts(S());
+  const list = M.openAmountChecks(S(), ledger.settings);
   if (!list.length) return "";
   const cats = new Map(S().categories.map((c) => [c.id, c.name])), SHOWN = 12;
   return `<div class="card" id="amount-check" style="margin-bottom:14px"><p><b>Check ${list.length === 1 ? "this amount" : "these " + list.length + " amounts"}.</b></p>
     <p class="note small">Before this update, a comma typed in an amount was dropped: 1,5 was saved as 15.00. ${list.length === 1 ? "This typed entry is" : "These typed entries are"} at least ten times the usual amount for the same thing. Nothing was changed.</p>
-    <div class="rsum">${list.slice(0, SHOWN).map((r) => `<div class="rs"><span class="rs-l">${esc(listDate(r.date))} · ${esc(r.payee.trim() || cats.get(r.category_id) || "")}${r.status === "draft" ? " · draft" : ""}</span><b>${peso(r.amount)}</b><small>Usually about ${peso(r.usual)}</small></div>`).join("")}</div>
+    <div class="rsum">${list.slice(0, SHOWN).map((r) => `<div class="rs" data-id="${esc(r.id)}"><span class="rs-l">${esc(listDate(r.date))} \u00b7 ${esc(r.payee.trim() || cats.get(r.category_id) || "")}${r.status === "draft" ? " \u00b7 draft" : ""}</span><b>${peso(r.amount)}</b><small>Usually about ${peso(r.usual)}</small><button class="act" data-action="amount-ok" data-id="${esc(r.id)}">This amount is right</button></div>`).join("")}</div>
     ${list.length > SHOWN ? `<p class="note small">And ${list.length - SHOWN} more, older.</p>` : ""}
     <p class="note small">If one is wrong: a draft can be edited in Verify; a verified entry is put right below, under "Put right a verified entry".</p>
-    <p><button data-action="amount-check-done" style="width:100%">Got it</button></p></div>`;
+    <p class="note small">This card stays until each one is put right or marked right.</p></div>`;
 }
 function repairCardHtml() {
   const st = M.repairStatus(S());
@@ -4267,7 +4268,7 @@ async function onClick(el) {
       break;
     }
     case "open-paymonth": ui.sheet = { type: "paymonth" }; renderSheet(); break;
-    case "amount-check-done": await commit(S(), { ...ledger.settings, amount_check_seen: true }, { quiet: true }); renderScreen(); break;
+    case "amount-ok": await commit(S(), M.markAmountRight(ledger.settings, id), { quiet: true }); renderScreen(); break;   // the owner's mark only: no entry changes
     case "paymonth-done": ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, paymonth_seen: true }, { quiet: true }); renderScreen(); break;
     case "repair-run": {   // past data is changed: the app first keeps a copy of the ledger by the same mechanism as before an upgrade, reads it back, and stops if it cannot
       const plan = M.planGapRepair(S(), { now: new Date() });

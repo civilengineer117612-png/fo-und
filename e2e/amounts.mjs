@@ -20,6 +20,7 @@ const seeded = () => {
   spend("k1", "2026-10-05", "Kape", 6500); spend("k2", "2026-10-12", "Kape", 7000); spend("k3", "2026-10-19", "Kape", 6500);
   spend("k4", "2026-10-26", "Kape", 65000);   // typed "6,50,0"-style slip: ten times the usual
   spend("m1", "2026-10-06", "Merienda", 4000); spend("m2", "2026-10-13", "Merienda", 4500);
+  spend("t1", "2026-10-07", "Taho", 2000); spend("t2", "2026-10-14", "Taho", 2500); spend("t3", "2026-10-21", "Taho", 25000);   // a second one to check: ten times the usual
   assert.deepEqual(validateState(s), []);
   l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, bankLogosTried: {}, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])) };
   return l;
@@ -41,8 +42,8 @@ await first.close();
 const page = await open();
 await quiet(page);
 const spentOf = (l) => l.state.entries.filter((e) => e.category_id === "food" && e.amount > 0).map((e) => e.amount).sort((a, b) => a - b).join(",");
-const START = "4000,4500,6500,6500,7000,65000";
-ok(spentOf(await stored(page)) === START, "the ledger starts with six typed entries");
+const START = "2000,2500,4000,4500,6500,6500,7000,25000,65000";
+ok(spentOf(await stored(page)) === START, "the ledger starts with nine typed entries");
 
 // ---- 1. a comma that is not between thousands is refused and says so; nothing is saved
 await page.click('[data-action="open-other"]'); await page.waitForSelector("#sheet #f-amount");
@@ -79,25 +80,37 @@ await page.click("#f-save"); await page.locator("#toast").filter({ hasText: "Sav
 await quiet(page);
 ok(spentOf(await stored(page)) === "150," + START + ",125050", "it is saved as 1,250.50");
 
-// ---- 3. Weekly review lists the old entry that looks like a dropped comma, once, and changes nothing
-await page.click("#menuBtn"); await page.click('#menu .item:has-text("Weekly review")'); await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
-if (await page.locator('#screen .hub button:has-text("Weekly review")').count()) await page.click('#screen .hub button:has-text("Weekly review")');
-await page.waitForSelector("#amount-check");
-const card = await page.locator("#amount-check").innerText();
-ok(card.includes("Check this amount.") && card.includes("Kape") && card.includes("650.00") && card.includes("Usually about") && card.includes("65.00") && card.includes("Nothing was changed."), "Weekly review shows Check this amount: the 650.00 Kape, usually about 65.00");
+// ---- 3. Weekly review lists the old entries that look like a dropped comma, and KEEPS the card until each is resolved (owner, Nov 12)
+const toReview = async () => {
+  await page.click("#menuBtn"); await page.click('#menu .item:has-text("Weekly review")'); await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
+  if (await page.locator('#screen .hub button:has-text("Weekly review")').count()) await page.click('#screen .hub button:has-text("Weekly review")');
+  await page.waitForFunction(() => document.querySelector("#screen").innerText.includes("Week of"));
+};
+const reload = async () => { await page.reload(); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 }); await toReview(); };
+await toReview();
+let card = await page.locator("#amount-check").innerText();
+ok(card.includes("Check these 2 amounts.") && card.includes("Kape") && card.includes("650.00") && card.includes("Taho") && card.includes("250.00") && card.includes("Usually about") && card.includes("Nothing was changed."), "Weekly review shows Check these 2 amounts: the 650.00 Kape and the 250.00 Taho, each with what it usually is");
 ok(!card.includes("Merienda") && !card.includes("1,250.50"), "entries that are not ten times their usual are not listed");
-ok(await page.locator("#amount-check button").count() === 1 && (await page.locator("#amount-check button").innerText()).trim() === "Got it", "the card has one button, Got it");
+ok((await page.locator("#amount-check button").allInnerTexts()).map((t) => t.trim()).join("|") === "This amount is right|This amount is right", "each listed entry has one button, This amount is right, and there is no Got it");
+await reload();
+ok((await page.locator("#amount-check").innerText()).includes("Check these 2 amounts."), "after a reload, with nothing done, the card is still there with both");
 const before = await stored(page);
-await page.click("#amount-check button"); await page.waitForFunction(() => !document.querySelector("#amount-check"));
+await page.click('#amount-check .rs:has-text("Kape") button[data-action="amount-ok"]');
+await page.waitForFunction(() => document.querySelector("#amount-check")?.innerText.includes("Check this amount."));
 await quiet(page);
-const after = await stored(page);
-ok(JSON.stringify(after.state) === JSON.stringify(before.state), "Got it changes no entry, account or category");
-ok(after.settings.amount_check_seen === true && JSON.stringify({ ...after.settings, amount_check_seen: undefined }) === JSON.stringify({ ...before.settings, amount_check_seen: undefined }), "it only marks the card as seen");
-await page.reload(); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 });
-await page.click("#menuBtn"); await page.click('#menu .item:has-text("Weekly review")'); await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
-if (await page.locator('#screen .hub button:has-text("Weekly review")').count()) await page.click('#screen .hub button:has-text("Weekly review")');
-await page.waitForFunction(() => document.querySelector("#screen").innerText.includes("Week of"));
-ok(await page.locator("#amount-check").count() === 0, "and the card does not come back");
+const mid = await stored(page);
+ok(JSON.stringify(mid.state) === JSON.stringify(before.state), "This amount is right changes no entry, account or category");
+ok(JSON.stringify(mid.settings.amount_check_ok) === JSON.stringify(["k4"]), "it only keeps the owner's mark for that one entry");
+card = await page.locator("#amount-check").innerText();
+ok(card.includes("Check this amount.") && card.includes("Taho") && !card.includes("Kape"), "the count goes down: one left, the Taho");
+await reload();
+ok((await page.locator("#amount-check").innerText()).includes("Check this amount.") && (await page.locator("#amount-check").innerText()).includes("Taho"), "after a reload the card stays, with the one still to check");
+await page.click('#amount-check .rs:has-text("Taho") button[data-action="amount-ok"]');
+await page.waitForFunction(() => !document.querySelector("#amount-check"));
+await quiet(page);
+ok(JSON.stringify((await stored(page)).state) === JSON.stringify(before.state), "still no entry changed");
+await reload();
+ok(await page.locator("#amount-check").count() === 0, "the last one resolved: after a reload the card is gone");
 
 ok(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await browser.close();
