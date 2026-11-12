@@ -85,7 +85,7 @@ export { weekEndingOn, autoFillSurvey, planSurveyResponse, surveyReview, unlogge
 export { editDraft } from "./inbox.js";
 export { detectPlatform, assessDevice, trialAllowed } from "./device.js";
 export { buildReminderCalendar, defaultReminders, validateReminder, foldLine } from "./reminders.js";
-export { parsePesos, formatPesos, formatPesosWhole } from "./money.js";
+export { parsePesos, formatPesos, formatPesosWhole, AMOUNT_COMMA, AMOUNT_HINT } from "./money.js";
 export { defaultCategories, defaultPresets, UNLOGGED_CATEGORY_ID, UNCATEGORIZED_NAME, plainNames, categoryByRole, categoriesByRole, categoriesOfKind, LEGACY_ROLES, addCategory, renameCategory, ensureIncomeCategories, dropUnusedCardCategory, INCOME_CATEGORIES, CATEGORY_ROLES, ROLE_LABELS, roleNoticeRows, setCategoryRole } from "./seed.js";
 export { applyDrafts, planExpense, discardDraft, verifyDraft, editDraftFields, setAccountIcon, planAttachment, attachmentsFor, planSplitExpense, splitCategoryEntry, sameAmountElsewhere } from "./drafts.js";
 export { LEDGER_VERSION, emptyState, emptyLedger, nextLedger, parseLedger, chooseLedger, restoreLedger, summarizeLedger, backupFileName, daysSinceBackup, saveOutcome, ledgerBytes, formatBytes, ledgerHead, mayOverwrite, CHANGED_ELSEWHERE } from "./persist.js";
@@ -118,6 +118,7 @@ export { MAX_INTRO_SHOWS, INTROS, introFor, shouldShowIntro, markIntro, introDra
 
 export { recordFromParse, accountLines, proveMonths, acceptMonth, monthSummary, failingLines, alreadyKept, removeStatement, onStatementIds } from "./proof.js";
 export { pairMoves, moveLogged, planPairedMove, matchPayslips, statementDifference, planMissingDraft, planRewards, startFromStatement, planPocketFromStatement, moveTarget, statementMoves, planStatementVerify, planStatementMoves, notOnStatement, statementBalanceProof, planStatementGap } from "./reconcile.js";
+export { suspectAmounts, AMOUNT_CHECK_TIMES, AMOUNT_CHECK_MIN_OTHERS } from "./amountcheck.js";
 export { payeeKey, payeeLabel, withPayeeBook, spendingByPayee, payeeMonths, payeeCount, namePayee, categoryFromBook } from "./payees.js";
 export { RANGES, dailySpending, firstSpendingDate, rangeFor, stepFor, seriesFor, measureSpan, zoomWindow, addDays, daysBetween } from "./spendline.js";
 export { payerFor, nextDue, lastStatementDate, cardStatement, setCardDetails, planCardPayment, makeCardDueDrafts, DUE_CATCH_UP_DAYS } from "./cardpay.js";

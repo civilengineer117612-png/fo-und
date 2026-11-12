@@ -2428,6 +2428,19 @@ function viewGoals() {
 // Past weekly counts that still count a gap as spending (or as found money lowering it): the owner can put them right in one step (owner, Oct 29), with the months before and after.
 // "counts" when only weekly counts are put right, "entries" once an entry cancelled twice is part of it
 const repairUnit = (plan, n) => (plan.extraCount ? (n === 1 ? "entry" : "entries") : (n === 1 ? "count" : "counts"));
+// CHECK THESE AMOUNTS (owner, Nov 12): typed entries that look like a comma was dropped from the amount. Read-only: the owner corrects them himself.
+function amountCheckHtml() {
+  if (ledger.settings.amount_check_seen) return "";
+  const list = M.suspectAmounts(S());
+  if (!list.length) return "";
+  const cats = new Map(S().categories.map((c) => [c.id, c.name])), SHOWN = 12;
+  return `<div class="card" id="amount-check" style="margin-bottom:14px"><p><b>Check ${list.length === 1 ? "this amount" : "these " + list.length + " amounts"}.</b></p>
+    <p class="note small">Before this update, a comma typed in an amount was dropped: 1,5 was saved as 15.00. ${list.length === 1 ? "This typed entry is" : "These typed entries are"} at least ten times the usual amount for the same thing. Nothing was changed.</p>
+    <div class="rsum">${list.slice(0, SHOWN).map((r) => `<div class="rs"><span class="rs-l">${esc(listDate(r.date))} · ${esc(r.payee.trim() || cats.get(r.category_id) || "")}${r.status === "draft" ? " · draft" : ""}</span><b>${peso(r.amount)}</b><small>Usually about ${peso(r.usual)}</small></div>`).join("")}</div>
+    ${list.length > SHOWN ? `<p class="note small">And ${list.length - SHOWN} more, older.</p>` : ""}
+    <p class="note small">If one is wrong: a draft can be edited in Verify; a verified entry is put right below, under "Put right a verified entry".</p>
+    <p><button data-action="amount-check-done" style="width:100%">Got it</button></p></div>`;
+}
 function repairCardHtml() {
   const st = M.repairStatus(S());
   if (!st.candidates) return "";   // nothing booked as spending and nothing cancelled twice: the only case with no card
@@ -2507,7 +2520,7 @@ function viewCheckin() {
   const heldGaps = M.unexplainedGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }), matchedNote = heldGaps.length ? `<p class="note small">${heldGaps.length === 1 ? "1 gap is" : heldGaps.length + " gaps are"} not yet explained. ${heldGaps.length === 1 ? "It is" : "They are"} not counted as spending. Log what explains ${heldGaps.length === 1 ? "it" : "them"} when you can.</p>` : "";   // a quiet reminder, never a block
   const fix = `<h2 class="today">A mistake in something verified?</h2><p class="note">A verified entry is final. Here, and only here, you can cancel one from the last two weeks and enter it again.</p>
     <button class="choice" data-action="open-correct"${fixable ? "" : " disabled"}><span>Put right a verified entry</span><span class="bval">${fixable ? fixable + " can be put right" : "none to put right"}</span></button>`;
-  return `<h1>Weekly review</h1>${repairCardHtml()}${pastMovesHtml()}<p class="sub">Week of ${esc(longDate(w.week_start))} to ${esc(longDate(w.week_end))}</p>
+  return `<h1>Weekly review</h1>${amountCheckHtml()}${repairCardHtml()}${pastMovesHtml()}<p class="sub">Week of ${esc(longDate(w.week_start))} to ${esc(longDate(w.week_end))}</p>
     <p class="note">Open each account, look at the real balance, and type it in. Count them all first; then you see every gap together. ${accts.length ? pairFig(done, accts.length, { fmt: (n) => String(n), tail: "counted", left: "to count", doneWord: "All counted" }) : ""}</p>${backupLine}${(() => { const l = M.picturesBackupLine((S().attachments ?? []).length, ledger.settings.last_pictures_backup_at ?? "", today()); return l ? `<p class="note">${esc(l)} <button class="act" data-action="tab" data-tab="setup" data-page="backup">Back up pictures</button></p>` : ""; })()}${rows}${reviewGapsHtml(accts, pend)}${gapNote}${matchedNote}${fix}${questions}
     ${why("A gap you do not explain is kept apart as Not yet explained and is not counted as spending. It never blocks anything.")}`;
 }
@@ -3669,6 +3682,16 @@ function renderSheet() {
   if (voiceListener && sh.type === "voice") { const b = $("v-mic"); if (b) b.innerHTML = micLabel("Listening in " + LANG_NAME[ui.form.lang ?? firstLanguage()] + "... tap to stop"); setWave(true); }
   refreshSave();
   hydratePhotos();
+  for (const el of document.querySelectorAll('#sheet input[inputmode="decimal"]')) amountHint(el);
+}
+// A typed amount whose comma is not between thousands ("1,5") is refused, and SAYS so under its box (it used to be read as 15.00 without a word).
+// The line is added or removed only while typing or when the window is drawn, never under a finger.
+function amountHint(el) {
+  if (el.dataset.field === "pct") return;   // a share in percent, not pesos
+  const bad = el.value.trim() !== "" && M.parsePesos(el.value).error === M.AMOUNT_COMMA, next = el.nextElementSibling, has = next?.classList.contains("amthint");
+  el.setAttribute("aria-invalid", bad ? "true" : "false");
+  if (bad && !has) el.insertAdjacentHTML("afterend", `<p class="note small amthint" role="status">▲ ${esc(M.AMOUNT_HINT)}</p>`);
+  else if (!bad && has) next.remove();
 }
 
 // Safari's engine drops a tap when the inside of the pressed button is replaced between the press and the release (proved on WebKit, Nov 1: leaving the
@@ -4224,6 +4247,7 @@ async function onClick(el) {
       break;
     }
     case "open-paymonth": ui.sheet = { type: "paymonth" }; renderSheet(); break;
+    case "amount-check-done": await commit(S(), { ...ledger.settings, amount_check_seen: true }, { quiet: true }); renderScreen(); break;
     case "paymonth-done": ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, paymonth_seen: true }, { quiet: true }); renderScreen(); break;
     case "repair-run": {   // past data is changed: the app first keeps a copy of the ledger by the same mechanism as before an upgrade, reads it back, and stops if it cannot
       const plan = M.planGapRepair(S(), { now: new Date() });
@@ -5766,6 +5790,7 @@ document.addEventListener("input", (e) => {
     const empty = list.querySelector(".pickempty"); if (empty) empty.hidden = any > 0;
     return;
   }
+  if (e.target.getAttribute?.("inputmode") === "decimal") amountHint(e.target);
   const field = e.target.dataset?.field;
   if (!field) return;
   if (e.target.type === "file") return;   // handled on change
