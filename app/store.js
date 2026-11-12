@@ -1,6 +1,7 @@
 // The only file that touches storage. The SAME text is written to localStorage and IndexedDB,
 // so losing or failing one of them is noticed and repaired from the other (model/persist.js).
 // A value of undefined means "that store could not be read at all".
+import { ledgerHead, mayOverwrite } from "../src/model/persist.js";
 let LS_KEY = "financialTracker.ledger", DB_NAME = "financialTracker";
 const STORE = "kv", KEY = "ledger", PHOTOS = "photos", SAFETY = "safety";
 let COPIES_KEY = "financialTracker.preupgrade";   // the copies kept from before an upgrade (see model/migrate.js)
@@ -32,17 +33,37 @@ async function idbGet() {
     });
   } finally { db.close(); }
 }
+// TWO WINDOWS (L1): `base` is the head of the ledger this window last loaded or saved (null until the app has started: start-up writes are not judged).
+// A save is a compare-and-swap inside ONE IndexedDB transaction: what is stored is read, and the new text is written only when the store still holds what
+// this window saw (model: mayOverwrite). IndexedDB runs transactions of every window one after another, so two windows can never both pass.
+let base = null, armed = false;   // armed once the app has started; a null base then means "this window started from an empty store"
+export function setBase(ledger) { base = ledger ? { rev: ledger.rev, saved_at: ledger.saved_at } : null; armed = true; }
 async function idbPut(text) {
   const db = await openDb();
   try {
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(text, KEY);
-      tx.oncomplete = resolve;
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite"), st = tx.objectStore(STORE);
+      let conflict = false;
+      const g = st.get(KEY);
+      g.onsuccess = () => { if (armed && !mayOverwrite(ledgerHead(g.result ?? null), base)) { conflict = true; return; } st.put(text, KEY); };   // nothing is written on a conflict
+      tx.oncomplete = () => resolve({ conflict });
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
   } finally { db.close(); }
+}
+// Other windows are told about a save at once, so an out-of-date one can say so before anything is typed into it. (The compare-and-swap above is what
+// protects the data; this only brings the news sooner.) The name follows the database, so a trial copy and a real one never hear each other.
+let channel = null, onNews = null;
+const tell = (head) => { try { channel?.postMessage(head); } catch { /* the save itself is not affected */ } };
+export function watchOtherWindows(cb) {
+  onNews = cb;
+  try { channel = new BroadcastChannel(DB_NAME + ".saves"); channel.onmessage = (e) => { if (armed && e.data && !mayOverwrite(e.data, base)) onNews?.(); }; } catch { channel = null; }
+}
+// Has another window saved since this one loaded? Asked when the app comes back to the front (a window that was asleep hears no news).
+export async function changedElsewhere() {
+  if (!armed) return false;
+  try { return !mayOverwrite(ledgerHead(await idbGet()), base); } catch { return false; }
 }
 
 export async function readBoth() {
@@ -56,9 +77,16 @@ export async function readBoth() {
 let queue = Promise.resolve();
 export function writeBoth(text, { local = true, idb = true } = {}) {
   const job = queue.then(async () => {
-    const result = { local: !local, idb: !idb };
-    if (local) { try { localStorage.setItem(LS_KEY, text); result.local = true; } catch { /* reported below */ } }
-    if (idb) { try { await idbPut(text); result.idb = true; } catch { /* reported below */ } }
+    const result = { local: !local, idb: !idb }, head = ledgerHead(text);
+    // The main store first: it is the one that can compare and write in one step. On a conflict NOTHING is written anywhere.
+    if (idb) { try { const r = await idbPut(text); if (r.conflict) return { local: false, idb: false, conflict: true }; result.idb = true; } catch { /* reported below */ } }
+    if (local) {
+      try {
+        if (!result.idb || !idb) { let cur = null; try { cur = localStorage.getItem(LS_KEY); } catch { cur = null; } if (armed && !mayOverwrite(ledgerHead(cur), base)) return { local: false, idb: false, conflict: true }; }   // only the spare is being written: judge it the same way
+        localStorage.setItem(LS_KEY, text); result.local = true;
+      } catch { /* reported below */ }
+    }
+    if ((result.idb && idb) || (result.local && local)) { if (armed && head) base = head; tell(head); }
     return result;
   });
   queue = job.catch(() => {});

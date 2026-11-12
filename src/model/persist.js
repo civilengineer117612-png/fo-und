@@ -81,3 +81,23 @@ export function saveOutcome(r) {
 // The size of the saved ledger text in bytes (what Setup shows), and a plain "5.4 MB" form of it.
 export const ledgerBytes = (text) => new TextEncoder().encode(text).length;
 export const formatBytes = (n) => (n < 1024 * 1024 ? Math.max(1, Math.round(n / 1024)) + " KB" : (n / (1024 * 1024)).toFixed(1) + " MB");
+
+// TWO WINDOWS (owner, Nov 12, L1): a window may save only on top of the ledger it loaded. The head of a stored ledger is its revision and the moment it was
+// saved: {rev, saved_at}, or null when nothing (or nothing readable) is stored. It is read from the first characters, never by parsing megabytes of text.
+const HEAD = /^\{"v":\d+,"rev":(\d+),"saved_at":"([^"]*)"/;
+export function ledgerHead(text) {
+  if (typeof text !== "string" || !text) return null;
+  const m = HEAD.exec(text.slice(0, 200));
+  if (m) return { rev: Number(m[1]), saved_at: m[2] };
+  try { const raw = JSON.parse(text); return raw && Number.isInteger(raw.rev) ? { rev: raw.rev, saved_at: String(raw.saved_at ?? "") } : null; } catch { return null; }
+}
+// May a window whose last loaded or saved ledger was `base` (null: it started from an empty store) write over what the store holds now (`stored`)? Yes when the store is empty, when it holds exactly
+// what this window last saw, or when it is BEHIND this window (an older copy being repaired). No when the store is ahead, or at the same revision but saved at
+// another moment: another window saved in between, and writing would erase what it saved.
+export function mayOverwrite(stored, base) {
+  if (!stored) return true;
+  if (!base) return false;   // this window started from an empty store, and the store is not empty any more
+  if (stored.rev < base.rev) return true;
+  return stored.rev === base.rev && stored.saved_at === base.saved_at;
+}
+export const CHANGED_ELSEWHERE = "Your data was changed in another window or tab, so this one is out of date. Nothing was saved from here.";
