@@ -5,7 +5,7 @@ import { payrollItems, payrollPdf } from "./payroll-table.mjs";
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { emptyLedger, CHANGES, BANKS } from "../src/model/index.js";
+import { emptyLedger, CHANGES } from "../src/model/index.js";
 const require = createRequire(import.meta.url);
 const browser = await launchBrowser();
 const base = process.env.BASE ?? "http://127.0.0.1:8124/app/index.html";
@@ -268,10 +268,9 @@ try {
     console.log("ok: an old payslip keeps its printed lines by reading the same PDF again; the pay is untouched");
   }
 
-  const bankDomains = new Set(BANKS.flatMap((bank) => [bank.domain, ...(bank.alt ?? [])]));
   for (const request of external) {
     const host = new URL(request.url).hostname.replace(/^www\./, "");
-    assert.ok(bankDomains.has(host) || /(^|\.)(icon\.horse|faviconkit\.com|gstatic\.com|duckduckgo\.com|wikipedia\.org|wikimedia\.org)$/.test(host), "only existing bank logo lookups: " + request.url);
+    assert.ok(["icon.horse", "api.faviconkit.com", "en.wikipedia.org", "upload.wikimedia.org"].includes(host), "only the four bank logo services, never a bank's own site: " + request.url);
     assert.equal(request.method, "GET"); assert.equal(request.body, null);
     assert.ok(!request.url.includes("test1234"));
   }

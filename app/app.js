@@ -176,22 +176,19 @@ const expenseCategories = () => S().categories.filter((c) => c.kind === "expense
 
 // The picture the owner chose for an account, or a plain first-letter tile until they do.
 // A listed bank's logo, loaded once for every bank (see "bank logos" below) and kept in the phone's settings.
+// LOGO PRIVACY (owner, Nov 12, P1): a picture is drawn ONLY from a copy kept on this phone (a data: picture). A logo's outside address is never drawn: loading it
+// each time an account is shown told that service which banks the owner uses. An address saved by an earlier version stays in the data, unused.
 function bankLogo(bankId) {
-  const l = bankId ? ledger.settings.bankLogos?.[bankId] : null;
-  if (l?.icon?.startsWith("data:image/")) return { icon: l.icon };
-  if (l?.icon_url?.startsWith("https://")) return { icon_url: l.icon_url };
-  return null;
+  if (!bankId || ledger.settings.bankLogosBlocked?.[bankId]) return null;   // "Remove the picture" hides a bank's logo; the copy stays on the phone, so what is asked of the services never depends on it
+  const l = ledger.settings.bankLogos?.[bankId];
+  return l?.icon?.startsWith("data:image/") ? { icon: l.icon } : null;
 }
-// A bank logo from an icon service that cannot load (offline) is taken away, so the letter tile under it stays. (No inline handler: the page's content security policy allows none.)
-document.addEventListener("error", (e) => { if (e.target?.classList?.contains("ov")) e.target.remove(); }, true);
 function iconOf(a, size = 28) {
   // An account's own picture wins; otherwise its bank's logo (linked, or plainly named after the bank); otherwise a letter.
-  if (!a.icon && !a.icon_url) { const l = bankLogo(a.bank ?? (a.name ? M.bankForName(a.name)?.id : null)); if (l) a = { ...a, ...l }; }
-  if (a.icon) return `<img class="ico" src="${esc(a.icon)}" alt="" width="${size}" height="${size}">`;
+  if (!a.icon) { const l = bankLogo(a.bank ?? (a.name ? M.bankForName(a.name)?.id : null)); if (l) a = { ...a, ...l }; }
+  if (a.icon?.startsWith("data:image/")) return `<img class="ico" src="${esc(a.icon)}" alt="" width="${size}" height="${size}">`;
   const letter = [...a.name][0]?.toUpperCase() ?? "?";
-  const mono = `<span class="ico mono" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.5)}px" aria-hidden="true">${esc(letter)}</span>`;
-  // A logo shown from an icon service sits over the letter tile; if it cannot load (offline) the letter stays.
-  return a.icon_url ? `<span class="icowrap" style="width:${size}px;height:${size}px">${mono}<img class="ico ov" src="${esc(a.icon_url)}" alt="" width="${size}" height="${size}"></span>` : mono;
+  return `<span class="ico mono" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.5)}px" aria-hidden="true">${esc(letter)}</span>`;
 }
 const withIcon = (a, size) => iconOf(a, size) + `<span>${esc(a.name)}</span>`;
 
@@ -1513,16 +1510,9 @@ function hydratePhotos() {
 // ---------- bank logos: loaded for every listed bank, once, when the phone has internet ----------
 // The logos of ALL the listed banks are fetched together, so the icon service learns nothing about which banks you use.
 // They are kept in the phone's settings (never in the repository) and shown wherever an account belongs to that bank.
-// COPY: services that let the page read the picture (it is shrunk and kept). LINK: places that only allow showing it;
-// then only the address is kept. A bank's own site icon is tried before icon services, which may invent placeholders.
+// The services that let the page read the picture, so it can be shrunk and KEPT on the phone. A place that only allows showing a picture (a bank's own
+// site, a search engine's icon) is never used: showing it would mean asking that place again every time the account is drawn (LOGO PRIVACY above).
 const COPY_SOURCES = (domain) => [["Icon Horse", `https://icon.horse/icon/${domain}`], ["Favicon Kit", `https://api.faviconkit.com/${domain}/144`]];
-const LINK_SOURCES = (domain) => [
-  ["its website", `https://${domain}/apple-touch-icon.png`],
-  ["its website", `https://www.${domain.replace(/^www\./, "")}/apple-touch-icon.png`],
-  // nfrp=2 makes the service answer "not found" for a site with no icon, instead of a generic grey placeholder picture
-  ["Google icons", `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&nfrp=2&url=https://${domain}&size=128`],
-  ["DuckDuckGo", `https://icons.duckduckgo.com/ip3/${domain}.ico`],
-];
 // Some services invent a flat grey tile (a letter, or a grey circle) when a site has no icon. That is not a logo.
 function looksLikeLetterTile(ctx) {
   const d = ctx.getImageData(0, 0, ICON_PX, ICON_PX).data, buckets = new Map();
@@ -1547,16 +1537,15 @@ function pictureIsLetterTile(url) {
     img.src = url;
   });
 }
-// Resolves to {url} (a copied picture) or {ok:true} (loads fine, for LINK) or {why}, saying exactly what went wrong.
-function loadLogo(url, { copy = true, ms = 8000 } = {}) {
+// Resolves to {url} (a copied picture) or {why}, saying exactly what went wrong. The request carries no cookie and no address of this page.
+function loadLogo(url, { ms = 8000 } = {}) {
   return new Promise((resolve) => {
     const img = new Image(), timer = setTimeout(() => resolve({ why: "no answer in " + ms / 1000 + " seconds" }), ms);
-    if (copy) img.crossOrigin = "anonymous";
+    img.crossOrigin = "anonymous"; img.referrerPolicy = "no-referrer";
     img.onerror = () => { clearTimeout(timer); resolve({ why: "could not be loaded" }); };
     img.onload = () => {
       clearTimeout(timer);
       if (img.naturalWidth < 32) { resolve({ why: "only a tiny placeholder came back (" + img.naturalWidth + " pixels)" }); return; }
-      if (!copy) { resolve({ ok: true }); return; }
       try {
         const c = document.createElement("canvas"); c.width = c.height = ICON_PX;
         const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, ICON_PX, ICON_PX);
@@ -1574,7 +1563,7 @@ function loadLogo(url, { copy = true, ms = 8000 } = {}) {
 async function wikiLogo(term) {
   try {
     const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 8000);
-    const res = await fetch("https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrlimit=1&prop=pageimages&piprop=thumbnail&pithumbsize=256&format=json&formatversion=2&origin=*&gsrsearch=" + encodeURIComponent(term), { signal: ctl.signal });
+    const res = await fetch("https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrlimit=1&prop=pageimages&piprop=thumbnail&pithumbsize=256&format=json&formatversion=2&origin=*&gsrsearch=" + encodeURIComponent(term), { signal: ctl.signal, credentials: "omit", referrerPolicy: "no-referrer" });
     clearTimeout(timer);
     const src = (await res.json())?.query?.pages?.[0]?.thumbnail?.source;
     if (!src || !src.startsWith("https://upload.wikimedia.org/")) return { why: "no picture found" };
@@ -1585,7 +1574,6 @@ async function fetchBankLogo(b) {
   const why = [];
   for (const domain of b.noLookup ? [] : [b.domain, ...(b.alt ?? [])]) {
     for (const [label, src] of COPY_SOURCES(domain)) { const r = await loadLogo(src); if (r.url) return { icon: r.url }; why.push(domain + " " + label + ": " + r.why); }
-    for (const [label, src] of LINK_SOURCES(domain)) { const r = await loadLogo(src, { copy: false }); if (r.ok) return { icon_url: src }; why.push(domain + " " + label + ": " + r.why); }
   }
   for (const term of [b.wiki ?? []].flat()) { const r = await wikiLogo(term); if (r.url) return { icon: r.url }; why.push("Wikipedia (" + term + "): " + r.why); }
   return { why: why.join("; ") };
@@ -1595,14 +1583,13 @@ let logoRun = null;
 async function loadBankLogos({ force = false } = {}) {
   if (logoRun || !device.allowEntry || navigator.onLine === false) return;
   const have = ledger.settings.bankLogos ?? {}, tried = ledger.settings.bankLogosTried ?? {}, t = today();
-  const due = (d) => !d || (Date.parse(t) - Date.parse(d)) / 86400000 >= 7;
-  const blocked = ledger.settings.bankLogosBlocked ?? {};
-  const todo = M.BANKS.filter((b) => !blocked[b.id] && !bankLogo(b.id) && (force || due(tried[b.id])));
+  // WHICH banks are asked for never depends on the owner's accounts or choices: every listed bank that has no copy on this phone yet (M.logosToFetch).
+  const todo = M.logosToFetch(M.BANKS, have, tried, t, force);
   if (!todo.length) return;
   ui.logoBusy = true; if (ui.sheet?.type === "banks") renderSheet();   // only the bank list shows progress
   logoRun = (async () => {
     const got = {}, report = [];
-    for (const b of todo) { const r = await fetchBankLogo(b); if (r.icon || r.icon_url) got[b.id] = r.icon ? { icon: r.icon } : { icon_url: r.icon_url }; else report.push(b.name + " (" + r.why + ")"); }
+    for (const b of todo) { const r = await fetchBankLogo(b); if (r.icon) got[b.id] = { icon: r.icon }; else report.push(b.name + " (" + r.why + ")"); }
     ui.logoReport = report.length ? "No logo found online for: " + report.join(" | ") : null;
     ui.logoBusy = false;
     await commit(S(), { ...ledger.settings, bankLogos: { ...(ledger.settings.bankLogos ?? {}), ...got }, bankLogosTried: { ...(ledger.settings.bankLogosTried ?? {}), ...Object.fromEntries(todo.map((b) => [b.id, t])) } }, { quiet: true });
@@ -2856,7 +2843,7 @@ function renderSheet() {
     const forAdd = sh.for === "add", acct = forAdd ? null : S().accounts.find((x) => x.id === sh.for);
     const current = forAdd ? ui.accountForm.bank : acct?.bank;
     const rows = M.pickerBanks().map((b) => `<button class="bankrow" data-action="pick-bankrow" data-id="${esc(b.id)}" aria-pressed="${current === b.id}">${iconOf({ name: b.name, bank: b.id, ...(bankPictureOf(b.id) ?? {}) }, 32)}<span>${esc(b.name)}</span>${current === b.id ? '<span class="tick" aria-hidden="true">\u2713</span>' : ""}</button>`).join("");
-    const missing = M.BANKS.filter((b) => !bankLogo(b.id) && !bankPictureOf(b.id)).map((b) => b.name);
+    const missing = M.BANKS.filter((b) => !bankLogo(b.id) && !bankPictureOf(b.id)?.icon).map((b) => b.name);
     const shotOnly = M.BANKS.filter((b) => b.noLookup && missing.includes(b.name)).map((b) => b.name);
     body = `<h3>${forAdd ? "Choose a bank" : "Which bank is it?"}</h3><div class="banklist" role="list">${rows}
       <button class="bankrow" data-action="pick-bankrow" data-id=""><span class="ico mono" style="width:32px;height:32px;font-size:16px" aria-hidden="true">+</span><span>${forAdd ? "Not in the list (type a name)" : "No bank"}</span></button></div>
@@ -3455,7 +3442,7 @@ function renderSheet() {
       <label for="i-zoom">Zoom</label><input id="i-zoom" data-field="zoom" type="range" min="1" max="4" step="0.01" value="1" disabled>
       <p id="f-msg" role="alert" class="note"></p>
       <p><button class="primary" id="f-save" data-action="save-icon" disabled>Use this picture</button></p>
-      ${a.icon || a.icon_url || bankLogo(a.bank ?? M.bankForName(a.name)?.id) ? `<p><button data-action="clear-icon" style="width:100%">Remove the picture</button></p>` : ""}`;
+      ${a.icon || bankLogo(a.bank ?? M.bankForName(a.name)?.id) ? `<p><button data-action="clear-icon" style="width:100%">Remove the picture</button></p>` : ""}`;
   } else if (sh.type === "networth") {
     const range = ui.form.range ?? "12", shown = ui.cardsShown === true, series = M.netWorthSeries(S(), { today: today(), months: range === "all" ? "all" : Number(range) }), pts = series.points, last = pts.at(-1);
     const dots = "\u20b1\u2022\u2022\u2022\u2022\u2022", fig = (c) => shown ? (c < 0 ? "-" : "") + peso(Math.abs(c)) : dots;
@@ -4677,10 +4664,11 @@ async function onClick(el) {
       const a = S().accounts.find((x) => x.id === ui.sheet.id);
       const r = M.setAccountIcon(S(), a.id, null);
       ui.sheet = null; renderSheet();
-      // A logo that came from the bank is removed for the bank, and not fetched again, so a wrong one can be replaced by a screenshot.
+      // A logo that came from the bank is hidden for the bank from now on, so a wrong one can be replaced by a screenshot. Its copy stays on the phone:
+      // if it were thrown away the bank would be asked for again, and what is asked would then depend on the owner's choice (LOGO PRIVACY).
       const key = a.bank ?? M.bankForName(a.name)?.id;
       let settings = ledger.settings;
-      if (key && bankLogo(key)) { const rest = { ...(settings.bankLogos ?? {}) }; delete rest[key]; settings = { ...settings, bankLogos: rest, bankLogosBlocked: { ...(settings.bankLogosBlocked ?? {}), [key]: true } }; }
+      if (key && bankLogo(key)) settings = { ...settings, bankLogosBlocked: { ...(settings.bankLogosBlocked ?? {}), [key]: true } };
       if (r.ok) await commit(r.state, settings);
       break;
     }

@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-12-logo-privacy", date: "2026-11-12", text: "Bank logos are now only ever shown from copies kept on your phone, and the same list is fetched for everyone, so no outside service can tell which banks you use." },
   { id: "2026-11-12-two-windows", date: "2026-11-12", text: "With the app open in two tabs or windows, a save can no longer erase what the other one saved: the out-of-date one takes the latest, or says so and saves nothing." },
   { id: "2026-11-11-setup-accounts", date: "2026-11-11", text: "In Setup, tap an account to change its last four digits or picture, or to remove or hide it; the rows no longer carry small links." },
   { id: "2026-11-11-buttons", date: "2026-11-11", text: "Actions are outlined buttons, not underlined words; Log shows one floating reminder, Cards shows accounts in a grid with a More button, and an i next to a title opens its help." },
