@@ -16,6 +16,8 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+      # DATE GUARD: the same tests again as if today were New Year, a leap day and other days (tools/test-dates.mjs)
+      - run: npm run test:dates
 
   e2e:
     runs-on: ubuntu-latest
