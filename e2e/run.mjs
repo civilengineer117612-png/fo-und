@@ -142,6 +142,8 @@ const menuGo = async (page, name, opts = {}) => {   // Spending and Income are o
 const seen = async (page, sel, sub, ms = 4000) => { try { await page.waitForFunction(([q, t]) => document.querySelector(q)?.innerText.includes(t), [sel, sub], { timeout: ms }); return true; } catch { return false; } };
 const gone = async (page, sel, sub, ms = 4000) => { try { await page.waitForFunction(([q, t]) => !document.querySelector(q)?.innerText.includes(t), [sel, sub], { timeout: ms }); return true; } catch { return false; } };
 const stored = (page) => page.evaluate(async () => {
+  // A save writes the main store first and the spare a moment later (two windows, Nov 12), so "what is stored" is read once no save is on its way.
+  for (let i = 0; i < 100 && document.documentElement.dataset.saving; i++) await new Promise((r) => setTimeout(r, 30));
   const local = localStorage.getItem("financialTracker.ledger");
   const idb = await new Promise((res) => { const r = indexedDB.open("financialTracker"); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => { const g = r.result.transaction("kv").objectStore("kv").get("ledger"); g.onsuccess = () => res(g.result ?? null); }; });
   return { local, idb };

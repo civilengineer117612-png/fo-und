@@ -2,7 +2,7 @@
 // Plain and firm, never harsh: facts are stated once, nothing is red, nothing blocks logging.
 import * as M from "../src/model/index.js";
 import { requestStorageProtection, storageProtected } from "./protection.js";
-import { readBoth, writeBoth, putPhoto, getPhoto, deletePhoto, useTrialStorage, clearTrialStorage, readCopies, writeCopies, readRestoreCopies, writeRestoreCopies, readLock, writeLock, clearLock } from "./store.js";
+import { readBoth, writeBoth, setBase, watchOtherWindows, changedElsewhere, putPhoto, getPhoto, deletePhoto, useTrialStorage, clearTrialStorage, readCopies, writeCopies, readRestoreCopies, writeRestoreCopies, readLock, writeLock, clearLock } from "./store.js";
 import { createPasskey, verifyPasskey } from "./lock.js";
 import { preparePhoto, readPage, readPlain, evenedCopy } from "./ocr.js";
 import { speechSupported, listen, firstLanguage, other } from "./voice.js";
@@ -247,12 +247,47 @@ const isGenerated = (t) => t.id.startsWith("rsv:") || M.isFeeId(t.id);   // the 
 const dueDrafts = () => M.pendingDrafts(S(), addDays(today(), -1)).filter((t) => !isGenerated(t));
 
 // ---------- saving ----------
+// TWO WINDOWS (L1): a save is refused when another window or tab saved after this one loaded (store.js compares and writes in one step), so nothing can be
+// written over a newer save. What this window then does depends on what the owner is doing in it:
+//   - nothing is open (it was only being looked at, or its own background save was refused): it quietly takes the latest ledger and goes on;
+//   - a window is open, or a save the owner asked for was refused: it says so and offers ONE thing, "Load the latest" (what was typed here was not saved).
+// The store judges EVERY write of the ledger (commit, restores, repairs); the app only has to say so.
+class ChangedElsewhere extends Error { constructor() { super(M.CHANGED_ELSEWHERE); this.code = "CHANGED_ELSEWHERE"; } }
+const writeLedgerHere = async (text) => { const r = await writeBoth(text); if (r.conflict) await noteElsewhere({ refused: true }); return r; };   // a restore or a repair of the whole ledger: refused the same way, and it says so
+async function adoptLatest() {
+  if (ui.sheet || ui.upgrade?.failed || $("warn").firstChild) return false;
+  let idb; try { ({ idb } = await readBoth()); } catch { return false; }
+  const p = idb == null ? null : M.parseLedger(idb);
+  if (!p?.ok || p.ledger.v !== M.LEDGER_VERSION || ui.sheet) return false;   // anything unusual is left to a full reload, which checks the data as at start
+  ledger = p.ledger; setBase(ledger);
+  return true;
+}
+let noting = null;
+function noteElsewhere({ refused = false } = {}) {
+  if (ui.elsewhere) return Promise.resolve();
+  return noting ??= (async () => {
+    try {
+      if (!refused && await adoptLatest()) { renderAll(); showToast("Updated: your data was changed in another window."); return; }
+      ui.elsewhere = true; renderBanner();
+      $("warn").innerHTML = `<div class="wscrim"></div><div class="sheet center enter" role="alertdialog" aria-labelledby="warn-h">
+        <h3 class="wl-title" id="warn-h">Changed in another window</h3>
+        <p class="note">${esc(M.CHANGED_ELSEWHERE)} Load the latest, then enter it again.</p>
+        <p><button class="primary" data-action="reload-latest" style="width:100%">Load the latest</button></p></div>`;
+      lockPage(true);
+    } finally { noting = null; }
+  })();
+}
+let inFlight = 0, beforeFlight = null;   // the ledger as it was before the saves now on their way, to go back to when a save is refused
 async function commit(state, settings = ledger.settings, { quiet = false } = {}) {
-  if (ui.upgrade?.failed) return false;   // the update of the saved data failed: nothing is written until the owner restores the copy or updates the app, so old data is never overwritten
+  if (ui.upgrade?.failed) return false;
+  if (ui.elsewhere) throw new ChangedElsewhere();   // already known to be out of date: nothing is tried   // the update of the saved data failed: nothing is written until the owner restores the copy or updates the app, so old data is never overwritten
   const next = M.nextLedger(ledger, state, settings);
   const text = JSON.stringify(next);
+  if (inFlight === 0) beforeFlight = ledger;
+  inFlight++; document.documentElement.dataset.saving = "1";   // the page says so while a save is on its way (the main store is compared and written first, the spare a moment later)
   ledger = next;   // at once, before the save finishes: a second tap during the save must see this change (it used to see the old data and could repeat it). Kept in memory even if the main store fails; the banner says so
-  const r = await writeBoth(text);
+  let r; try { r = await writeBoth(text); } finally { inFlight--; if (inFlight === 0) delete document.documentElement.dataset.saving; }
+  if (r.conflict) { await noteElsewhere({ refused: !quiet }); if (ui.elsewhere) { ledger = beforeFlight; renderScreen(); } throw new ChangedElsewhere(); }   // nothing was written: the screen goes back to what is really stored here, and the caller's "Saved" is never reached
   const out = M.saveOutcome(r);   // IndexedDB is the main store; a full localStorage mirror is not an error
   ui.error = out.error; ui.mirror = out.mirror; ui.ledgerBytes = M.ledgerBytes(text);
   const failed = out.ok ? [] : ["x"];
@@ -362,6 +397,7 @@ function renderMenu() {
 function renderBanner() {
   if (ui.locked) return;
   const bars = [];
+  if (ui.elsewhere) bars.push(`<div class="bar" role="alert">${esc(M.CHANGED_ELSEWHERE)}<p><button data-action="reload-latest">Load the latest</button></p></div>`);
   if (ui.error) bars.push(`<div class="bar" role="alert">${esc(ui.error)}</div>`);
   if (ui.upgrade?.failed) bars.push(`<div class="bar" role="alert">${esc(ui.upgrade.failed)}</div>`);
   if (device.status === "TRIAL") bars.push(`<div class="trialstrip" role="status"><span>Trial copy. Do not enter real data.</span><button class="act" data-action="reset-trial">${ui.confirmTrial ? "Tap again to erase" : "Start over"}</button></div>`);
@@ -4002,6 +4038,7 @@ async function onClick(el) {
   const { action, id, tab } = el.dataset;
   const form = ui.form;
   switch (action) {
+    case "reload-latest": location.reload(); break;
     case "warn-save": answerOverdraw(true, false); break;
     case "warn-cancel": answerOverdraw(false, false); break;
     case "warn-income": answerOverdraw(false, true); break;
@@ -4149,7 +4186,7 @@ async function onClick(el) {
       const r0 = M.applyPlanMigration(S(), ledger.settings, ui.form.pm ?? {}, { newId: () => newId("rule"), now: new Date(), month: M.monthOf(today()) });
       if (!r0.ok) { ui.sheet = null; renderSheet(); showToast(r0.message); break; }
       const next = M.nextLedger(ledger, r0.state, r0.settings);
-      const r = await M.replaceWithCopy({ current: ledger, next, io: { readCopies, writeCopies, writeLedger: (text) => writeBoth(text) }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });
+      const r = await M.replaceWithCopy({ current: ledger, next, io: { readCopies, writeCopies, writeLedger: writeLedgerHere }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });
       if (!r.ok) { ui.sheet = null; ui.error = r.message.replace("Your data was not replaced", "The move was not made"); renderAll(); break; }
       if (!M.saveOutcome(r.written).ok) { ui.sheet = null; ui.error = "The move could not be saved. Nothing was changed, and the copy is kept."; renderAll(); break; }
       ledger = next; ui.copies = await readCopies(); ui.sheet = null; renderAll();
@@ -4192,7 +4229,7 @@ async function onClick(el) {
       const plan = M.planRefundRepair(S(), chosen, { now: new Date() });
       if (!plan.ok || !plan.count) { ui.sheet = null; renderSheet(); showToast(plan.ok ? "Nothing to repair." : "Could not repair: " + plan.violations[0].message); break; }
       const next = M.nextLedger(ledger, M.applyRefundRepair(S(), plan), ledger.settings);
-      const r = await M.replaceWithCopy({ current: ledger, next, io: { readCopies, writeCopies, writeLedger: (text) => writeBoth(text) }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });
+      const r = await M.replaceWithCopy({ current: ledger, next, io: { readCopies, writeCopies, writeLedger: writeLedgerHere }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });
       if (!r.ok) { ui.sheet = null; ui.error = r.message.replace("Your data was not replaced", "The repair was not made"); renderAll(); break; }
       if (!M.saveOutcome(r.written).ok) { ui.sheet = null; ui.error = "The repair could not be saved. Nothing was changed, and the copy is kept."; renderAll(); break; }
       ledger = next; ui.copies = await readCopies(); ui.sheet = null; renderAll();
@@ -4205,7 +4242,7 @@ async function onClick(el) {
       const plan = M.planGapRepair(S(), { now: new Date() });
       if (!plan.ok || !plan.count) { ui.sheet = null; renderSheet(); showToast(plan.ok ? "Nothing to repair." : "Could not repair: " + plan.violations[0].message); break; }
       const next = M.nextLedger(ledger, M.applyGapRepair(S(), plan), ledger.settings);
-      const r = await M.replaceWithCopy({ current: ledger, next, io: { readCopies, writeCopies, writeLedger: (text) => writeBoth(text) }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });
+      const r = await M.replaceWithCopy({ current: ledger, next, io: { readCopies, writeCopies, writeLedger: writeLedgerHere }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });
       if (!r.ok) { ui.sheet = null; ui.error = r.message.replace("Your data was not replaced", "The repair was not made"); renderAll(); break; }
       if (!M.saveOutcome(r.written).ok) { ui.sheet = null; ui.error = "The repair could not be saved. Nothing was changed, and the copy is kept."; renderAll(); break; }
       ledger = next; ui.copies = await readCopies(); ui.sheet = null; renderAll();
@@ -5028,7 +5065,7 @@ async function onClick(el) {
       const said = [pocketNote, r.count ? `${r.count} ${r.count === 1 ? "draft is" : "drafts are"} waiting in Verify.` : "", rewardNote, moveNote, verifyNote, gapNote, kept].filter(Boolean).join(" ");
       if (gapKept) {   // the ledger changes beyond plain drafts: the app first keeps a copy by the pre-upgrade mechanism, reads it back, and stops if it cannot
         const nl = M.nextLedger(ledger, next, ledger.settings);
-        const rr = await M.replaceWithCopy({ current: ledger, next: nl, io: { readCopies, writeCopies, writeLedger: (text) => writeBoth(text) }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });
+        const rr = await M.replaceWithCopy({ current: ledger, next: nl, io: { readCopies, writeCopies, writeLedger: writeLedgerHere }, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind: "repair" } });
         if (!rr.ok) { ui.error = rr.message.replace("Your data was not replaced", "The statement was not added"); renderAll(); break; }
         if (!M.saveOutcome(rr.written).ok) { ui.error = "The statement could not be saved. Nothing was changed, and the copy is kept."; renderAll(); break; }
         ledger = nl; ui.copies = await readCopies(); renderAll(); showToast(said);
@@ -5547,7 +5584,7 @@ async function restoreNow() {
 // as a restore copy first, read back and checked, and if that fails NOTHING is replaced (model/restorecopy.js). The window "Your data was replaced" is shown once
 // after the reload; sessionStorage carries the word across it and nothing else is saved.
 const RESTORED_FLAG = "financialTracker.justReplaced";
-const restoreIo = { readCopies: readRestoreCopies, writeCopies: writeRestoreCopies, writeLedger: (text) => writeBoth(text) };
+const restoreIo = { readCopies: readRestoreCopies, writeCopies: writeRestoreCopies, writeLedger: writeLedgerHere };
 async function replaceLedger(next, { kind, pictures = 0 }) {
   const r = await M.replaceWithCopy({ current: ledger, next, io: restoreIo, meta: { at: M.phTimestamp(), from_version: ledger.v, build: M.APP_BUILD, kind } });
   if (!r.ok) { ui.sheet = null; ui.error = r.message; renderAll(); return false; }
@@ -5784,7 +5821,7 @@ function showFault(message) {
   renderBanner();
 }
 window.addEventListener("error", (e) => showFault(e.message));
-window.addEventListener("unhandledrejection", (e) => showFault(String(e.reason?.message ?? e.reason)));
+window.addEventListener("unhandledrejection", (e) => { if (e.reason?.code === "CHANGED_ELSEWHERE") { e.preventDefault(); return; } showFault(String(e.reason?.message ?? e.reason)); });   // a refused save has already said so in its own window
 
 // ---------- start ----------
 // Data saved by an older version of the app (model/migrate.js): keep a copy first; convert; check; save; read it back and check again. If anything is
@@ -5919,6 +5956,7 @@ async function start() {
   let justReplaced = null;
   try { justReplaced = JSON.parse(sessionStorage.getItem(RESTORED_FLAG) ?? "null"); sessionStorage.removeItem(RESTORED_FLAG); } catch { justReplaced = null; }
   if (justReplaced && device.allowEntry && boot.status === "OK" && ui.restoreCopies[0] && !ui.sheet) ui.sheet = { type: "replaced", kind: justReplaced.kind, pictures: justReplaced.pictures ?? 0 };
+  setBase(boot.status === "NONE" ? null : ledger); watchOtherWindows(noteElsewhere);   // from here on a save is refused when another window saved first (a brand-new phone starts from an empty store, and says so)
   if (!trial) {   // the lock is read AFTER the data is checked but BEFORE anything is drawn; a trial copy never has one
     lockRec = await readLock();
     if (M.lockOn(lockRec)) { lockActive = true; applyAppearance(); await new Promise((go) => { lockWaiter = go; enterLocked("open"); }); }
@@ -5953,7 +5991,8 @@ async function start() {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") { appHidden(); return; }
   appShown();
-  if (document.visibilityState === "visible" && device.allowEntry && !ui.locked) { processScanQueue(); setTimeout(shrinkOldPictures, 8000); runSchedules().then((made) => { if (made) renderAll(); }); } });
+  changedElsewhere().then((yes) => { if (yes) noteElsewhere(); });   // a window that was asleep hears no news: it asks when it comes back
+  if (document.visibilityState === "visible" && device.allowEntry && !ui.locked && !ui.elsewhere) { processScanQueue(); setTimeout(shrinkOldPictures, 8000); runSchedules().then((made) => { if (made) renderAll(); }); } });
 addEventListener("pagehide", appHidden);
 addEventListener("pageshow", (e) => { if (e.persisted) appShown(); else coverOff(); });
 start();
