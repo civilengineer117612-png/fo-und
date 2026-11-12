@@ -32,10 +32,11 @@
     --critical: #D03B3B; --good: #7FB09E; --warn: #4F8C75; --serious: #1E5B47;   /* the budget grades: green steps, and red only for strictly over */
     --scrim: rgba(27, 29, 31, .45); --shade: rgba(27, 29, 31, .14); --lightbox: #000; --lightbox-ink: #E2DDD3;
     --mid: var(--muted); --soft: var(--muted); --wash: var(--track); --paper: var(--surface); --chart: var(--accent);   /* the older names, pointing at the tokens */
+    --t-press: .1s; --t-move: .2s; --ease-out: cubic-bezier(.2,.8,.2,1);   /* FEEL (owner, Nov 12): a press shows within 100 ms, anything that moves takes 200 ms */
     --sans: "IBM Plex Sans", system-ui, sans-serif; --num: var(--sans);   /* figures are Plex Sans too, set with even-width digits */
   }
   * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; overflow-x: hidden; overscroll-behavior-x: none; }
+  html { -webkit-text-size-adjust: 100%; overflow-x: hidden; overscroll-behavior: none; touch-action: manipulation; }   /* no rubber band at the ends of the page, no double-tap zoom anywhere */
   body { margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1.4; color: var(--ink); background: var(--paper);
          padding: max(12px, env(safe-area-inset-top)) 16px calc(72px + env(safe-area-inset-bottom)); }
   h1 { font-size: 22px; margin: 4px 0 2px; }
@@ -44,7 +45,7 @@
   .sub { color: var(--mid); margin: 0 0 12px; }
   .note { color: var(--mid); }
   button { font: inherit; color: var(--ink); background: var(--wash); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-height: 48px; }
-  button { transition: transform .12s ease, background-color .12s ease; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  button { transition: transform var(--t-press) ease, background-color var(--t-press) ease; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .hub button:active, .glance:active, .entrieshead:active, .choice:active { transform: scale(.99); }
   .row.rowbtn:active { background: var(--wash); }
   button:active { background: var(--line); transform: scale(.98); }
@@ -75,7 +76,7 @@
   details.tot > summary { min-height: 76px; }
   .tl { font-size: 17px; font-weight: 700; } .tl small { display: block; font-size: 13px; font-weight: 400; color: var(--mid); }
   .tv { margin-left: auto; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .tchev { font-size: 24px; line-height: 1; color: var(--mid); transition: transform .15s; } details[open] > summary .tchev { transform: rotate(90deg); }
+  .tchev { font-size: 24px; line-height: 1; color: var(--mid); transition: transform var(--t-move) var(--ease-out); } details[open] > summary .tchev { transform: rotate(90deg); }
   details[data-keep="t"] > summary { font-size: 15px; color: var(--mid); }
   input.chk, select.chk { outline: 2px solid var(--ink); outline-offset: 1px; border-radius: 8px; }   /* a figure the arithmetic did not prove: an outline and words, never red */
   .unread { display: grid; grid-template-columns: 1fr; gap: 4px; padding: 6px 0; border-top: 1px dashed var(--dashed); }
@@ -110,7 +111,7 @@
   .shotbtn.enlarge { position: relative; } .shotbtn.enlarge::after { content: "Tap to enlarge"; position: absolute; right: 8px; bottom: 8px; background: var(--ink); color: var(--paper); font-size: 13px; padding: 4px 8px; border-radius: 6px; }
   .note.small { font-size: 13px; margin: 6px 0; }
   .lightbox { position: fixed; inset: 0; z-index: 100; background: var(--lightbox); display: flex; flex-direction: column; }
-  .wave { display: flex; align-items: center; justify-content: center; gap: 5px; height: 0; overflow: hidden; opacity: 0; transition: height .2s ease, opacity .2s ease, margin .2s ease; }
+  .wave { display: flex; align-items: center; justify-content: center; gap: 5px; height: 0; overflow: hidden; opacity: 0; transition: height var(--t-move) ease, opacity var(--t-move) ease, margin var(--t-move) ease; }
   .wave.on { height: 48px; opacity: 1; margin: 14px 0 2px; }
   .wave i { display: block; width: 5px; height: 10px; border-radius: 3px; background: var(--ink); }
   .wave.on i { animation: wavebar 1s ease-in-out infinite; }
@@ -130,12 +131,12 @@
   .titleswitch svg { color: var(--mid); flex: none; }
   .modebar { display: flex; justify-content: flex-end; margin: 4px 0 0; } .modebar button { min-height: 36px; padding: 4px 12px; font-size: 14px; color: var(--mid); background: none; }
   @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
-  #screen.swap { animation: fadein .15s ease-out; } .viewbody.fade { animation: fadein .18s ease-out; }
+  #screen.swap { animation: fadein var(--t-move) ease-out; } .viewbody.fade { animation: fadein var(--t-move) ease-out; }
   @media (prefers-reduced-motion: reduce) { #screen.swap, .viewbody.fade { animation: none; } }
   .paytitle { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .editbtn { width: 44px; min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; color: var(--mid); border-radius: 10px; } .editbtn:active { background: var(--wash); }
   .tile { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
   .tile .tcat { display: block; font-style: normal; font-size: 11px; color: var(--soft); opacity: .8; margin-top: 1px; }
-  .tiles.arranging .tile { touch-action: none; cursor: grab; transition: transform .18s ease, opacity .2s ease; position: relative; background: var(--wash); border: 1px solid var(--line); padding: 12px 14px; }   /* a div here, so it gets the look of the button tiles */
+  .tiles.arranging .tile { touch-action: none; cursor: grab; transition: transform var(--t-move) ease, opacity var(--t-move) ease; position: relative; background: var(--wash); border: 1px solid var(--line); padding: 12px 14px; }   /* a div here, so it gets the look of the button tiles */
   .tiles.arranging .tile:not(.addtile):not(.dragging) { animation: wiggle .26s ease-in-out infinite alternate; }
   .tiles.arranging .tile:nth-child(even):not(.addtile):not(.dragging) { animation-direction: alternate-reverse; animation-delay: -.09s; }
   @keyframes wiggle { from { rotate: -1.4deg; } to { rotate: 1.4deg; } }
@@ -156,7 +157,7 @@
   .daycapbtn { background: none; border: 0; padding: 2px 8px; min-height: 0; color: var(--mid); font-size: 14px; }
   .camicon.micbtn { margin-left: auto; padding: 0; border: 0; font-size: inherit; }
   .micbtn + .camicon { margin-left: 0; }
-  .camicon { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 12px; background: var(--ink); color: var(--paper); cursor: pointer; box-shadow: none; transition: transform .12s ease; } .camicon:active { transform: scale(.94); }
+  .camicon { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 12px; background: var(--ink); color: var(--paper); cursor: pointer; box-shadow: none; transition: transform var(--t-press) ease; } .camicon:active { transform: scale(.94); }
   .menubtn { width: 44px; height: 44px; min-height: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; border-radius: 10px; margin-left: -6px; }
   .menubtn:active { background: var(--wash); }
   .menubtn svg { display: block; }
@@ -164,8 +165,8 @@
   #menu .drawer { position: fixed; top: 0; bottom: 0; left: 0; z-index: 21; width: min(80%, 320px); background: var(--paper); border-radius: 0 16px 16px 0; box-shadow: 10px 0 40px var(--shade);
                   padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom)); overflow: auto;
                   display: flex; flex-direction: column; }
-  #menu .drawer.enter { animation: drawerin .26s cubic-bezier(.2,.8,.2,1); } #menu .scrim.enter { animation: scrimin .22s ease-out; }
-  #menu.leaving { pointer-events: none; } #menu.leaving .drawer { animation: drawerout .2s ease-in forwards; } #menu.leaving .scrim { animation: scrimout .2s ease-in forwards; }
+  #menu .drawer.enter { animation: drawerin var(--t-move) var(--ease-out); } #menu .scrim.enter { animation: scrimin var(--t-move) ease-out; }
+  #menu.leaving { pointer-events: none; } #menu.leaving .drawer { animation: drawerout var(--t-move) ease-in forwards; } #menu.leaving .scrim { animation: scrimout var(--t-move) ease-in forwards; }
   @keyframes drawerin { from { transform: translateX(-100%); } to { transform: none; } } @keyframes drawerout { from { transform: none; } to { transform: translateX(-100%); } }
   @keyframes scrimout { from { opacity: 1; } to { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { #menu .drawer.enter, #menu .scrim.enter { animation: none; } }
@@ -252,15 +253,15 @@
   .hero { font-size: 32px; font-weight: bold; line-height: 1.1; margin: 6px 0 2px; }
   .seg { display: flex; gap: 6px; margin: 8px 0; }
   button.entrieshead { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; min-height: 44px; margin-top: 10px; padding: 10px 0; background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; font-size: 14px; font-weight: 400; text-align: left; color: var(--mid); }
-  .entrieshead .eh-r { display: flex; align-items: center; gap: 8px; color: var(--ink); font-variant-numeric: tabular-nums; } .chev { transition: transform .2s ease; } .chev.up { transform: rotate(180deg); }
-  @keyframes flipchev { from { transform: rotate(0); } to { transform: rotate(180deg); } } .chev.up.flip { animation: flipchev .15s ease-out; }
-  @keyframes dropin { from { opacity: 0; } to { opacity: 1; } } #entries-list.drop { animation: dropin .15s ease-out; }
+  .entrieshead .eh-r { display: flex; align-items: center; gap: 8px; color: var(--ink); font-variant-numeric: tabular-nums; } .chev { transition: transform var(--t-move) ease; } .chev.up { transform: rotate(180deg); }
+  @keyframes flipchev { from { transform: rotate(0); } to { transform: rotate(180deg); } } .chev.up.flip { animation: flipchev var(--t-move) ease-out; }
+  @keyframes dropin { from { opacity: 0; } to { opacity: 1; } } #entries-list.drop { animation: dropin var(--t-move) ease-out; }
   @media (prefers-reduced-motion: reduce) { .chev.up.flip, #entries-list.drop { animation: none; } button { transition: none; } }
   #entries-list[hidden] { display: none; } .amt.in { color: var(--ink); }
   .choice .meter { margin: 6px 0 2px; } .choice small { display: block; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .hub { display: flex; gap: 6px; margin: 0 0 14px; }
-  .hub button { flex: 1; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px; padding: 6px 4px; min-height: 44px; font-size: 14px; background: var(--wash); border-color: transparent; transition: background-color .2s ease, color .2s ease; }
+  .hub button { flex: 1; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 6px; padding: 6px 4px; min-height: 44px; font-size: 14px; background: var(--wash); border-color: transparent; transition: background-color var(--t-move) ease, color var(--t-move) ease; }
   .hub button[aria-current="page"] { background: var(--ink); color: var(--paper); }
   button.glance { display: grid; gap: 4px; width: 100%; text-align: left; margin: 14px 0 2px; padding: 0; background: none; border: 0; border-radius: 0; min-height: 0; }
   .glance .gl-top { display: flex; justify-content: space-between; align-items: baseline; color: var(--mid); font-size: 14px; } .glance .gl-top b { color: var(--ink); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -364,7 +365,7 @@
   button.link.done { font-weight: 600; text-decoration: none; min-height: 44px; padding: 0 4px; }
   .row.catedit { padding: 0; align-items: center; } .row.catedit button.rowbtn { border-bottom: 0; flex: 1; display: flex; justify-content: space-between; align-items: center; min-height: 56px; }
   .sortlist .row[data-sort] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  .sortlist.arranging .sortrow { touch-action: none; cursor: grab; transition: transform .18s ease; position: relative; background: var(--paper); }
+  .sortlist.arranging .sortrow { touch-action: none; cursor: grab; transition: transform var(--t-move) ease; position: relative; background: var(--paper); }
   .sortlist.arranging .sortrow.dragging { transition: none; z-index: 5; background: var(--wash); border: 1px solid var(--line); border-radius: 10px; margin: 0 -8px; padding-left: 8px; padding-right: 8px; }   /* the held row lifts out of the card as a rounded tile: no shadow */
   .sortlist.arranging .sortrow button, .sortlist.arranging .sortrow a { pointer-events: none; }   /* while arranging the rows look the same but only drag */
   .sorthead { align-items: baseline; }
@@ -373,7 +374,7 @@
   .row.catedit .chev { color: var(--muted); font-size: 20px; }
   button.catx { background: none; border: 0; min-width: 44px; min-height: 44px; padding: 0 6px; font-size: 22px; line-height: 1; }
   .sheet.center { top: 50%; bottom: auto; left: 16px; right: 16px; max-width: 400px; margin: 0 auto; transform: translateY(-50%); max-height: 88vh; border: 1px solid var(--line); border-radius: 20px; padding: 22px 20px 20px; }
-  .sheet.center.enter { animation: welcomein .26s ease-out; }
+  .sheet.center.enter { animation: welcomein var(--t-move) var(--ease-out); }
   @keyframes welcomein { from { transform: translateY(-46%) scale(.96); opacity: 0; } to { transform: translateY(-50%) scale(1); opacity: 1; } }
   .wl-title { text-align: center; font-size: 22px; margin: 0 0 6px; } .sheet.center .note { text-align: center; }
   .wl { margin: 12px 0; } .wl-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; margin: 8px 0; background: var(--paper); }
@@ -453,7 +454,7 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   @keyframes scrimin { from { opacity: 0; } to { opacity: 1; } }
   #warn .wscrim { position: fixed; inset: 0; z-index: 20; background: var(--scrim); } #warn .sheet { z-index: 21; } #warn .warnsign { display: flex; justify-content: center; margin-bottom: 8px; }
   #warn .warnfig { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0; font-size: 15px; } #warn .warnfig dd { margin: 0; text-align: right; }
-  .sheet.enter { animation: sheetup .22s ease-out; } #scrim.enter { animation: scrimin .2s ease-out; }
+  .sheet.enter { animation: sheetup var(--t-move) var(--ease-out); } #scrim.enter { animation: scrimin var(--t-move) ease-out; }
   @media (prefers-reduced-motion: reduce) { .sheet.enter, #scrim.enter { animation: none; } button { transition: none; } }
   .sheet h3 { margin: 0 0 4px; font-size: 18px; }
   body.locked { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden; }   /* the page stays still while a window is open */
@@ -765,6 +766,10 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .floatnote .fn-x { flex: none; width: 44px; padding: 0; color: var(--muted); display: flex; align-items: center; justify-content: center; }
   button.qmark { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; min-height: 44px; padding: 0; margin: -6px 0 -6px auto; color: var(--muted); }
   .modebar button { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; min-height: 44px; padding: 0; text-decoration: none; color: var(--ink); }
+  /* REDUCE MOTION (owner, Nov 12): nothing slides, fades or eases when the phone asks for less motion; every state is shown at once.
+     Loops (how-to clips, intro drawings, the listening wave, arranging) have their own rules that show the finished frame. */
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0s !important; transition-delay: 0s !important; }
+    #screen.swap, .viewbody.fade, .sheet.enter, .sheet.center.enter, #scrim.enter, #menu .drawer.enter, #menu .scrim.enter, #menu.leaving .drawer, #menu.leaving .scrim, .chev.up.flip, #entries-list.drop { animation: none !important; } }
 </style>
 </head>
 <body>
