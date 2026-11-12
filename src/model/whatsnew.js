@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-12-feel", date: "2026-11-12", text: "Taps answer a little faster, the page no longer bounces at its top and bottom, and with Reduce Motion on nothing slides or fades." },
   { id: "2026-11-12-amounts", date: "2026-11-12", text: "A comma in an amount is read only between thousands: 1,5 is no longer saved as 15.00, the box says how to type it. Weekly review lists old entries to check." },
   { id: "2026-11-12-logo-privacy", date: "2026-11-12", text: "Bank logos are now only ever shown from copies kept on your phone, and the same list is fetched for everyone, so no outside service can tell which banks you use." },
   { id: "2026-11-12-two-windows", date: "2026-11-12", text: "With the app open in two tabs or windows, a save can no longer erase what the other one saved: the out-of-date one takes the latest, or says so and saves nothing." },
