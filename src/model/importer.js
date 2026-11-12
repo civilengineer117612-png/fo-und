@@ -46,9 +46,9 @@ export function dateOrder(raws, today) {
 // ---------- amounts ----------
 export function readAmount(raw) {
   if (typeof raw === "number") return Number.isFinite(raw) && raw > 0 ? Math.round(raw * 100) : null;
-  const s = String(raw ?? "").replace(/[₱\s]|php|p(?=\d)/gi, "").replace(/,/g, "");
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
-  const c = Math.round(parseFloat(s) * 100);
+  const s = String(raw ?? "").replace(/[₱\s]|php|p(?=\d)/gi, "");
+  if (!/^(\d{1,3}(,\d{3})+|\d+)(\.\d{1,2})?$/.test(s)) return null;   // a comma only between thousands: "1,5" is not read as 15 (it is listed as not read)
+  const c = Math.round(parseFloat(s.replace(/,/g, "")) * 100);
   return c > 0 ? c : null;
 }
 

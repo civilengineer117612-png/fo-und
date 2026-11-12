@@ -1,11 +1,16 @@
 // Pesos as people type and read them, centavos as the ledger stores them (spec 7.1).
 
-// "95" -> 9500, "1,250.5" -> 125050, "₱20.00" -> 2000. At most two decimals; never rounds.
+// "95" -> 9500, "1,250.5" -> 125050, "₱20.00" -> 2000, "P1,250.50" and "PHP 1,250.50" too. At most two decimals; never rounds.
+// A comma is read ONLY as the mark between thousands ("1,250", "12,345,678"). Anywhere else it is refused, never dropped: "1,5" used to become 15.00
+// and "1,23" 123.00 (owner, Nov 12, L2), a silent tenfold or hundredfold mistake for someone who types a comma for the centavos.
+export const AMOUNT_HINT = "Use a comma only between thousands, like 1,250.50. Use a point for centavos.";   // shown under the box
+export const AMOUNT_COMMA = "use a comma only between thousands, like 1,250.50, and a point for centavos";
+const PESOS = /^(?:₱|php|p)?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?$/i;
 export function parsePesos(input) {
-  const s = String(input ?? "").trim().replace(/^₱/, "").replace(/,/g, "");
-  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(s);
-  if (!m) return { ok: false, error: "enter an amount like 95 or 95.50" };
-  const centavos = Number(m[1]) * 100 + Number(((m[2] ?? "") + "00").slice(0, 2));
+  const s = String(input ?? "").trim();
+  const m = PESOS.exec(s);
+  if (!m) return { ok: false, error: /\d,|,\d/.test(s) && /^[₱phPH\s\d.,]+$/.test(s) ? AMOUNT_COMMA : "enter an amount like 95 or 95.50" };
+  const centavos = Number(m[1].replace(/,/g, "")) * 100 + Number(((m[2] ?? "") + "00").slice(0, 2));
   return Number.isSafeInteger(centavos) ? { ok: true, centavos } : { ok: false, error: "amount is too large" };
 }
 
