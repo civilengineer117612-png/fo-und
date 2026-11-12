@@ -68,6 +68,7 @@ const holdTaps = (page) => {   // every click (page.click and locator.click both
 // The count is printed at the end of every script; any place found FAILS the script (owner, Nov 1: the sweep brought it to 0, and it stays 0).
 process.on("exit", () => {
   if (!holdPatched) return;
+  if (outsideStopped.size) console.log("outside requests stopped by the engine: " + [...outsideStopped].map(([h, n]) => h + " " + n).join(", "));
   console.log("tap-safety: " + tapSafety.size + " place(s) where the tapped button changed or moved under the finger");
   if (tapSafety.size) { console.log("  FAIL tap-safety: " + [...tapSafety].map(([k, n]) => k + " (" + n + "x)").join(" | ")); process.exitCode = 1; }
 });
@@ -86,11 +87,21 @@ export async function drawPicture(page, draw, arg) {
   } finally { await other.close(); }
 }
 
+// NOTHING LEAVES THE TEST MACHINE (owner, Nov 12, L12). Every window a script opens answers a request to the outside by itself: it is stopped here
+// and counted. A script that wants to play an outside service (the bank logo services) adds its own route afterwards; a later route is asked first,
+// so it wins. Before this, a window opened without such a route asked the live logo services, and the answer of the day decided the run
+// (it failed e2e-webkit for weeks). The served app itself is the only thing a test may reach.
+const LOCAL = new Set(["localhost", "127.0.0.1", "[::1]"]);
+export const isOutside = (url) => { try { const u = new URL(url); return (u.protocol === "http:" || u.protocol === "https:" || u.protocol === "ws:" || u.protocol === "wss:") && !LOCAL.has(u.hostname); } catch { return false; } };
+export const outsideStopped = new Map();   // host -> how many requests were stopped here (not answered by a script's own route)
+const blockOutside = (context) => context.route((url) => isOutside(url.href), (route) => { const h = new URL(route.request().url()).host; outsideStopped.set(h, (outsideStopped.get(h) ?? 0) + 1); return route.abort(); });
+
 export async function launchBrowser() {
   const browser = await playwright()[ENGINE].launch(ENGINE === "chromium" && process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
   const make = browser.newContext.bind(browser);
   browser.newContext = async (...args) => {
     const context = await make(...args);
+    await blockOutside(context);
     if (process.env.E2E_SHOW_CONSOLE) showConsole(context);
     await watchTaps(context);
     context.on("page", holdTaps);
