@@ -454,7 +454,7 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   @keyframes scrimin { from { opacity: 0; } to { opacity: 1; } }
   #warn .wscrim { position: fixed; inset: 0; z-index: 20; background: var(--scrim); } #warn .sheet { z-index: 21; } #warn .warnsign { display: flex; justify-content: center; margin-bottom: 8px; }
   #warn .warnfig { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0; font-size: 15px; } #warn .warnfig dd { margin: 0; text-align: right; }
-  .sheet.enter { animation: sheetup var(--t-move) var(--ease-out); } #scrim.enter { animation: scrimin var(--t-move) ease-out; }
+  .sheet.enter { animation: sheetup .22s ease-out; } #scrim.enter { animation: scrimin .2s ease-out; }   /* kept as it was: a 200 ms ease-out curve here made taps in the browser tests land on a window still arriving */
   @media (prefers-reduced-motion: reduce) { .sheet.enter, #scrim.enter { animation: none; } button { transition: none; } }
   .sheet h3 { margin: 0 0 4px; font-size: 18px; }
   body.locked { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden; }   /* the page stays still while a window is open */
