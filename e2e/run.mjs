@@ -3992,8 +3992,9 @@ console.log("\n-- Suggest a budget --");
   await page.click('button[data-action="open-suggest"]'); await page.waitForSelector("#sheet .catcard");
   const t = (await text(page, "#sheet")).replace(/\s+/g, " ");
   check(t.includes("Suggest a budget") && t.includes("Income") && t.includes("\u20B125,000.00 a month") && t.includes("Needs") && t.includes("Wants") && t.includes("Savings") && /target 50\.0%/.test(t), "the window shows the income and the needs, wants and savings against their targets");
-  check(await page.locator("#sheet .catrow .catbar").count() >= 8 && /saved and set aside/i.test(t), "each category has its suggested figure and a thin bar, and the saved lines sit apart");
-  check(/^Funded in order: fixed, needs, savings floor, buffer, then wants \(up to \u20B17,500\.00\)\. Left: /.test((await text(page, "#sug-left")).trim()), "the note under the list says the order of funding and the wants cap (30% of 25,000.00)");
+  { const heads = (await page.locator("#sheet h4.sugh").allInnerTexts()).map((h) => h.trim()), order = ["Fixed", "Needs", "Savings", "Wants", "Buffer", "Other"];
+    check(await page.locator("#sheet .catrow .catbar").count() >= 8 && heads.includes("Buffer") && heads.every((h, i) => order.includes(h) && (i === 0 || order.indexOf(heads[i - 1]) < order.indexOf(h))) && t.includes("Buffer For overspending; not savings"), "each category has its suggested figure and a thin bar, grouped under the same headings as Budget in the same order (Wants before the Buffer), and the buffer is named as on Budget"); }
+  check(/^Paid in this order: Fixed, Needs, your savings minimum, the buffer, then Wants \(up to \u20B17,500\.00\)\. Left: /.test((await text(page, "#sug-left")).trim()), "the note under the list says the order of funding and the wants cap (30% of 25,000.00)");
   check(await page.locator('#sheet input[data-field^="y_"]').count() === 0, "the own-figure boxes are hidden until asked for");
   await page.click('#sheet button[data-action="sug-edit"]');
   check(await page.locator('#sheet input[data-field^="y_"]').count() >= 5, "'Type my own figures' shows one box per category");

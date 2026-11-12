@@ -2532,7 +2532,9 @@ const bvIncomes = (v) => v.regularIncomes;   // lines are shared over the REGULA
 const bvRegular = (v) => v.paydays.filter((p) => !p.extra);
 const bvNextReg = (v, w) => v.perPayday.slice(w + 1).find((p) => !p.extra) ?? null;   // the next regular payday in this month (never the next month)
 const bvAmounts = (v, key) => { const line = v.lines.find((l) => l.key === key); return line ? M.paydayShares(ledger.settings, line, bvIncomes(v)).map(M.amountText) : []; };
-const BUDGET_GROUPS = ["Fixed", "Needs", "Savings", "Buffer", "Wants", "Other"];   // the order of funding: Fixed payments first, then needs, savings, the buffer, then wants
+// The buffer is named the same way everywhere (Budget, Suggest, the Buffer screen): what it is for, and that it is not savings.
+const BUFFER_NAME = "Buffer", BUFFER_SUB = "For overspending; not savings";
+const BUDGET_GROUPS = ["Fixed", "Needs", "Savings", "Wants", "Buffer", "Other"];   // the order on screen (owner, Nov 11): Wants before the Buffer. The ORDER OF FUNDING in the model is unchanged: Fixed, Needs, savings, the buffer, then Wants.
 const incomeWords = (inc) => (inc.source === "pinned" ? "Your own figure" : inc.source === "payslips" ? "From your payslips" : inc.source === "plan" ? "From your Pay plan" : "");
 // The offer "Add to savings" for an amount that is Left: {add: {goal_id: centavos}, total, left} (model: placeSurplus). Used by the Budget and by its own tap.
 function savingsOffer(left) {
@@ -2555,14 +2557,17 @@ function viewBudget() {
   const leftLine = left >= 0 ? `Left: ${pesoW(left)}, not assigned` : `Over by ${pesoW(-left)}`;
   // ADD TO SAVINGS (owner, Nov 8): what is Left is never placed by itself; this offer puts it on the goals that still have a gap, only when it is tapped.
   const offer = per === "month" && left > 0 ? savingsOffer(left) : null;
-  const offerHtml = offer && offer.total > 0 ? `<p style="margin-bottom:4px"><button data-action="add-left-to-savings" style="width:100%">Add ${pesoW(offer.total)} to savings</button></p><p class="note small" style="margin-top:0">The emergency fund first, then your other goals by your percentages. Never more than a goal still needs.</p>` : "";
+  const hasOffer = !!(offer && offer.total > 0);
+  const offerNote = hasOffer ? `<p class="note small" style="margin-top:0">Add to savings: the emergency fund first, then your goals by your percentages.</p>` : "";
   const max = Math.max(1, ...rows.map((r) => r.amount));
   const nextM = M.addMonths(month, 1), changeNote = (id, now) => { const l = M.budgetFor(S().rules, id, nextM); return (l ?? null) !== (now ?? null) ? `${l === null ? "ends" : peso(l) + " a month"} from ${esc(M.monthLabel(nextM))}` : ""; };
   const spentNote = (r) => { if (!prog || r.kind !== "category") return ""; const sp = prog.spent[r.id] ?? 0, d = r.amount - sp; return `Spent ${peso(sp)} \u00b7 ${d >= 0 ? peso(d) + " left" : peso(-d) + " over"}`; };
-  const shareNote0 = (r) => { if (per === "month" && r.kind === "category") return changeNote(r.id, r.amount); if (per !== "payday" || v.paydays.length < 2) return r.kind === "goal" ? "Goal" : r.kind === "buffer" ? "For overspending; not savings" : ""; const pin = set.payday_pins?.[r.key]; return Number.isInteger(pin) ? (pin === w ? "Whole amount here" : "Whole amount on the " + v.paydays[pin].label.toLowerCase() + " payday") : r.kind === "buffer" ? "For overspending; not savings" : r.kind === "goal" ? "Goal" : ""; };
+  const shareNote0 = (r) => { if (per === "month" && r.kind === "category") return changeNote(r.id, r.amount); if (per !== "payday" || v.paydays.length < 2) return r.kind === "buffer" ? BUFFER_SUB : ""; const pin = set.payday_pins?.[r.key]; return Number.isInteger(pin) ? (pin === w ? "Whole amount here" : "Whole amount on the " + v.paydays[pin].label.toLowerCase() + " payday") : r.kind === "buffer" ? BUFFER_SUB : ""; };
   const shareNote = (r) => [shareNote0(r), spentNote(r)].filter(Boolean).join(" \u00b7 ");
-  const act = (r) => (per === "payday" ? { action: "bv-line", id: r.key } : per === "month" ? (r.kind === "category" ? { action: "open-budget", id: r.id } : r.kind === "goal" ? { action: "open-goal-monthly", id: r.id } : {}) : {});
-  const card = (g) => { const list = rows.filter((r) => r.group === g); return list.length ? `<h4 class="sugh">${g}</h4>` + barCard(list.map((r) => ({ name: `${esc(r.name)}${r.kind === "category" ? hiddenTag(r.id) : ""}`, sub: shareNote(r), fig: peso(r.amount), pct: Math.round((r.amount * 100) / max), label: r.name, ...act(r) }))) : ""; };
+  const act = (r) => (per === "payday" ? { action: "bv-line", id: r.key } : per === "month" ? (r.kind === "category" ? { action: "open-budget", id: r.id } : r.kind === "goal" ? { action: "open-goal-monthly", id: r.id } : r.kind === "buffer" ? { action: "open-buffer-monthly", id: "buffer" } : {}) : {});
+  // THE BUFFER LINE (P0-6 PR 5): one figure, settings.buffer_monthly; with none set, Month offers it as an empty row to tap.
+  const noBuffer = per === "month" && !rows.some((r) => r.kind === "buffer") ? `<h4 class="sugh">Buffer</h4>` + barCard([{ id: "buffer", action: "open-buffer-monthly", name: BUFFER_NAME, sub: BUFFER_SUB, fig: "Not set", pct: null }]) : "";
+  const card = (g) => { const list = rows.filter((r) => r.group === g); return !list.length ? (g === "Buffer" ? noBuffer : "") : `<h4 class="sugh">${g}</h4>` + barCard(list.map((r) => ({ name: `${r.kind === "buffer" ? BUFFER_NAME : esc(r.name)}${r.kind === "category" ? hiddenTag(r.id) : ""}`, sub: shareNote(r), fig: peso(r.amount), pct: Math.round((r.amount * 100) / max), label: r.name, ...act(r) }))); };
   const noBudget = per === "month" ? expenseCategories().filter((c) => !M.isHiddenCategory(set, c.id) && !(M.budgetFor(S().rules, c.id, month) > 0)) : [];
   const noBudgetCard = noBudget.length ? `<h4 class="sugh">No budget yet</h4>` + barCard(noBudget.map((c) => ({ id: c.id, action: "open-budget", name: esc(c.name), sub: changeNote(c.id, null), fig: "No budget", pct: null }))) : "";
   const moveBtn = per === "payday" && !block.extra && bvNextReg(v, w) && left < 0 ? `<p><button data-action="bv-move-pick" style="width:100%">Move ${pesoW(-left)} to the next payday?</button></p>` : "";
@@ -2574,12 +2579,12 @@ function viewBudget() {
     <div class="pp-whole" role="img" aria-label="${esc(pesoW(block.placed))} of ${esc(pesoW(income))} placed" style="margin:12px 0 8px"><span style="width:${income > 0 ? Math.max(0, Math.min(100, Math.round((block.placed * 100) / income))) : 0}%"></span></div>
     <div class="ct" style="display:flex;justify-content:space-between;gap:10px"><span class="note small" style="margin:0">${esc(src)}</span><span class="amt" style="white-space:nowrap">${esc(leftLine)}</span></div>${v.income.other ? `<p class="note small">Your payslips say ${peso(v.income.other.amount)}; your own figure is used.</p>` : ""}${payLine ? `<p class="note small" id="pay-line">${payLine}</p>` : ""}${prog ? `<p class="note small">${esc(longDate(prog.start))} to ${esc(longDate(prog.end))}. Only verified spending counts.</p>` : ""}</div>` : `<p class="note">${esc(M.NO_INCOME_PROMPT)}</p>`;
   const body = BUDGET_GROUPS.map(card).join("");
-  return `<h1>Budget</h1>${moveCard}${seg}${daySeg}${top}${moveBtn}${offerHtml}${per === "week" ? "" : `<p><button data-action="open-income" style="width:100%">Record pay received</button></p>`}${noPay}${body}${noBudgetCard}${weekNote}
-    <p><button class="primary" data-action="open-suggest" style="width:100%">Suggest a budget</button></p>${hiddenList}`;
+  return `<h1>Budget</h1>${moveCard}${seg}${daySeg}${top}${moveBtn}${hasOffer || per !== "week" ? `<div class="actrow2">${hasOffer ? `<button class="act" data-action="add-left-to-savings">Add ${pesoW(offer.total)} to savings</button>` : ""}${per === "week" ? "" : `<button class="act" data-action="open-income">Record pay received</button>`}</div>` : ""}${offerNote}${body}${noBudgetCard}${weekNote}
+    <p><button class="primary" data-action="open-suggest" style="width:100%">Suggest a budget</button></p>${noPay}${hiddenList}`;
 }
 
 const rowWhy = (x) => (x.source === "starter" && !x.pinned ? (/Lowered by .*$/.exec(x.reason)?.[0] ?? "") : x.reason);
-const runSuggest = () => { const set = ledger.settings; return M.suggestBudgets({ state: S(), plan: planOf(), pin: set.income_base_pin ?? null, today: today(), month: M.monthOf(today()), settings: set.suggest_settings, pins: set.budget_pins ?? {}, rent: set.starter_rent ?? undefined, goalPins: set.goal_monthly ?? {}, goalShares: set.goal_shares ?? {}, overrides: set.bucket_overrides ?? {}, targets: set.bucket_targets, hidden: M.hiddenCategoryIds(set), fixed: set.fixed_overrides ?? {} }); };
+const runSuggest = () => { const set = ledger.settings; return M.suggestBudgets({ state: S(), plan: planOf(), pin: set.income_base_pin ?? null, today: today(), month: M.monthOf(today()), settings: M.suggestSettingsOf(set), pins: set.budget_pins ?? {}, rent: set.starter_rent ?? undefined, goalPins: set.goal_monthly ?? {}, goalShares: set.goal_shares ?? {}, overrides: set.bucket_overrides ?? {}, targets: set.bucket_targets, hidden: M.hiddenCategoryIds(set), fixed: set.fixed_overrides ?? {} }); };
 // What the "Yours" box shows: what was typed or taken from the suggestion, else the pinned figure, else the budget in force.
 const yoursOf = (x, f) => (f["y_" + x.category_id] !== undefined ? f["y_" + x.category_id] : ledger.settings.budget_pins?.[x.category_id] !== undefined ? (ledger.settings.budget_pins[x.category_id] / 100).toFixed(2) : x.current != null ? (x.current / 100).toFixed(2) : "");
 // The figures the owner has in the suggestion sheet, as {category_id: centavos}, plus which were TYPED (those become pins).
@@ -3151,6 +3156,13 @@ function renderSheet() {
       <label for="f-amount">Per month (\u20B1)${REQ}</label><input id="f-amount" data-field="amount" inputmode="decimal" value="${esc(ui.form.amount ?? "")}" autocomplete="off">
       ${REQNOTE}
       <p><button class="primary" id="f-save" data-action="save-income-base" style="margin-top:6px" disabled>Use this figure</button></p>`;
+  } else if (sh.type === "buffer-monthly") {
+    const set0 = Number.isInteger(ledger.settings.buffer_monthly);
+    body = `<h3>Buffer: a month</h3><p class="note">Money kept for when a category goes over its budget. It is never counted as savings.</p>
+      <label for="f-amount">Per month (\u20B1)${REQ}</label><input id="f-amount" data-field="amount" inputmode="decimal" value="${esc(ui.form.amount ?? "")}" autocomplete="off">
+      ${REQNOTE}
+      <p><button class="primary" id="f-save" data-action="save-buffer-monthly" style="margin-top:6px" disabled>Use this amount</button></p>
+      ${set0 ? `<p><button data-action="clear-buffer-monthly" style="width:100%">No buffer</button></p>` : ""}`;
   } else if (sh.type === "goal-monthly") {
     const g = S().goals.find((x) => x.id === sh.id), typed = ledger.settings.goal_monthly?.[sh.id] !== undefined;
     body = `<h3>${esc(g.name)}: a month</h3><p class="note">Type how much to set aside for this goal each month. Other goals share what is left.</p>
@@ -3188,17 +3200,22 @@ function renderSheet() {
       const top = barCard([
         { name: "Income", sub: esc(r.income.text), fig: `${peso(r.income.amount)} a month`, pct: null, action: "open-income-base", id: "x" },
         ...(r.income.other ? [{ name: "Your payslips say", sub: "Not used: your own figure is", fig: `${peso(r.income.other.amount)} a month`, pct: null }] : []),
-        ...bk.rows.map((b) => ({ name: esc(b.label), sub: b.target != null ? `target ${M.showTenths(b.target)}` : "", fig: `${peso(b.amount)} \u00b7 ${b.tenths == null ? "" : M.showTenths(b.tenths)}`, pct: b.tenths == null ? 0 : Math.min(100, b.tenths / 10), label: `${b.label}: ${b.tenths == null ? "" : M.showTenths(b.tenths)} of income` })),
+        ...bk.rows.map((b) => ({ name: esc(b.bucket === "need" ? "Fixed and Needs" : b.label), sub: b.target != null ? `target ${M.showTenths(b.target)}` : "", fig: `${peso(b.amount)} \u00b7 ${b.tenths == null ? "" : M.showTenths(b.tenths)}`, pct: b.tenths == null ? 0 : Math.min(100, b.tenths / 10), label: `${b.label}: ${b.tenths == null ? "" : M.showTenths(b.tenths)} of income` })),
+        ...(bufferAmt > 0 ? [{ name: BUFFER_NAME, sub: "", fig: `${peso(bufferAmt)} \u00b7 ${M.showTenths(bk.buffer.tenths)}`, pct: Math.min(100, bk.buffer.tenths / 10), label: `${BUFFER_NAME}: ${M.showTenths(bk.buffer.tenths)} of income` }] : []),
       ]);
       const max = Math.max(1, ...r.rows.map((x) => sugAmt(x)));
-      const list = barCard(r.rows.map((x) => { const why = rowWhy(x), cur = sugAmt(x); return { name: esc(x.name), sub: why ? esc(why) : "", fig: `<b>${x.suggested === null ? "none" : peso(x.suggested)}</b>`, pct: Math.round((cur * 100) / max), label: `${x.name}: suggested ${x.suggested === null ? "none" : peso(x.suggested)}`,
-        extra: !f.sugEdit ? "" : `<div class="sugyours"><label for="y_${esc(x.category_id)}">Yours</label><input id="y_${esc(x.category_id)}" data-field="y_${esc(x.category_id)}" inputmode="decimal" value="${esc(yoursOf(x, f))}" placeholder="\u20B1 a month" autocomplete="off">${x.suggested === null ? "" : `<button class="act" data-action="use-sug" data-id="${esc(x.category_id)}">Use</button>`}</div>` }; }));
+      const fixedIds = M.fixedMap(S(), ledger.settings, today()), catById = new Map(S().categories.map((c) => [c.id, c]));
+      const groupOf = (id) => (fixedIds.has(id) ? "Fixed" : M.BUCKET_LABELS[M.bucketOf(catById.get(id), ledger.settings.bucket_overrides ?? {})] ?? "Other");
+      const rowOf = (x) => { const why = rowWhy(x), cur = sugAmt(x); return { name: esc(x.name), sub: why ? esc(why) : "", fig: `<b>${x.suggested === null ? "none" : peso(x.suggested)}</b>`, pct: Math.round((cur * 100) / max), label: `${x.name}: suggested ${x.suggested === null ? "none" : peso(x.suggested)}`,
+        extra: !f.sugEdit ? "" : `<div class="sugyours"><label for="y_${esc(x.category_id)}">Yours</label><input id="y_${esc(x.category_id)}" data-field="y_${esc(x.category_id)}" inputmode="decimal" value="${esc(yoursOf(x, f))}" placeholder="\u20B1 a month" autocomplete="off">${x.suggested === null ? "" : `<button class="act" data-action="use-sug" data-id="${esc(x.category_id)}">Use</button>`}</div>` }; };
+      const savedRow = (x) => (x.kind === "buffer" ? { name: BUFFER_NAME, sub: BUFFER_SUB, fig: peso(x.amount), pct: null, action: "open-buffer-monthly", id: "buffer" } : { name: esc(x.name), sub: x.need ? `Needs ${peso(x.need)} a month` : "", fig: peso(x.amount), pct: null, ...(x.goal_id ? { action: "open-goal-monthly", id: x.goal_id } : {}) });
+      const groups = BUDGET_GROUPS.map((g) => { const items = [...r.rows.filter((x) => groupOf(x.category_id) === g).map(rowOf), ...(g === "Savings" ? r.saved.filter((x) => x.kind !== "buffer").map(savedRow) : g === "Buffer" ? r.saved.filter((x) => x.kind === "buffer").map(savedRow) : [])];
+        return items.length ? `<h4 class="sugh">${g}</h4>${barCard(items)}${g === "Savings" && r.saved.some((x) => x.kind === "goal") ? `<p class="center"><button class="act" data-action="open-shares">Percentages for Add to savings</button></p>` : ""}` : ""; }).join("");
       const saved = r.saved.length ? barCard(r.saved.map((x) => ({ name: esc(x.name), sub: x.kind === "buffer" ? "overrun buffer, never savings" : x.need ? `Needs ${peso(x.need)} a month` : "", fig: peso(x.amount), pct: null, ...(x.goal_id ? { action: "open-goal-monthly", id: x.goal_id } : {}) }))) : "";
       body = `<h3>Suggest a budget</h3><p class="note">Nothing is saved until you confirm. Suggestions are rounded to the nearest \u20B150; typing a figure pins it as yours.${r.history.used === "starter" && ledger.settings.starter_rent != null ? ` Rent: ${peso(ledger.settings.starter_rent)} <button class="act" data-action="change-rent">Change</button>` : ""}</p>
         ${top}<p class="center"><button class="act" data-action="open-targets">Change the 50 / 30 / 20 split</button></p>
-        <h4 class="sugh">Spending, each a month</h4>${list}<p class="center"><button class="act" data-action="sug-edit">${f.sugEdit ? "Hide my own figures" : "Type my own figures"}</button></p>
-        ${saved ? `<h4 class="sugh">Saved and set aside</h4>${saved}<p class="center"><button class="act" data-action="open-shares">Percentages for Add to savings</button></p>` : ""}
-        <p class="note" id="sug-left">${r.short > 0 ? `<b>Short by ${peso(r.short)}.</b> Fixed, needs and savings floor: ${peso(r.income.amount + r.short)}. Income: ${peso(r.income.amount)}.` : `Funded in order: fixed, needs, savings floor, buffer, then wants (up to ${peso(r.funding.wantsCap)}). Left: <b>${peso(r.unallocated)}</b>.`}${r.trimmed.length ? ` Rounding would have gone over your income, so ${esc(r.trimmed.map((t) => `${t.name} was lowered by ${peso(t.by)}`).join(", "))}.` : ""}</p>
+        ${groups}<p class="center"><button class="act" data-action="sug-edit">${f.sugEdit ? "Hide my own figures" : "Type my own figures"}</button></p>
+        <p class="note" id="sug-left">${r.short > 0 ? `<b>Short by ${peso(r.short)}.</b> These figures come to ${peso(r.income.amount + r.short)}; your pay is ${peso(r.income.amount)}. Your own figures, goals and the buffer are never lowered for you.` : `Paid in this order: Fixed, Needs, your savings minimum, the buffer, then Wants (up to ${peso(r.funding.wantsCap)}). Left: <b>${peso(r.unallocated)}</b>.`}${r.trimmed.length ? ` Rounding would have gone over your income, so ${esc(r.trimmed.map((t) => `${t.name} was lowered by ${peso(t.by)}`).join(", "))}.` : ""}</p>
         <p><button data-action="use-all-sug" style="width:100%">Use all suggestions</button></p>
         <p><button class="primary" data-action="review-sug">Confirm</button></p>`;
     }
@@ -3763,7 +3780,7 @@ function refreshSave() {
     btn.disabled = !((f.name ?? "").trim() && a.ok && Boolean(f.start) === Boolean(f.end));
   } else if (type === "trip-dates") {
     btn.disabled = !(f.start && f.end);
-  } else if (type === "goal-monthly") {
+  } else if (type === "goal-monthly" || type === "buffer-monthly") {
     const a = M.parsePesos(f.amount ?? "");
     btn.disabled = !(a.ok && a.centavos >= 0);
   } else if (type === "shares") {
@@ -4101,6 +4118,9 @@ async function onClick(el) {
       showToast((w.changes.length === 1 ? "1 budget" : w.changes.length + " budgets") + " set from " + M.monthLabel(month) + ".");
       break;
     }
+    case "open-buffer-monthly": { const cur = ledger.settings.buffer_monthly, sug = runSuggest(), row = sug?.ok ? sug.saved.find((x) => x.kind === "buffer") : null; ui.sheet = { type: "buffer-monthly" }; ui.form = { amount: Number.isInteger(cur) ? (cur / 100).toFixed(2) : row ? (row.amount / 100).toFixed(2) : "" }; renderSheet(); break; }
+    case "save-buffer-monthly": { const a = M.parsePesos(ui.form.amount ?? ""); if (!a.ok || a.centavos < 0) break; ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, buffer_monthly: a.centavos }); showToast("Buffer: " + pesoW(a.centavos) + " a month"); break; }
+    case "clear-buffer-monthly": { const { buffer_monthly, ...rest } = ledger.settings; ui.sheet = null; renderSheet(); await commit(S(), rest); showToast("No buffer"); break; }
     case "open-goal-monthly": { const cur = ledger.settings.goal_monthly?.[id], row = M.savedRows({ plan: planOf(), suggestion: runSuggest() }).find((r) => r.goal_id === id); ui.sheet = { type: "goal-monthly", id }; ui.form = { amount: cur !== undefined ? (cur / 100).toFixed(2) : row ? (row.amount / 100).toFixed(2) : "" }; renderSheet(); break; }
     case "save-goal-monthly": { const a = M.parsePesos(ui.form.amount ?? ""); if (!a.ok || a.centavos < 0) break; const gid = ui.sheet.id; ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, goal_monthly: { ...(ledger.settings.goal_monthly ?? {}), [gid]: a.centavos } }); break; }
     case "clear-goal-monthly": { const { [ui.sheet.id]: _gone, ...rest } = ledger.settings.goal_monthly ?? {}; ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, goal_monthly: rest }); break; }

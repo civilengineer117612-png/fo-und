@@ -116,5 +116,5 @@ test("Suggest a budget is a window opened from Budget by a real button; nothing 
   const b = js.slice(js.indexOf("function viewBudget()"), js.indexOf("const rowWhy"));
   assert.ok(b.includes('<button class="primary" data-action="open-suggest" style="width:100%">Suggest a budget</button>') && !b.includes("never rewrites the past"));
   assert.ok(js.includes('sh.type === "budget-suggest"') && js.includes('case "review-sug"') && js.includes('case "save-sug"') && js.includes('case "sug-edit"'));
-  assert.ok(js.includes("barCard(r.rows.map") && js.includes("M.bucketRows({ categories: S().categories"), "the window draws through barCard and shows the split against the targets");
+  assert.ok(js.includes("r.rows.filter((x) => groupOf(x.category_id) === g).map(rowOf)") && js.includes("${barCard(items)}") && js.includes("M.bucketRows({ categories: S().categories"), "the window draws through barCard, grouped like Budget, and shows the split against the targets");
 });
