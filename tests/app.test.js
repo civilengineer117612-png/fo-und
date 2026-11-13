@@ -184,7 +184,8 @@ test("motion and icons: taps press, bars grow, the folded list drops in only on 
   assert.match(js, /const anim = ui\.entriesAnim; ui\.entriesAnim = false;/, "only the tap animates, not every redraw");
   assert.match(js, /case "toggle-entries": ui\.entriesAnim = true;/);
   for (const k of ["flipchev", "dropin"]) assert.ok(css.includes("@keyframes " + k + " {"), k);
-  assert.match(css, /\.hub button:active, \.glance:active, \.entrieshead:active, \.choice:active \{ transform: scale\(\.99\); \}/, "every tappable thing gives a small press");
+  // Before Nov 13 this checked a small shrink (scale .99); F2 made the ONE pressed look a darker surface (tests/press.test.js checks every pressed rule).
+  assert.match(css, /\.hub button:active, \.glance:active, \.entrieshead:active, \.choice:active \{ background: var\(--line\); \}/, "every tappable thing gives a press: its surface darkens");
   assert.match(css, /-webkit-tap-highlight-color: transparent; touch-action: manipulation;/, "no grey flash, no tap delay");
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.chev\.up\.flip, #entries-list\.drop \{ animation: none; \} button \{ transition: none; \} \}/, "Reduce Motion stops the new motion");
   assert.ok(!css.includes("@keyframes growbar") && !css.includes("@keyframes popin"), "bars do not animate while they are measured; nothing pops");
