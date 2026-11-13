@@ -46,7 +46,8 @@ test("shares are to one decimal and ties are ordered by name", () => {
   const s = base();
   spend(s, "a", "2026-03-02", "food", 1); spend(s, "b", "2026-03-02", "rent", 1); spend(s, "c", "2026-03-02", "unlogged", 1);
   const r = M(s);
-  assert.deepEqual(r.rows.map((x) => [x.name, x.percent]), [["Food", 33.3], ["Rent", 33.3], ["Unlogged", 33.3]]);
+  // Before Nov 13 this pinned 33.3 three times (the column read 99.9). L14: the shares add up; the first of the tied rows (by name) takes the missing tenth.
+  assert.deepEqual(r.rows.map((x) => [x.name, x.percent]), [["Food", 33.4], ["Rent", 33.3], ["Unlogged", 33.3]]);
 });
 test("only verified spending counts; drafts are reported as pending", () => {
   const s = base();
@@ -244,4 +245,28 @@ test("a Credit card spending category from an earlier version is taken away agai
   spend(s, "fee", "2026-03-10", "cat-creditcard", 12500, "card");
   assert.ok(dropUnusedCardCategory(s).categories.some((c) => c.id === "cat-creditcard"), "kept when used");
   assert.ok(!defaultCategories().some((c) => c.id === "cat-creditcard"), "not a default any more");
+});
+
+test("L14: a list twin's shares add up: three equal rows read 33.4, 33.3, 33.3 (never 99.9), the largest row takes the difference, a column that adds up is untouched", async () => {
+  const { sharesOf } = await import("../src/model/index.js");
+  const sum = (a) => Math.round(a.reduce((n, x) => n + x * 10, 0)) / 10;
+  assert.deepEqual(sharesOf([100, 100, 100], 300), [33.4, 33.3, 33.3]);
+  assert.equal(sum(sharesOf([100, 100, 100], 300)), 100);
+  assert.deepEqual(sharesOf([50000, 30000, 20000], 100000), [50, 30, 20], "exact shares are not touched");
+  assert.equal(sum(sharesOf([123457, 98765, 4321, 1, 77777], 304321)), 100, "odd figures still add to 100.0");
+  assert.deepEqual(sharesOf([0, 500], 500), [0, 100], "a row of zero shows 0");
+  assert.deepEqual(sharesOf([100, 100], 0), [0, 0], "nothing spent: no share");
+  // a row below zero (a category that brings the total down) takes no share; the others add to what they are of the total
+  assert.deepEqual(sharesOf([600, 600, -200], 1000), [60, 60, 0]);
+});
+
+test("L8: an entry dated before its account's start date is named at save, in one line (the charter's exception stays)", async () => {
+  const M = await import("../src/model/index.js"), { readFileSync } = await import("node:fs");
+  const s = { accounts: [{ id: "w", opening_date: "2026-01-01" }, { id: "n" }] };
+  assert.equal(M.beforeAccountStart(s, "w", "2025-12-25"), true, "Dec 25, 2025 on an account that starts Jan 1, 2026");
+  assert.equal(M.beforeAccountStart(s, "w", "2026-01-01"), false, "the start date itself counts");
+  assert.equal(M.beforeAccountStart(s, "n", "2025-12-25"), false, "an account with no start date never says it");
+  assert.equal(M.BEFORE_START_NOTE, "Before this account's start date: counted as spending, balance not changed.");
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  assert.ok(app.includes("if (M.beforeAccountStart(S(), input.account_id, drafts[0].transaction.date)) note = (note ? note + \" \" : \"\") + M.BEFORE_START_NOTE;"), "Add expense says it with the save");
 });

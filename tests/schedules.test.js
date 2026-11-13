@@ -416,3 +416,9 @@ test("an installment: 'already paid' is the first payments, and the ones older t
   assert.equal(madeAfterAnswers(s, sc, ["3", "4"], "2026-10-05"), 4);   // 2 older + 2 paid
   assert.equal(madeAfterAnswers(s, sc, [], "2026-10-05"), 2);
 });
+
+test("L16: Log's heading is Scheduled, not Due soon (late ones sort first: see the Due soon order test above)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  assert.ok(app.includes("return `<h2>Scheduled</h2>${list.slice(0, 3)") && !app.includes("<h2>Due soon</h2>"), "the heading says Scheduled");
+});

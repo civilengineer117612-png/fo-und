@@ -1825,7 +1825,7 @@ function barChart(rows, selected) {
 function foldRows(rows, total) {
   if (rows.length <= SHOWN_BARS + 1) return rows;
   const rest = rows.slice(SHOWN_BARS), sum = rest.reduce((n, r) => n + r.amount, 0);
-  return [...rows.slice(0, SHOWN_BARS), { id: "__rest", label: esc("Everything else (" + rest.length + " more)"), amount: sum, percent: total > 0 ? Math.round((sum * 1000) / total) / 10 : 0, fold: true }];
+  return [...rows.slice(0, SHOWN_BARS), { id: "__rest", label: esc("Everything else (" + rest.length + " more)"), amount: sum, percent: Math.round(rest.reduce((n, r) => n + (r.percent ?? 0) * 10, 0)) / 10, fold: true }]   // the rest's own shares added, so the column still adds up (L14);
 }
 
 function listTable(heads, rows, totalLabel, total) {
@@ -2061,8 +2061,8 @@ function viewMoney() {
   if (ui.view === "account") {
     const acc = M.spendingByAccount(S(), { from, to });
     if (!acc.rows.length) return empty();
-    const pct = (a) => (acc.total > 0 && a > 0 ? Math.round((a * 1000) / acc.total) / 10 : 0);
-    const rows = acc.rows.map((r) => ({ id: r.account_id, action: "spending-account", label: withIcon(S().accounts.find((a) => a.id === r.account_id) ?? { name: r.name }, 24), plain: accountName(r.account_id), amount: r.amount, percent: pct(r.amount) }));
+    const shared = M.sharesOf(acc.rows.map((r) => r.amount), acc.total), pctAt = new Map(acc.rows.map((r, i) => [r, shared[i]])), pct = (a, r) => pctAt.get(r) ?? 0;   // L14: the column adds up
+    const rows = acc.rows.map((r) => ({ id: r.account_id, action: "spending-account", label: withIcon(S().accounts.find((a) => a.id === r.account_id) ?? { name: r.name }, 24), plain: accountName(r.account_id), amount: r.amount, percent: pct(r.amount, r) }));
     if (ui.asList) return done(listTable(["Account", "Spent", "Share"], rows.map((r) => [`<button class="act" data-action="spending-account" data-id="${esc(r.id)}">${esc(accountName(r.id))}</button>`, peso(r.amount), r.percent + "%"]), "Total", acc.total));
     return done(shareBars(rows, acc.total));
   }
@@ -2266,10 +2266,10 @@ function scheduleDetail(id) {
     ${M.skippedOf(S(), sc, today()).length ? `<h2>Skipped</h2>${M.skippedOf(S(), sc, today()).map((p) => `<div class="row"><div>${esc(sc.kind === "installment" ? "Payment " + p.key : p.key)}<small>${peso(p.amount)}</small></div><div class="amt"><button class="act" data-action="sch-unskip" data-id="${esc(id)}" data-key="${esc(p.key)}">Bring it back</button></div></div>`).join("")}` : ""}
     ${rows.length ? `<h2>History</h2>${rows.map((c) => `<p class="note">${esc(words[c.kind](c))}</p>`).join("")}` : ""}`;
 }
-// The due soon lines on Log: name, amount, days left. Plain words.
+// The scheduled lines on Log (L16, Nov 13: "Scheduled", not "Due soon", which sat over payments 80 days late): late ones first, then the next due. Plain words.
 function dueSoonHtml() {
   const list = M.dueSoon(S(), today(), { days: 7 }); if (!list.length) return "";
-  return `<h2>Due soon</h2>${list.slice(0, 3).map((d) => `<div class="row"><div>${esc(d.name)}<small>${esc(M.daysText(d.days))}</small></div><div class="amt">${peso(d.amount)}</div></div>`).join("")}${list.length > 3 ? `<p class="note"><button class="act" data-action="tab" data-tab="scheduled">See all ${list.length}</button></p>` : ""}`;
+  return `<h2>Scheduled</h2>${list.slice(0, 3).map((d) => `<div class="row"><div>${esc(d.name)}<small>${esc(M.daysText(d.days))}</small></div><div class="amt">${peso(d.amount)}</div></div>`).join("")}${list.length > 3 ? `<p class="note"><button class="act" data-action="tab" data-tab="scheduled">See all ${list.length}</button></p>` : ""}`;
 }
 
 function viewTrips() {
@@ -4022,6 +4022,7 @@ async function logExpense(input, label) {
   let next = M.applyDrafts(S(), drafts);
   if (input.photo_id) { const a = M.planAttachment(next, { id: input.photo_id, transaction_id: drafts[0].transaction.id }); if (a.ok) next = a.state; }
   const ok = await commit(next, settings);
+  if (M.beforeAccountStart(S(), input.account_id, drafts[0].transaction.date)) note = (note ? note + " " : "") + M.BEFORE_START_NOTE;   // L8: said once, at save
   showToast((ok ? "Saved " : "Not safely stored: ") + label + " \u00b7 " + accountName(input.account_id), drafts[0].transaction.id, note);
   if (ok && !drafts[0].transaction.schedule_id) {   // a due scheduled payment of about the same name and amount: offer to link, so it is counted once
     const t0 = drafts[0].transaction, due = M.matchDueDraft(S(), { payee: t0.payee || label, amount: input.amount, date: t0.date, category_id: input.category_id });

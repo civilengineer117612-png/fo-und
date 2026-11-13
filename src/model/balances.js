@@ -79,3 +79,8 @@ export function netPosition(held, owe) {
   const have = Math.max(0, held), owed = Math.max(0, owe);
   return { have, owed, free: held - owed, share: have > 0 ? Math.min(1, owed / have) : owed > 0 ? 1 : 0 };
 }
+
+// L8 (overhaul, Nov 13): ACCOUNTING.md keeps one stated exception: an entry dated before its account's start date counts as spending but does not move that
+// account's balance. Said once, at save, so it is never a surprise.
+export const BEFORE_START_NOTE = "Before this account's start date: counted as spending, balance not changed.";
+export const beforeAccountStart = (state, accountId, date) => { const a = state.accounts.find((x) => x.id === accountId); return Boolean(a?.opening_date && date && date < a.opening_date); };
