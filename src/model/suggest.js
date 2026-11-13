@@ -262,7 +262,7 @@ export function suggestPlan(input) {
   if (!lines.has(bufferKey)) {
     const amount = Math.min(bufferMonthly, room), [a, b] = splitBy(amount, income[0], inc1);
     put(bufferName, "buffer", [a, b], S.buffer_amount !== null ? "Your overrun buffer setting, split by what each payday brings in." : `Starter share, a common rule of thumb and not advice: ${pct(S.starter.buffer)} of pay, split by what each payday brings in.`, S.buffer_amount !== null ? "history" : "starter");
-    if (amount < bufferMonthly) lines.get(bufferKey).reason += " Lowered: it comes after fixed payments, needs and your savings floor.";
+    if (amount < bufferMonthly) lines.get(bufferKey).reason += " Lowered: it comes after Fixed, Needs and your savings minimum.";
   }
   const bufferAmt = lines.get(bufferKey).first + lines.get(bufferKey).second;
   room = Math.max(0, room - bufferAmt);
@@ -282,7 +282,7 @@ export function suggestPlan(input) {
   else {
     const want = Math.floor((monthIncome * S.starter.savings) / 10000), left = Math.max(0, monthIncome - costs - floorAmt);
     saving = floorAmt + Math.min(Math.max(0, want - floorAmt), left);
-    why = saving === floorAmt && floorAmt > 0 && left === 0 ? "Your savings floor; there is not enough room for more." : `A cautious start: what is left after your costs, up to ${pct(S.starter.savings)} of pay (a rule of thumb), never below your savings floor.`;
+    why = saving === floorAmt && floorAmt > 0 && left === 0 ? "Your savings minimum; there is not enough room for more." : `A cautious start: what is left after your costs, up to ${pct(S.starter.savings)} of pay (a rule of thumb), never below your savings floor.`;
   }
   const funding = { income: monthIncome, fixed: fixedTotal, needs: needTotal, floor: floorAmt, buffer: bufferAmt, wants: wantsTotal, wantsCap, saving, shortBy };
   // The money set aside is shared between the goals by one rule (savings.js): typed amounts first, then each goal's monthly need (the emergency fund first when the money is short, the rest pro rata to need), then the percentages for what is left.

@@ -28,7 +28,8 @@ const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { widt
   userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1" });
 await ctx.route("**/*", (route) => new URL(route.request().url()).origin === new URL(base).origin ? route.continue() : route.abort());
 await ctx.addInitScript(() => { Object.defineProperty(navigator, "standalone", { get: () => true }); sessionStorage.setItem("logOpen", "1"); });
-const open = async () => { const page = await ctx.newPage(); page.on("pageerror", (e) => errors.push(e.message)); await page.clock.setFixedTime(new Date(TS)); await page.goto(base); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 }); return page; };
+await ctx.clock.setFixedTime(new Date(TS));   // on the window, before any page: on WebKit a fresh page's own clock was not ready yet
+const open = async () => { const page = await ctx.newPage(); page.on("pageerror", (e) => errors.push(e.message)); await page.goto(base); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 }); return page; };
 const stored = (page) => page.evaluate(() => new Promise((res) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => { const g = r.result.transaction("kv").objectStore("kv").get("ledger"); g.onsuccess = () => { r.result.close(); res(JSON.parse(g.result)); }; }; }));
 const quiet = async (page) => { let last = null, same = 0; while (same < 4) { const now = JSON.stringify(await stored(page)); same = now === last ? same + 1 : 0; last = now; await page.waitForTimeout(400); } };
 

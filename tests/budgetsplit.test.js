@@ -166,7 +166,7 @@ test("CUTOFF PROGRESS: per payday, what was verified-spent in that payday's own 
 test("the screen keeps Record pay received and the spent-so-far line on every category of a payday", () => {
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
   const view = app.slice(app.indexOf("function viewBudget()"), app.indexOf("const rowWhy"));
-  assert.ok(view.includes('<button data-action="open-income" style="width:100%">Record pay received</button>'), "pay received is recorded from Budget");
+  assert.ok(view.includes('${per === "week" ? "" : `<button class="act" data-action="open-income">Record pay received</button>`}'), "pay received is recorded from Budget, in Month and Per payday (a compact button beside Add to savings, owner's marks Nov 11)");
   assert.match(app, /M\.paydayProgress\(S\(\), set, month, \{ categoryMaps: S\(\)\.categoryMaps \}\)/);
   assert.match(app, /Spent \$\{peso\(sp\)\} \\u00b7 \$\{d >= 0 \? peso\(d\) \+ " left" : peso\(-d\) \+ " over"\}/);
 });
