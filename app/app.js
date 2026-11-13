@@ -289,7 +289,9 @@ async function commit(state, settings = ledger.settings, { quiet = false } = {})
   ui.error = out.error; ui.mirror = out.mirror; ui.ledgerBytes = M.ledgerBytes(text);
   const failed = out.ok ? [] : ["x"];
   // A background save (the logos) must not rebuild an open window and lose what is being done in it.
-  if (!quiet) renderAll(); else { renderBanner(); if (!document.activeElement?.matches("input, textarea, select")) renderScreen(); if (ui.sheet?.type === "banks") renderSheet(); }   // the screen behind a window may change; the window stays
+  // WINDOW JUMP (Nov 13): nothing behind an open window is rebuilt by a background save either: the screen is marked stale and drawn once the window closes
+  // (a rebuild behind a scrolled window threw it back up on WebKit, 138 to 46).
+  if (!quiet) renderAll(); else { if (ui.sheet || document.activeElement?.matches("input, textarea, select")) ui.screenStale = true; else { renderBanner(); renderScreenQuiet(); } if (ui.sheet?.type === "banks") renderSheet(); }   // the screen behind a window may change; the window stays
   if (!ledger.settings.bankLogosTried && !logoRun && failed.length === 0) loadBankLogos();   // a new install: logos after the first save
   if (out.ok && !quiet) void requestStorageProtection();
   return failed.length === 0;
@@ -366,7 +368,9 @@ function renderTop(title) {
   const lines = `<svg width="22" height="16" viewBox="0 0 22 16" aria-hidden="true"><rect y="1" width="22" height="2" rx="1" fill="currentColor"/><rect y="7" width="22" height="2" rx="1" fill="currentColor"/><rect y="13" width="13" height="2" rx="1" fill="currentColor"/></svg>`;   // three lines, the last one shorter, no box
   const mic = device.allowEntry && ui.tab === "log" ? `<button class="camicon micbtn" data-action="open-voice" aria-label="Say an entry out loud"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS.mic}</svg></button>` : "";
   const qm = device.allowEntry && M.introFor(ui.tab) ? `<button class="qmark" type="button" data-action="intro" data-id="${esc(ui.tab)}" aria-label="Help"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.25"/><path d="M12 11v5.5"/><circle cx="12" cy="7.75" r=".6" fill="currentColor"/></svg></button>` : "";   // brings back the short explanation
-  $("top").innerHTML = (device.allowEntry ? `<button class="menubtn" id="menuBtn" data-action="open-menu" aria-label="Menu" aria-expanded="${ui.menu}">${lines}</button>` : "") + (hub ? `<h1 class="sr">${esc(title)}</h1>` : titleOf(title)) + qm + mic;
+  const topHtml = (device.allowEntry ? `<button class="menubtn" id="menuBtn" data-action="open-menu" aria-label="Menu" aria-expanded="${ui.menu}">${lines}</button>` : "") + (hub ? `<h1 class="sr">${esc(title)}</h1>` : titleOf(title)) + qm + mic;
+  if (topHtml === lastTopHtml && $("top").firstChild) return;   // F4: the header holds only buttons and the title; the same markup is never written again
+  lastTopHtml = topHtml; $("top").innerHTML = topHtml;
 }
 
 let menuTimer = null;
@@ -438,9 +442,13 @@ function groupRows(root) {
 }
 
 let lastTabSig = null, lastViewSig = null, swapTimer = null;
+let lastScreenHtml = null, lastTopHtml = null, bgRender = false;
+const renderScreenQuiet = () => { bgRender = true; renderScreen(); bgRender = false; };   // a redraw for a background save (F4): unchanged markup is not written again
 function renderScreen() {
   if (ui.locked) return;
+  const background = bgRender; bgRender = false;
   if (holdingTap()) { afterTap(renderScreen); return; }   // never redraw under a finger (tap-safety): it waits until this tap has landed
+  ui.screenStale = false;
   applyAppearance();
   if (ui.tab === "cards" && lastTabSig !== "cards") { ui.cardsShown = false; ui.pocketsOpen = {}; }   // Cards opens with every amount hidden and every pocket folded; nothing is remembered
   if (ui.tab !== "log") ui.arrange = false;
@@ -452,7 +460,12 @@ function renderScreen() {
   const m = /^<h1>([^<]*)<\/h1>/.exec(html);
   renderTop(m ? m[1] : "fo/und");
   const scr0 = $("screen"), sameTab = ui.tab === lastTabSig, oldBar = scr0.querySelector(".modebar, .viewmark"), barWas = oldBar?.getBoundingClientRect().top, bodyWas = scr0.querySelector(".viewbody")?.offsetHeight ?? 0;
-  $("screen").innerHTML = hubStrip() + (m ? html.slice(m[0].length) : html);
+  const screenBody = m ? html.slice(m[0].length) : html, screenHtml = hubStrip() + screenBody;
+  // F4 (Nov 13): DRAW ONCE. A background save (the logos, a start-up save) does not write the same screen again: it used to rebuild it under a finger.
+  // A redraw asked for by a tap always writes (it may have to put a typed box or an opened fold back as the markup says).
+  if (background && sameTab && screenHtml === lastScreenHtml && scr0.firstChild) { hydratePhotos(); return; }
+  lastScreenHtml = screenHtml;
+  $("screen").innerHTML = hubStrip() + screenBody;
   // Changing screen fades the whole screen in; changing the view (category, budget...) or chart/list fades in ONLY what is under the view
   // buttons, so the top (month, total, buttons) stays perfectly still. Fade only, nothing slides.
   const tabSig = ui.tab, viewSig = [ui.view, ui.asList, ui.period?.kind, ui.incomeView].join(), scr = $("screen");
@@ -2773,7 +2786,7 @@ function renderSheet() {
   if (ui.locked) return;
   if (holdingTap()) { afterTap(renderSheet); return; }
   const sh = ui.sheet;
-  if (!sh) { $("sheet").innerHTML = ""; lastSheetKey = null; lockPage(false); return; }
+  if (!sh) { $("sheet").innerHTML = ""; lastSheetKey = null; lockPage(false); if (ui.screenStale) { ui.screenStale = false; renderBanner(); renderScreenQuiet(); } return; }
   const key = [sh.type, sh.id ?? "", sh.queueId ?? ""].join(":"), opening = lastSheetKey !== key, keepAt = lastSheetKey === key ? document.querySelector("#sheet .sheet")?.scrollTop ?? 0 : 0;
   lastSheetKey = key; lockPage(true);
   if (opening) ui.sheetTyped = false;   // F3: nothing typed yet in a window that just opened
