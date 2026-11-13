@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { baseIncome, shares, tenths, showTenths, incomeChanged, savedRows, suggestBudgets, budgetChangesFromDraft, netsByKind, NO_INCOME_PROMPT, budgetFor, renameCategory, suggestPlan, parsePlan } from "../src/model/index.js";
+import { baseIncome, shares, tenths, showTenths, incomeChanged, savedRows, suggestBudgets, budgetChangesFromDraft, netsByKind, NO_INCOME_PROMPT, budgetFor, renameCategory, suggestPlan, parsePlan, fixedMap, bucketMap } from "../src/model/index.js";
 import { UNLOGGED_CATEGORY_ID } from "../src/model/seed.js";
 import { makeState, account } from "./fixtures.js";
 
@@ -301,4 +301,69 @@ test("the Buffer row: named the same everywhere, set and cleared from its own wi
   assert.match(app, /case "save-buffer-monthly": \{ const a = M\.parsePesos\(ui\.form\.amount \?\? ""\); if \(!a\.ok \|\| a\.centavos < 0\) break; ui\.sheet = null; renderSheet\(\); await commit\(S\(\), \{ \.\.\.ledger\.settings, buffer_monthly: a\.centavos \}\);/);
   assert.match(app, /case "clear-buffer-monthly": \{ const \{ buffer_monthly, \.\.\.rest \} = ledger\.settings;/, "No buffer removes the setting; no entry is touched");
   assert.ok(app.includes('<p class="note">Money kept for when a category goes over its budget. It is never counted as savings.</p>'));
+});
+
+// ---- L3 (Nov 13): Suggest a budget reads the scheduled payments. A payment sets its category's suggested AMOUNT (at least the scheduled total for the
+// month); it never changes the category's GROUP and never makes it Fixed (owner, Nov 13).
+const withPlan = (s, amount, cat = "fun") => { s.schedules = [{ id: "sc1", kind: "repeating", name: "Test Plan", category_id: cat, account_id: "chk", start: "2026-01-10", amount, day: 10, created_at: TS }]; return s; };
+test("L3: with history, a category already costing more than its scheduled payment keeps its usual figure, and the payment is not a loose line", () => {
+  const s = withPlan(monthly(), 50000);
+  const r = sug(s);
+  assert.equal(r.ok, true);
+  const fun = r.rows.find((x) => x.category_id === "fun");
+  assert.equal(fun.suggested, 300000, "Fun usually costs 3,000.00 a month, the 500.00 plan included: the suggestion is 3,000.00, not 3,500.00 or 2,500.00");
+  assert.equal(fun.reason, "Median of the last 6 usable months. At least its scheduled payments (Test Plan).");
+  assert.ok(!r.others.some((x) => x.name === "Test Plan"), "the payment is not a line of its own");
+  assert.equal(sug(s, { scheduled: [] }).rows.find((x) => x.category_id === "fun").suggested, 300000, "a caller can still pass its own list");
+});
+test("L3: with history, a scheduled payment bigger than the usual spending raises the suggestion to the payment", () => {
+  const r = sug(withPlan(monthly(), 450000));
+  const fun = r.rows.find((x) => x.category_id === "fun");
+  assert.equal(fun.suggested, 450000, "Fun usually costs 3,000.00, but 4,500.00 is scheduled: at least 4,500.00");
+  assert.match(fun.reason, /Raised: at least its scheduled payments \(Test Plan\)\./);
+});
+test("L3: with no history, a category that carries a scheduled payment is suggested at least that payment", () => {
+  const s = withPlan(base(), 150000);
+  const r = sug(s, { pin: 2500000, rent: 0 });
+  assert.equal(r.ok, true);
+  const fun = r.rows.find((x) => x.category_id === "fun");
+  assert.ok(fun.suggested >= 150000, "at least the 1,500.00 plan");
+  assert.match(fun.reason, /At least its scheduled payments \(Test Plan\)\./);
+  assert.doesNotMatch(sug(s, { pin: 2500000, rent: 0, scheduled: [] }).rows.find((x) => x.category_id === "fun").reason, /scheduled/, "before L3 the engine never saw the schedule");
+});
+test("L3: a payment that has ended, or an installment paid off, is not suggested", () => {
+  const s = withPlan(base(), 150000);
+  s.scheduleChanges = [{ id: "e1", schedule_id: "sc1", kind: "end", effective_from: "2026-09-30", created_at: TS }];
+  const r = sug(s, { pin: 2500000, rent: 0 });
+  assert.doesNotMatch(r.rows.find((x) => x.category_id === "fun").reason, /scheduled/);
+});
+test("L3 (owner's rule): a scheduled Streaming in Wants stays in Wants, and its suggestion is at least the scheduled amount", () => {
+  const s = withPlan(base(), 120000, "stream");
+  s.categories.push({ id: "stream", name: "Streaming", kind: "expense" });   // no role: the owner put it in Wants
+  const set = { bucket_overrides: { stream: "want" } };
+  assert.equal(fixedMap(s, set, "2026-10-05").has("stream"), false, "the schedule does not make it Fixed");
+  assert.equal(bucketMap(s.categories, set.bucket_overrides).get("stream"), "want", "its bucket is still the owner's: Wants");
+  const r = sug(s, { pin: 2500000, rent: 0, overrides: set.bucket_overrides });
+  assert.equal(r.ok, true);
+  const row = r.rows.find((x) => x.category_id === "stream");
+  assert.ok(row.suggested >= 120000, "at least the 1,200.00 scheduled");
+  assert.ok(r.funding.wants >= 120000, "funded with the wants, not as Fixed");
+  // a ROLE the owner set still wins: as a subscription it is Fixed, whatever the schedule
+  s.categories.find((c) => c.id === "stream").role = "subscription";
+  assert.equal(fixedMap(s, set, "2026-10-05").get("stream"), "role");
+});
+test("L3: the wants cap never lowers a want below its scheduled payments, and that minimum is funded before the buffer", () => {
+  const s = withPlan(monthly(), 100000);   // Fun usually costs 3,000.00; 1,000.00 of it is scheduled. Income typed as 6,000.00: the wants get nothing past what is promised
+  const r = sug(s, { pin: 600000 });
+  assert.equal(r.ok, true);
+  const fun = r.rows.find((x) => x.category_id === "fun"), f = r.funding;
+  assert.equal(fun.suggested, 100000, "lowered to fit, but never below the 1,000.00 scheduled");
+  assert.match(fun.reason, /Lowered to fit/);
+  assert.equal(f.shortBy, Math.max(0, f.fixed + f.needs + f.floor + 100000 - f.income), "the scheduled minimum counts with what must be paid");
+});
+test("L3: the wants cap never lowers a want below its scheduled payments", () => {
+  const s = withPlan(base(), 1000000);   // 10,000.00 scheduled on Fun, a want, against a 25,000.00 income (cap 30% = 7,500.00)
+  const r = sug(s, { pin: 2500000, rent: 0 });
+  assert.equal(r.ok, true);
+  assert.ok(r.rows.find((x) => x.category_id === "fun").suggested >= 1000000, "never below the 10,000.00 scheduled");
 });

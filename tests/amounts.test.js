@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parsePesos, formatPesos, readAmount, parseNotes, suspectAmounts, emptyLedger, validateState, AMOUNT_COMMA, AMOUNT_HINT, AMOUNT_CHECK_TIMES } from "../src/model/index.js";
+import { parsePesos, formatPesos, readAmount, parseNotes, suspectAmounts, openAmountChecks, markAmountRight, AMOUNT_FIX_BEFORE, emptyLedger, validateState, AMOUNT_COMMA, AMOUNT_HINT, AMOUNT_CHECK_TIMES } from "../src/model/index.js";
 
 test("a comma is read only between thousands; anywhere else the amount is refused, never made bigger", () => {
   for (const [input, c] of [["1,250", 125000], ["1,250.5", 125050], ["12,345,678.90", 1234567890], ["1250", 125000], ["999", 99900], ["0,000", 0]]) assert.deepEqual(parsePesos(input), { ok: true, centavos: c }, input);
@@ -87,15 +87,53 @@ test("check these amounts: what is and is not listed", () => {
   assert.deepEqual(suspectAmounts(s).map((r) => r.id), [f]);
 });
 
-test("the app says what is wrong under the box, shows the list once, and changes no entry", () => {
+test("the app says what is wrong under the box, keeps the list until each entry is resolved, and changes no entry", () => {
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
   assert.match(app, /if \(e\.target\.getAttribute\?\.\("inputmode"\) === "decimal"\) amountHint\(e\.target\);/, "every amount box is checked while typing");
   assert.match(app, /M\.parsePesos\(el\.value\)\.error === M\.AMOUNT_COMMA/);
   assert.match(app, /for \(const el of document\.querySelectorAll\('#sheet input\[inputmode="decimal"\]'\)\) amountHint\(el\);/, "and again when a window is drawn");
   assert.ok(AMOUNT_HINT.length < 90 && !/[—–]/.test(AMOUNT_HINT));
   const card = app.slice(app.indexOf("function amountCheckHtml()"), app.indexOf("function repairCardHtml()"));
-  assert.ok(card.includes("M.suspectAmounts(S())") && card.includes("Nothing was changed."));
-  assert.ok(!/commit\(|plan[A-Z]\w+\(|data-action="(?!amount-check-done)/.test(card), "the card has one button, Got it, and makes nothing");
-  assert.match(app, /case "amount-check-done": await commit\(S\(\), \{ \.\.\.ledger\.settings, amount_check_seen: true \}, \{ quiet: true \}\); renderScreen\(\); break;/, "Got it only marks the card as seen: S() is saved as it is");
+  // before (Nov 12, #338): one "Got it" hid the card for good. After (owner, Nov 12): one "This amount is right" per entry; no Got it; the old mark is not read.
+  assert.ok(card.includes("M.openAmountChecks(S(), ledger.settings)") && card.includes("A comma may have been lost: 1,5 saved as 15.00.") && !card.includes("amount_check_seen") && !card.includes("Got it"));
+  assert.ok(!/commit\(|plan[A-Z]\w+\(|data-action="(?!amount-ok")/.test(card), "the card's only button is This amount is right, and the card makes nothing");
+  assert.ok(card.includes('<button class="act" data-action="amount-ok" data-id="${esc(r.id)}">This amount is right</button>'), "one per listed entry");
+  assert.match(app, /case "amount-ok": await commit\(S\(\), M\.markAmountRight\(ledger\.settings, id\), \{ quiet: true \}\); renderScreen\(\); break;/, "the mark only changes settings: S() is saved as it is");
   assert.ok(!/\.replace\(\/,\/g, ""\)/.test(readFileSync(new URL("../src/model/money.js", import.meta.url), "utf8").replace(/m\[1\]\.replace\(\/,\/g, ""\)/, "")), "money.js drops commas only from a number that already matched the thousands pattern");
+});
+
+test("kept until resolved: each entry leaves the list only when it is corrected or marked right; nothing else hides it", () => {
+  const s = state();
+  spend(s, "Kape", 6500); spend(s, "Kape", 7000); spend(s, "Kape", 6500);
+  const a = spend(s, "Kape", 65000, { date: "2026-10-28" });
+  spend(s, "Taho", 2000); spend(s, "Taho", 2500);
+  const b = spend(s, "Taho", 25000, { status: "draft", date: "2026-10-29" });
+  const before = JSON.stringify(s);
+  let set = { amount_check_seen: true };   // the first version's "Got it" no longer hides anything
+  assert.deepEqual(openAmountChecks(s, set).map((r) => r.id), [b, a], "two to check");
+  set = markAmountRight(set, a);
+  assert.deepEqual(set.amount_check_ok, [a]);
+  assert.equal(markAmountRight(set, a), set, "marking twice changes nothing");
+  assert.deepEqual(openAmountChecks(s, set).map((r) => r.id), [b], "the count goes down by one");
+  assert.equal(JSON.stringify(s), before, "marking changes no entry");
+  // the draft is corrected in Verify (its amount edited): it leaves the list by itself
+  for (const e of s.entries) if (e.transaction_id === b) e.amount = e.amount > 0 ? 2550 : -2550;
+  assert.deepEqual(openAmountChecks(s, set), [], "the last one is resolved: nothing is left, so no card");
+  // a verified entry put right at the Weekly review is cancelled, and so leaves the list
+  const s2 = state(); spend(s2, "Kape", 6500); spend(s2, "Kape", 7000); const c = spend(s2, "Kape", 65000, { date: "2026-10-28" });
+  assert.equal(openAmountChecks(s2, {}).length, 1);
+  s2.transactions.push({ id: "rev:" + c, date: "2026-10-30", payee: "", memo: "", status: "verified", source: "correction", reverses: c, created_at: "2026-10-30T09:00:00+08:00", verified_at: "2026-10-30T09:00:00+08:00" });
+  s2.entries.push({ transaction_id: "rev:" + c, account_id: "chk", amount: 65000 }, { transaction_id: "rev:" + c, category_id: "food", amount: -65000 });
+  assert.equal(openAmountChecks(s2, {}).length, 0);
+});
+
+test("only entries saved before the fix are asked about: a large amount typed since is what the owner meant", () => {
+  assert.equal(AMOUNT_FIX_BEFORE, "2026-11-13T00:00:00+08:00");
+  const s = state(); spend(s, "Kape", 6500); spend(s, "Kape", 7000); spend(s, "Kape", 6500); spend(s, "Kape", 6000);
+  const old = spend(s, "Kape", 65000, { date: "2026-11-12" });
+  s.transactions.find((t) => t.id === old).created_at = "2026-11-12T23:59:00+08:00";
+  const late = spend(s, "Kape", 70000, { date: "2026-11-13" });
+  s.transactions.find((t) => t.id === late).created_at = "2026-11-13T00:00:00+08:00";
+  assert.deepEqual(openAmountChecks(s, {}).map((r) => r.id), [old]);
+  assert.ok(suspectAmounts(s).some((r) => r.id === late), "the rule itself still sees it; only the card leaves it out");
 });

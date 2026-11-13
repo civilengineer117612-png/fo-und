@@ -39,23 +39,26 @@ test("Fixed: a category in Other is never Fixed, even with a schedule or when tu
   const refused = withFixed(s, {}, "misc", true);
   assert.equal(refused.ok, false); assert.match(refused.message, /Other is never Fixed/);
   const answered = fixedMap(s, { bucket_overrides: { loan: "need" } }, TODAY);
-  assert.equal(answered.get("loan"), "schedule", "answered as a need, its schedule makes it Fixed");
+  // Before Nov 13: answered as a need, its schedule made it Fixed ("schedule"). Now a schedule never makes a category Fixed (L3): it stays a need.
+  assert.equal(answered.has("loan"), false, "answered as a need, it stays a need: a schedule never makes it Fixed");
+  assert.equal(fixedMap(s, { bucket_overrides: { loan: "need" }, fixed_overrides: { loan: true } }, TODAY).get("loan"), "you", "the owner can still turn it on");
   assert.equal(withFixed(s, { bucket_overrides: { misc: "want" } }, "misc", true).ok, true);
 });
 
-test("Fixed: an installment, a scheduled payment and a loan repayment count while a payment is still to come, and stop when it is over", () => {
+// Before Nov 13 this test checked that a schedule MADE a category Fixed while a payment was to come; now it checks that it never does (L3, owner's rule).
+test("Fixed: an installment, a scheduled payment or a loan repayment never makes its category Fixed, while a payment is to come or after", () => {
   let s = state();
   s.categories.push(cat("fam", "Family support")); s.rules.push(rule("fam", 500000));   // a scheduled family send
   s = addSchedule(s, { id: "s2", kind: "repeating", name: "Monthly send", category_id: "fam", account_id: "chk", start: "2026-09-01", amount: 500000, day: 12 }).state;
   s = addSchedule(s, { id: "s3", kind: "installment", name: "Phone", category_id: "fun", account_id: "chk", start: "2026-05-01", total: 600000, count: 6, made: 6 }).state;
   const m = fixedMap(s, { bucket_overrides: { fam: "need" } }, TODAY);
-  assert.equal(m.get("fam"), "schedule");
+  assert.equal(m.has("fam"), false, "a scheduled family send stays in its bucket (a need)");
   assert.equal(m.has("fun"), false, "an installment with every payment made has nothing to come");
   s = addSchedule(s, { id: "s4", kind: "installment", name: "Laptop", category_id: "fun", account_id: "chk", start: "2026-08-01", total: 600000, count: 6, made: 1 }).state;
-  assert.equal(fixedMap(s, {}, TODAY).get("fun"), "schedule");
+  assert.equal(fixedMap(s, {}, TODAY).has("fun"), false, "an installment still to pay does not make Fun Fixed");
 });
 
-test("withFixed: on, off, and back to what the role and the schedule say; nothing else changes", () => {
+test("withFixed: on, off, and back to what the role says; nothing else changes", () => {
   const s = state(), set = { goal_monthly: { x: 1 } };
   const on = withFixed(s, set, "food", true).settings; assert.deepEqual(on.fixed_overrides, { food: true }); assert.deepEqual(on.goal_monthly, { x: 1 });
   const off = withFixed(s, on, "food", false).settings; assert.deepEqual(off.fixed_overrides, { food: false });

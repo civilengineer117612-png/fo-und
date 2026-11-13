@@ -36,7 +36,27 @@ export function suspectAmounts(state) {
     if (others.length < AMOUNT_CHECK_MIN_OTHERS) continue;
     const usual = median(others);
     if (usual <= 0 || r.amount < usual * AMOUNT_CHECK_TIMES) continue;
-    out.push({ id: r.t.id, date: r.t.date, payee: r.t.payee ?? "", category_id: legs.get(r.t.id).category_id, status: r.t.status, amount: r.amount, usual, times: Math.floor(r.amount / usual) });
+    out.push({ id: r.t.id, date: r.t.date, created_at: r.t.created_at, payee: r.t.payee ?? "", category_id: legs.get(r.t.id).category_id, status: r.t.status, amount: r.amount, usual, times: Math.floor(r.amount / usual) });
   }
   return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.id < b.id ? -1 : 1));
+}
+
+// KEPT UNTIL RESOLVED (owner, Nov 12): the card stays until every listed entry is either corrected or marked "This amount is right" by the
+// owner; the count goes down as each is done. Still read-only: the app changes no entry by itself.
+// - corrected: a verified entry put right at the Weekly review is cancelled (and so left out above); a draft edited in Verify to an amount that
+//   no longer looks like a dropped comma leaves the list by itself.
+// - marked right: its id is in the setting `amount_check_ok` (a list of ids; only the owner's tap adds one).
+// Only entries saved before the fix are asked about (`AMOUNT_FIX_BEFORE`, Manila): since then a misplaced comma is refused, so a large amount
+// typed later is what the owner meant, and the card would otherwise never end.
+export const AMOUNT_FIX_BEFORE = "2026-11-13T00:00:00+08:00";
+const instant = (t) => Date.parse(t);
+export function openAmountChecks(state, settings = {}) {
+  const ok = new Set(Array.isArray(settings?.amount_check_ok) ? settings.amount_check_ok : []);
+  const cut = instant(AMOUNT_FIX_BEFORE);
+  return suspectAmounts(state).filter((r) => !ok.has(r.id) && !(instant(r.created_at) >= cut));
+}
+// The owner's tap: one entry's amount is right. Returns new settings; the ledger's entries are untouched.
+export function markAmountRight(settings, id) {
+  const ok = Array.isArray(settings?.amount_check_ok) ? settings.amount_check_ok : [];
+  return ok.includes(id) ? settings : { ...settings, amount_check_ok: [...ok, id] };
 }
