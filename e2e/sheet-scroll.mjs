@@ -30,13 +30,15 @@ async function steps(extraCss, { wait = 400, blur = false, js = null, bgSave = f
     userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1" });
   await ctx.addInitScript(() => { Object.defineProperty(navigator, "standalone", { get: () => true }); sessionStorage.setItem("logOpen", "1"); });
   await ctx.clock.setFixedTime(new Date(TS));
-  let release = () => {}; const held = new Promise((res) => { release = res; });
-  if (bgSave) await ctx.route(/icon\.horse|faviconkit\.com|wikipedia\.org|wikimedia\.org/, async (route) => { await held; await route.fulfill({ status: 200, contentType: "image/png", headers: { "access-control-allow-origin": "*" }, body: PNG }).catch(() => {}); });
+  // Only the reloaded page's lookups are held: the first page's are refused at once, else WebKit's reload waits for them and never finishes (CI, Nov 13).
+  let release = () => {}, armed = false; const held = new Promise((res) => { release = res; });
+  if (bgSave) await ctx.route(/icon\.horse|faviconkit\.com|wikipedia\.org|wikimedia\.org/, async (route) => { if (!armed) return route.abort().catch(() => {}); await held; await route.fulfill({ status: 200, contentType: "image/png", headers: { "access-control-allow-origin": "*" }, body: PNG }).catch(() => {}); });
   const page = await ctx.newPage(); page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(base); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 });
   await page.evaluate(async (text) => { localStorage.setItem("financialTracker.ledger", text);
     await new Promise((res) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => { const tx = r.result.transaction("kv", "readwrite"); tx.objectStore("kv").put(text, "ledger"); tx.oncomplete = () => { r.result.close(); res(); }; }; }); }, JSON.stringify(seeded()));
-  await page.reload(); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 });
+  armed = true;
+  await page.reload({ waitUntil: "domcontentloaded" }); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 });
   if (extraCss) await page.addStyleTag({ content: extraCss });
   if (js) await page.evaluate(js);
   await page.setViewportSize({ width: 360, height: 520 });   // a short screen, so the window has to scroll
