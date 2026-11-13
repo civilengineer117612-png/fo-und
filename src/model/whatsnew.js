@@ -2,6 +2,7 @@
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
   { id: "2026-11-13-ef-help", date: "2026-11-13", text: "Help now says the emergency fund target leaves Wants out, and how to count a payment you cannot stop: set its category to Fixed." },
+  { id: "2026-11-13-keep-typed", date: "2026-11-13", text: "Tapping outside a window you typed in now asks first: Keep editing or Discard. Nothing you typed is lost by a stray tap." },
   { id: "2026-11-13-pay-received", date: "2026-11-13", text: "Received in Budget now counts only your pay, and pay that lands a few days early, like on the Friday before a weekend payday, counts under that payday." },
   { id: "2026-11-13-suggest-schedules", date: "2026-11-13", text: "Suggest a budget now counts your scheduled payments: each category is suggested at least what is scheduled in it, and stays in its own group." },
   { id: "2026-11-12-amount-check-open", date: "2026-11-12", text: "Check amounts now stays on Weekly review until each entry is put right or you tap This amount is right; the count goes down as you go." },
