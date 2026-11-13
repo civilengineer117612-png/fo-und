@@ -4005,7 +4005,10 @@ console.log("\n-- Suggest a budget --");
     check(!tops.includes("Fixed and Needs") && seenTop[0] === "Fixed" && seenTop[1] === "Needs" && seenTop.length >= 5 && seenTop.every((x, i) => i === 0 || topOrder.indexOf(seenTop[i - 1]) < topOrder.indexOf(x)), "the top card runs Fixed, Needs (two rows), Savings, Wants, Buffer, Other: " + seenTop.join(", "));
     const groupRows = await page.evaluate(() => [...document.querySelectorAll("#sheet h4.sugh")].map((h) => [h.textContent.trim(), [...(h.nextElementSibling?.querySelectorAll(".catrow .ctn") ?? [])].map((n) => n.firstChild?.textContent.trim() ?? "")]));
     const catRows = groupRows.filter(([g]) => !["Savings", "Buffer"].includes(g));
-    check(catRows.length >= 3 && catRows.every(([, names]) => names.every((n, i) => i === 0 || names[i - 1].localeCompare(n) <= 0)), "inside each group the rows follow Setup's order (A to Z here): " + JSON.stringify(catRows)); }
+    // Before Nov 13 (second word) the rows followed Setup's order; the owner now wants the HIGHEST budget first, equal ones in Setup's order (A to Z here)
+    const figs = await page.evaluate(() => [...document.querySelectorAll("#sheet h4.sugh")].map((h) => [h.textContent.trim(), [...(h.nextElementSibling?.querySelectorAll(".catrow") ?? [])].map((r) => [r.querySelector(".ctn")?.firstChild?.textContent.trim() ?? "", Number((r.querySelector(".amt")?.textContent ?? "").replace(/[^0-9.]/g, ""))])]));
+    const sorted = figs.every(([, rows]) => rows.every(([n, a], i) => i === 0 || rows[i - 1][1] > a || (rows[i - 1][1] === a && rows[i - 1][0].localeCompare(n) <= 0)));
+    check(catRows.length >= 3 && sorted, "inside each group, goals included, the rows run from the highest budget to the lowest (equal ones A to Z): " + JSON.stringify(figs)); }
   check(/^Paid in this order: Fixed, Needs, your savings minimum, the buffer, then Wants \(up to \u20B17,500\.00\)\. Left: /.test((await text(page, "#sug-left")).trim()), "the note under the list says the order of funding and the wants cap (30% of 25,000.00)");
   check(await page.locator('#sheet input[data-field^="y_"]').count() === 0, "the own-figure boxes are hidden until asked for");
   await page.click('#sheet button[data-action="sug-edit"]');

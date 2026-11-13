@@ -384,10 +384,11 @@ test("a category paid every month keeps its median (one big month does not lift 
   const none = sug(withUp(monthly()), { overrides: { up: "need" } }).rows.find((x) => x.category_id === "up");
   assert.equal(none.suggested, 0, "nothing spent: the owner types a figure for a known future cost");
 });
-test("Suggest a budget shows ONE order (Fixed, Needs, Savings, Wants, Buffer, Other) and rows in the owner's Setup order", () => {
+test("Suggest a budget shows ONE order (Fixed, Needs, Savings, Wants, Buffer, Other) and rows highest budget first, ties in the owner's Setup order", () => {
   assert.match(app, /const SUG_TOP = \["need", "savings", "want"\];/);
   assert.match(app, /\.\.\.\[\.\.\.bk\.rows\]\.filter\(\(b\) => b\.bucket !== "other"\)\.sort\(\(p, q\) => SUG_TOP\.indexOf\(p\.bucket\) - SUG_TOP\.indexOf\(q\.bucket\)\)/, "the top card in the groups' order");
-  assert.ok(app.includes("const setupAt = new Map(orderedCats(S().categories).map((c, i) => [c.id, i]));") && app.includes("r.rows.sort((p, q) => (setupAt.get(p.category_id) ?? 1e9) - (setupAt.get(q.category_id) ?? 1e9));"), "rows in the Setup order");
+  assert.ok(app.includes("const setupAt = new Map(orderedCats(S().categories).map((c, i) => [c.id, i]));") && app.includes("r.rows.sort((p, q) => sugAmt(q) - sugAmt(p) || (setupAt.get(p.category_id) ?? 1e9) - (setupAt.get(q.category_id) ?? 1e9));"), "rows highest first, ties in the Setup order");
+  assert.ok(app.includes("items.sort((p, q) => q.amt - p.amt);"), "the whole group, goals included, highest first");
 });
 
 test("Fixed and Needs are two rows in the top card: Fixed is returned on its own, still counted inside Needs (the 50)", async () => {
