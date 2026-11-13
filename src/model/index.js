@@ -118,7 +118,7 @@ export { MAX_INTRO_SHOWS, INTROS, introFor, shouldShowIntro, markIntro, introDra
 
 export { recordFromParse, accountLines, proveMonths, acceptMonth, monthSummary, failingLines, alreadyKept, removeStatement, onStatementIds } from "./proof.js";
 export { pairMoves, moveLogged, planPairedMove, matchPayslips, statementDifference, planMissingDraft, planRewards, startFromStatement, planPocketFromStatement, moveTarget, statementMoves, planStatementVerify, planStatementMoves, notOnStatement, statementBalanceProof, planStatementGap } from "./reconcile.js";
-export { suspectAmounts, AMOUNT_CHECK_TIMES, AMOUNT_CHECK_MIN_OTHERS } from "./amountcheck.js";
+export { suspectAmounts, openAmountChecks, markAmountRight, AMOUNT_FIX_BEFORE, AMOUNT_CHECK_TIMES, AMOUNT_CHECK_MIN_OTHERS } from "./amountcheck.js";
 export { payeeKey, payeeLabel, withPayeeBook, spendingByPayee, payeeMonths, payeeCount, namePayee, categoryFromBook } from "./payees.js";
 export { RANGES, dailySpending, firstSpendingDate, rangeFor, stepFor, seriesFor, measureSpan, zoomWindow, addDays, daysBetween } from "./spendline.js";
 export { payerFor, nextDue, lastStatementDate, cardStatement, setCardDetails, planCardPayment, makeCardDueDrafts, DUE_CATCH_UP_DAYS } from "./cardpay.js";
