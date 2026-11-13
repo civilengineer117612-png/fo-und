@@ -13,7 +13,7 @@ function ledger() {
   const s = makeState();
   s.accounts = [account({ id: "chk", name: "Test Checking", class: "asset", opening_balance: 100000000 })];
   s.categories = [{ id: "food", name: "Food", kind: "expense", role: "food" }, { id: "rent", name: "Rent", kind: "expense", role: "rent" }, { id: "fun", name: "Fun", kind: "expense" },
-    { id: "games", name: "Games", kind: "expense" }, { id: UNLOGGED_CATEGORY_ID, name: "Uncategorized", kind: "expense" }, { id: "pay", name: "Pay", kind: "income" }];
+    { id: "games", name: "Games", kind: "expense" }, { id: UNLOGGED_CATEGORY_ID, name: "Uncategorized", kind: "expense" }, { id: "pay", name: "Pay", kind: "income" }, { id: "cat-salary", name: "Salary", kind: "income" }, { id: "cat-interest", name: "Interest", kind: "income" }];
   s.payslips = []; s.payslipLines = []; s.subscriptions = []; s.rules = [];
   s.goals = [{ id: "trip", name: "Trip", account_id: "chk", hidden_by_default: false }];
   for (const m of ["2026-07", "2026-08", "2026-09"]) for (const [d, v] of [[`${m}-15`, 1200000], [`${m}-30`, 1800000]]) {
@@ -153,7 +153,7 @@ test("CUTOFF PROGRESS: per payday, what was verified-spent in that payday's own 
   spend("d", "2026-10-31", 300000);                  // second cutoff (the last day to Nov 14)
   spend("e", "2026-11-14", 20000);                   // still the second cutoff
   spend("f", "2026-11-15", 999999);                  // the next month's first cutoff
-  tx("p", "2026-10-15"); s.entries.push({ transaction_id: "p", account_id: "chk", amount: 1200000 }, { transaction_id: "p", category_id: "pay", amount: -1200000 });
+  tx("p", "2026-10-15"); s.entries.push({ transaction_id: "p", account_id: "chk", amount: 1200000 }, { transaction_id: "p", category_id: "cat-salary", amount: -1200000 });   // before L7 this used a test "Pay" category; pay is now Salary or Overtime
   const prog = M.paydayProgress(s, SET, MONTH);
   assert.deepEqual(prog.map((p) => [p.start, p.end]), [["2026-10-15", "2026-10-30"], ["2026-10-31", "2026-11-14"]]);
   assert.deepEqual(prog.map((p) => p.spent.food), [400000, 320000], "verified spending in each payday's own dates, nothing from the neighbours");
@@ -176,13 +176,13 @@ test("EXPECTED, RECEIVED, DIFFERENCE: each payday header and the month say what 
   assert.deepEqual(M.payHeader(1200000, 0, 0), { expected: 1200000, received: null, difference: null }, "no pay logged: Received and Difference are blank");
   assert.deepEqual(M.payHeader(1200000, 1000000, 1), { expected: 1200000, received: 1000000, difference: -200000 }, "10,000.00 against 12,000.00 expected: 2,000.00 less");
   assert.equal(M.payHeader(1200000, 1250000, 2).difference, 50000, "more than expected is a positive difference");
-  const pay = (id, date, amount, status = "verified") => { s.transactions.push({ id, date, payee: "", memo: "", status, source: "manual", created_at: TSX, ...(status === "verified" ? { verified_at: TSX } : {}) }); s.entries.push({ transaction_id: id, account_id: "chk", amount }, { transaction_id: id, category_id: "pay", amount: -amount }); };
-  assert.deepEqual(M.monthPay(s, MONTH), { received: 0, count: 0 });
+  const pay = (id, date, amount, status = "verified") => { s.transactions.push({ id, date, payee: "", memo: "", status, source: "manual", created_at: TSX, ...(status === "verified" ? { verified_at: TSX } : {}) }); s.entries.push({ transaction_id: id, account_id: "chk", amount }, { transaction_id: id, category_id: "cat-salary", amount: -amount }); };   // before L7: a test "Pay" category
+  assert.deepEqual(M.monthPay(s, MONTH), { received: 0, count: 0, other: 0, otherCount: 0 });
   pay("p1", "2026-10-15", 1000000);        // the first payday's pay
   pay("p2", "2026-10-31", 1800000);        // the second payday's pay, on the last day
   pay("p3", "2026-10-20", 500000, "draft");    // a draft is not pay yet
   pay("p4", "2026-09-30", 777700);         // last month's pay
-  assert.deepEqual(M.monthPay(s, MONTH), { received: 2800000, count: 2 }, "the month's logged pay: 28,000.00 (the draft and September's pay are not in it)");
+  assert.deepEqual(M.monthPay(s, MONTH), { received: 2800000, count: 2, other: 0, otherCount: 0 }, "the month's logged pay: 28,000.00 (the draft and September's pay are not in it)");
   const prog = M.paydayProgress(s, SET, MONTH);
   assert.deepEqual(prog.map((p) => [p.received, p.count]), [[1000000, 1], [1800000, 1]], "each payday's pay by its own dates (the last day's pay belongs to the second payday)");
   const v = M.budgetPlan(s, SET, MONTH);
@@ -190,4 +190,40 @@ test("EXPECTED, RECEIVED, DIFFERENCE: each payday header and the month say what 
   assert.deepEqual(M.payHeader(v.monthView.income, 2800000, 2), { expected: 3000000, received: 2800000, difference: -200000 }, "the month: expected 30,000.00, received 28,000.00");
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8"), view = app.slice(app.indexOf("function viewBudget()"), app.indexOf("const rowWhy"));
   assert.match(view, /Expected \$\{peso\(payHead\.expected\)\} \\u00b7 Received \$\{payHead\.received === null \? "\\u2013" : peso\(payHead\.received\)\} \\u00b7 Difference/);
+});
+
+// ---- L6 and L7 (overhaul, Nov 13): pay received ----
+const payTx = (s, id, date, amount, cat = "cat-salary") => { const TSX = "2026-10-01T09:00:00.000+08:00"; s.transactions.push({ id, date, payee: "", memo: "", status: "verified", source: "manual", created_at: TSX, verified_at: TSX }); s.entries.push({ transaction_id: id, account_id: "chk", amount }, { transaction_id: id, category_id: cat, amount: -amount }); };
+test("L6: pay that lands up to 5 days before its payday (a weekend payday paid on the Friday) counts under that payday, not the one before", () => {
+  const s = ledger();
+  payTx(s, "fri", "2026-11-13", 1500000);   // the Nov 15 payday is a Sunday; the bank paid on Friday Nov 13
+  const oct = M.paydayProgress(s, SET, MONTH);
+  assert.deepEqual(oct.map((p) => [p.payStart, p.payEnd]), [["2026-10-10", "2026-10-25"], ["2026-10-26", "2026-11-09"]], "each pay window starts 5 days before its payday");
+  assert.deepEqual(oct.map((p) => p.received), [0, 0], "October's paydays do not take the Friday pay (before L6 the Oct 31 payday showed it)");
+  assert.deepEqual(oct.map((p) => [p.start, p.end]), [["2026-10-15", "2026-10-30"], ["2026-10-31", "2026-11-14"]], "the spending cutoffs do not move");
+  const nov = M.paydayProgress(s, SET, "2026-11");
+  assert.deepEqual([nov[0].received, nov[0].count], [1500000, 1], "the Nov 15 payday says Received 15,000.00");
+  payTx(s, "late", "2026-11-17", 100000);   // two days late is still the Nov 15 payday
+  payTx(s, "far", "2026-11-09", 70000);     // six days early is the payday before
+  const nov2 = M.paydayProgress(s, SET, "2026-11");
+  assert.equal(nov2[0].received, 1600000);
+  assert.equal(M.paydayProgress(s, SET, MONTH)[1].received, 70000);
+});
+test("L6: weekly paydays take less than 5 days early, so a payday never takes its neighbour's pay", () => {
+  const s = ledger(), set = { pay_schedule: { kind: "weekly", weekday: 5 } };   // Fridays
+  payTx(s, "w", "2026-10-15", 400000);   // a Thursday: one day before Friday Oct 16
+  const p = M.paydayProgress(s, set, MONTH);
+  assert.equal(p.find((x) => x.date === "2026-10-16").received, 400000);
+  assert.ok(p.every((x) => (Date.parse(x.date) - Date.parse(x.payStart)) / 86400000 === 3), "3 days early at most for a weekly payday");
+});
+test("L7: Received counts pay only; interest and other money in are counted apart", () => {
+  const s = ledger();
+  payTx(s, "sal", "2026-10-15", 2500000);
+  payTx(s, "int", "2026-10-16", 1234, "cat-interest");
+  const p = M.paydayProgress(s, SET, MONTH)[0];
+  assert.deepEqual([p.received, p.count, p.other, p.otherCount], [2500000, 1, 1234, 1], "before L7: Received 25,012.34 from 2 entries");
+  const m = M.monthPay(s, MONTH);
+  assert.deepEqual(m, { received: 2500000, count: 1, other: 1234, otherCount: 1 });
+  const slip = ledger(); payTx(slip, "ps", "2026-10-15", 900000, "pay"); slip.payslips = [{ id: "sl", transaction_id: "ps" }];
+  assert.equal(M.monthPay(slip, MONTH).received, 900000, "a payslip's own money in is pay, whatever its income category");
 });
