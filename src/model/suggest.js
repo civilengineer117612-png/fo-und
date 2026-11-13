@@ -129,10 +129,18 @@ export function suggestPlan(input) {
     fixedAt(s.name, "expense", s.amount, s.renewal_day, `Renews on day ${s.renewal_day}, so it is set aside on payday ${payOfDay(s.renewal_day) + 1}.`, "history");
     fixedWants += s.amount;
   }
+  // A SCHEDULE NEVER MAKES A CATEGORY FIXED (owner, Nov 13): a payment that carries one of the spending categories here only sets that category's
+  // MINIMUM (`floors`, below); the category keeps the group its role or bucket gives it. A payment with no category (or a hidden one) is still its own fixed line.
+  const catIds = new Set(cats.map((c) => c.id)), floors = new Map(), floorAt = new Map(), floorNames = new Map();
+  for (const x of scheduled) if (x.months_left !== 0 && x.category_id && catIds.has(x.category_id)) {
+    floors.set(x.category_id, (floors.get(x.category_id) ?? 0) + x.amount);
+    const at = floorAt.get(x.category_id) ?? [0, 0]; at[payOfDay(x.day)] += x.amount; floorAt.set(x.category_id, at);   // set aside on the payday its due day falls in
+    floorNames.set(x.category_id, [...(floorNames.get(x.category_id) ?? []), x.name]);
+  }
   for (const x of scheduled) {
-    if (x.months_left === 0) continue;
+    if (x.months_left === 0 || floors.has(x.category_id)) continue;
     const left = x.kind === "installment" && x.months_left != null ? ` ${plural(x.months_left, "payment", "payments")} left.` : "";
-    fixedAt(x.name, "expense", x.amount, x.day, `${x.kind === "installment" ? "Installment" : "Scheduled payment"} due on day ${x.day}, so it is set aside on payday ${payOfDay(x.day) + 1}.${left}`, "history", x.category_id);   // its category: Suggest a budget adds it to that category's line (L3)
+    fixedAt(x.name, "expense", x.amount, x.day, `${x.kind === "installment" ? "Installment" : "Scheduled payment"} due on day ${x.day}, so it is set aside on payday ${payOfDay(x.day) + 1}.${left}`, "history");
     fixedNeeds += x.amount;
   }
   // Rent is fixed too, once there is history to learn its amount and its usual day from.
@@ -154,15 +162,13 @@ export function suggestPlan(input) {
   }
 
   // 4. Spending lines. With 2 or more usable months: median of each category. Otherwise a starter share of pay, marked "starter".
-  const schedulerCat = new Map();
-  for (const x of scheduled) if (x.category_id && x.months_left !== 0) schedulerCat.set(x.category_id, (schedulerCat.get(x.category_id) ?? 0) + x.amount);
   const skip = (c) => lines.has(c.name.trim().toLowerCase()) || (typeOf(c) === "subscription" && subs.length > 0);
   const spendCats = cats.filter((c) => !skip(c));
   const split = (total, name, kind, reason, source, category_id) => put(name, kind, splitBy(total, days1, days2), reason, source, category_id);
   if (learn) {
     for (const c of spendCats) {
-      const total = Math.max(0, median(monthly(c.id)) - (schedulerCat.get(c.id) ?? 0));
-      split(total, c.name, "expense", `Median of the last ${plural(months.length, "usable month", "usable months")}${schedulerCat.has(c.id) ? ", after its scheduled payments" : ""}, split by days covered (${days1} and ${days2} days).`, "history", c.id);
+      const total = median(monthly(c.id));
+      split(total, c.name, "expense", `Median of the last ${plural(months.length, "usable month", "usable months")}, split by days covered (${days1} and ${days2} days).`, "history", c.id);
     }
     // A step toward your targets: the median copies your habits, so when spending is over the needs + wants targets, the want lines are lowered by a share of
     // the amount over (nudge_bps), shared by their size. Needs, rent, fixed payments and anything you typed are never lowered here.
@@ -200,11 +206,9 @@ export function suggestPlan(input) {
     const tableWeight = (c) => (typeOf(c) === "rent" ? 0 : S.starter_weights[typeOf(c)] ?? (bk ? S.needs_other_weight : 0));
     // Learned from you first: the needs you have logged share the pool as you spend on them; a needs category with nothing logged takes its table weight,
     // scaled to the same total, so a new category still gets something. With nothing logged at all, the table alone.
-    // A category that carries a scheduled payment is covered by it (L3, Nov 13): with no history to learn the rest from, the payment is its figure, not a share on top.
-    const scheduledOnly = (c) => schedulerCat.has(c.id);
-    const needCats = spendCats.filter((c) => isNeed(c) && typeOf(c) !== "rent" && !scheduledOnly(c)), loggedNeeds = needCats.reduce((n, c) => n + (logged.get(c.id) ?? 0), 0);
+    const needCats = spendCats.filter((c) => isNeed(c) && typeOf(c) !== "rent"), loggedNeeds = needCats.reduce((n, c) => n + (logged.get(c.id) ?? 0), 0);
     const needWeight = (c) => (!loggedNeeds ? tableWeight(c) : (logged.get(c.id) ?? 0) > 0 ? logged.get(c.id) : Math.floor((loggedNeeds * tableWeight(c)) / 10000));
-    const needsList = needCats.filter((c) => needWeight(c) > 0), wantsList = spendCats.filter((c) => !isNeed(c) && typeOf(c) !== "rent" && !(bk && bk.get(c.id) === "savings") && !scheduledOnly(c));   // rent is fixed: never a share
+    const needsList = needCats.filter((c) => needWeight(c) > 0), wantsList = spendCats.filter((c) => !isNeed(c) && typeOf(c) !== "rent" && !(bk && bk.get(c.id) === "savings"));   // rent is fixed: never a share
     // Rent and fixed needs come first, but the everyday needs keep at least their floor of the needs part; what the fixed needs take past that comes out of
     // the wants part (and, when wants run out, out of savings, which only gets what is left).
     const needsPart = Math.floor((monthIncome * S.starter.needs) / 10000), keep = Math.floor((needsPart * S.needs_variable_floor) / 10000);
@@ -221,6 +225,23 @@ export function suggestPlan(input) {
     }
   }
 
+  // 4b. SCHEDULED MINIMUMS (L3, owner Nov 13): a category that carries scheduled payments is suggested AT LEAST their monthly total, in its own group.
+  //     Raised only, never lowered; each payment sits on the payday its due day falls in, the rest is shared by days covered. The line keeps `floor`
+  //     and `floorAt` so the funding order never cuts it below that either.
+  const placeFloor = (l, total) => {
+    const at = l.floorAt, rest = Math.max(0, total - l.floor), one = l.tier === "fixed" ? (l.second > l.first ? 1 : 0) : null;   // a fixed line (rent) keeps the rest on its own payday
+    const [a, b] = one === null ? splitBy(rest, days1, days2) : one === 0 ? [rest, 0] : [0, rest];
+    l.first = at[0] + a; l.second = at[1] + b;
+  };
+  for (const [id, floor] of floors) {
+    const c = cats.find((x) => x.id === id), names = floorNames.get(id).join(", "), note = `At least its scheduled payments (${names}).`;
+    let l = [...lines.values()].find((x) => x.category_id === id && x.kind === "expense");
+    if (!l) { put(c.name, "expense", [0, 0], note, "history", id); l = lines.get(c.name.trim().toLowerCase()); }
+    else l.reason += (l.first + l.second < floor ? " Raised: at least" : " At least") + ` its scheduled payments (${names}).`;
+    l.floor = floor; l.floorAt = floorAt.get(id);
+    placeFloor(l, Math.max(floor, l.first + l.second));
+  }
+
   // 5. Pinned lines are the owner's: they replace the suggestion and are never changed. The difference is returned.
   const differences = [];
   const applyPins = () => {
@@ -235,8 +256,8 @@ export function suggestPlan(input) {
   applyPins();
 
   // 6. THE ORDER OF FUNDING (owner, Oct 29), over the whole month on the base income:
-  //    (1) fixed commitments: rent and subscriptions (categories with that role), and anything that carries a schedule (scheduled payments, installments,
-  //        loan repayments, family sends); (2) needs at their usual level; (3) the savings floor (the ratchet's amount when one owns the savings);
+  //    (1) fixed commitments: rent and subscriptions (categories with that role), and a scheduled payment that has no category of its own (a payment in a
+  //        category adds to that category's minimum and is funded in that category's group, L3); (2) needs at their usual level; (3) the savings floor (the ratchet's amount when one owns the savings);
   //    (4) the overrun buffer; (5) wants from what is left, at most `wants_cap_bps` of the base income (30%). A category with no fixed role and no need
   //    (the bucket Other included) is a want, funded last. Steps (1) to (3) are NEVER lowered: when they do not fit the income the answer says how much it is
   //    short, and the buffer and the wants get nothing. Only the wants (not the owner's pinned ones) are ever lowered, shared by their size.
@@ -248,7 +269,7 @@ export function suggestPlan(input) {
     const c = catOf(l);
     if (!c) return "want";
     const t = typeOf(c);
-    if (t === "subscription") return "fixed";   // rent and scheduled lines were already marked fixed when they were made
+    if (t === "subscription") return "fixed";   // rent and a scheduled payment with no category were already marked fixed when they were made
     return (bk ? bk.get(c.id) === "need" : NEEDS.has(t)) ? "need" : "want";
   };
   const spend = () => [...lines.values()].filter((l) => l.kind === "expense");
@@ -256,7 +277,9 @@ export function suggestPlan(input) {
   const sumTier = (tier, pick = () => true) => spend().filter((l) => l.tier === tier && pick(l)).reduce((n, l) => n + l.first + l.second, 0);
   const fixedTotal = sumTier("fixed"), needTotal = sumTier("need");
   const floorAmt = input.ratchet ? input.ratchet.amount : S.savings_floor;
-  const core = fixedTotal + needTotal + floorAmt;
+  // A want's scheduled minimum is money already promised: it is funded with the core and never lowered (it stays in Wants).
+  const wantFloor = spend().filter((l) => l.tier === "want" && !l.pinned).reduce((n, l) => n + Math.min(l.floor ?? 0, l.first + l.second), 0);
+  const core = fixedTotal + needTotal + floorAmt + wantFloor;
   const shortBy = Math.max(0, core - monthIncome);
   let room = Math.max(0, monthIncome - core);
   const bufferName = "Overrun buffer", bufferKey = bufferName.toLowerCase();
@@ -268,14 +291,16 @@ export function suggestPlan(input) {
   }
   const bufferAmt = lines.get(bufferKey).first + lines.get(bufferKey).second;
   room = Math.max(0, room - bufferAmt);
-  const pinnedWants = sumTier("want", (l) => l.pinned), loose = spend().filter((l) => l.tier === "want" && !l.pinned && l.first + l.second > 0), looseTotal = loose.reduce((n, l) => n + l.first + l.second, 0);
-  const wantsCap = Math.floor((monthIncome * S.wants_cap_bps) / 10000), allowed = Math.max(0, Math.min(room, wantsCap) - pinnedWants);
+  const pinnedWants = sumTier("want", (l) => l.pinned), floorOf = (l) => Math.min(l.floor ?? 0, l.first + l.second);
+  const loose = spend().filter((l) => l.tier === "want" && !l.pinned && l.first + l.second - floorOf(l) > 0), looseTotal = loose.reduce((n, l) => n + l.first + l.second - floorOf(l), 0);
+  const wantsCap = Math.floor((monthIncome * S.wants_cap_bps) / 10000), allowed = Math.max(0, Math.min(room - pinnedWants, wantsCap - pinnedWants - wantFloor));
   if (looseTotal > allowed) {
-    const why = looseTotal > 0 && allowed >= Math.min(room, wantsCap) - pinnedWants && room >= wantsCap ? `Lowered to the wants cap: ${pct(S.wants_cap_bps)} of your base income.` : "Lowered to fit: wants come after fixed payments, needs, your savings floor and the buffer.";
-    const cuts = loose.map((l) => Math.floor((allowed * (l.first + l.second)) / looseTotal));
-    const big = loose.reduce((m, l, i) => (l.first + l.second > loose[m].first + loose[m].second ? i : m), 0);
+    const why = room >= wantsCap - wantFloor ? `Lowered to the wants cap: ${pct(S.wants_cap_bps)} of your base income.` : "Lowered to fit: wants come after fixed payments, needs, your savings floor and the buffer.";
+    const part = (l) => l.first + l.second - floorOf(l);   // only what is above a scheduled minimum is ever lowered
+    const cuts = loose.map((l) => Math.floor((allowed * part(l)) / looseTotal));
+    const big = loose.reduce((m, l, i) => (part(l) > part(loose[m]) ? i : m), 0);
     cuts[big] += allowed - cuts.reduce((x, y) => x + y, 0);
-    loose.forEach((l, i) => { const [a, b] = splitBy(cuts[i], days1, days2); l.was = l.first + l.second; l.first = a; l.second = b; l.reason += " " + why; });
+    loose.forEach((l, i) => { l.was = l.first + l.second; if (l.floorAt) placeFloor(l, l.floor + cuts[i]); else { const [a, b] = splitBy(cuts[i], days1, days2); l.first = a; l.second = b; } l.reason += " " + why; });
   }
   const wantsTotal = sumTier("want");
   const costs = fixedTotal + needTotal + bufferAmt + wantsTotal;   // everything but savings, with the pins in

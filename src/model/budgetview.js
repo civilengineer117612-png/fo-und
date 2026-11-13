@@ -139,7 +139,8 @@ export function engineSettings(state, settings, overrides = {}, targets) {
 // rent: the monthly rent the owner typed (centavos, 0 for none), needed only while there is too little history to learn it from: without it the answer is {ok: false, code: "NEEDS_RENT"}.
 // pins: {category_id: centavos} the owner typed; they come back as the owner's, and the engine's own figure is kept as the suggestion.
 // SCHEDULES (L3, Nov 13): the scheduled payments and installments still to come are read from the ledger (`suggestInputs`) unless a caller passes its own
-// list. A payment's amount is part of its category's suggestion (the engine keeps it on the category's Fixed line), never a loose line of its own.
+// list. A payment sets its category's MINIMUM (at least the scheduled total) and never its group: the category stays in Needs or Wants by its own role or
+// bucket, and a schedule never makes it Fixed (owner, Nov 13).
 export function suggestBudgets({ state, plan = null, pin = null, today, month, settings, pins = {}, scheduled = suggestInputs(state, today), rent, overrides = {}, targets, goalPins = {}, goalShares = {}, hidden = [], fixed = {} }) {
   const income = baseIncome(state, { plan, pin });
   if (!income.amount) return { ok: false, code: "NO_INCOME", message: NO_INCOME_PROMPT };
@@ -154,17 +155,12 @@ export function suggestBudgets({ state, plan = null, pin = null, today, month, s
   const lines = r.paydays[0].lines, diff = new Map(r.differences.filter((d) => d.category_id).map((d) => [d.category_id, d]));
   // every spending category gets a row (the engine drops a line that comes to nothing), so a figure can be typed for any of them
   const rows = [...names].map(([category_id, name]) => {
-    const all = lines.filter((x) => x.category_id === category_id), d = diff.get(category_id), current = budgetFor(state.rules, category_id, month);
-    const isSched = (x) => scheduled.some((sc) => sc.name === x.name && sc.category_id === category_id);
-    const own = all.filter((x) => !isSched(x)), sch = all.filter(isSched), pinnedLine = all.find((x) => x.pinned);
-    const l = pinnedLine ?? (!sch.length ? own[0] ?? null : { ...(own[0] ?? sch[0]), name, pinned: false, tier: "fixed",
-      amount: (own[0]?.amount ?? 0) + sch.reduce((n, x) => n + x.amount, 0),
-      reason: (own[0] ? own[0].reason.replace(/, split by days covered \(\d+ and \d+ days\)\./, ".").replace(", after its scheduled payments.", ".") + " " : "") + "Includes " + sch.map((x) => x.name).join(", ") + ", scheduled." });
+    const l = lines.find((x) => x.category_id === category_id), d = diff.get(category_id), current = budgetFor(state.rules, category_id, month);
     if (!l) return { category_id, name, suggested: 0, pinned: false, amount: 0, reason: "Nothing to suggest: no steady monthly spending on it to learn from.", source: r.history.used, current };
     return { category_id, name: l.name, suggested: l.pinned ? (d?.suggested?.first == null ? null : toNearest50(d.suggested.first)) : toNearest50(l.amount), pinned: Boolean(l.pinned), amount: l.pinned ? l.amount : toNearest50(l.amount),
       reason: l.pinned ? "You pinned this figure, so it is not changed." : l.reason.replace(/, split by days covered \(\d+ and \d+ days\)\./, "."), source: l.source, current };
   });
-  const others = lines.filter((l) => !l.category_id && l.kind === "expense")   // a scheduled payment now carries its category, so it is in that row, never here.map((l) => ({ name: l.name, amount: l.amount, reason: l.reason }));
+  const others = lines.filter((l) => !l.category_id && l.kind === "expense").map((l) => ({ name: l.name, amount: l.amount, reason: l.reason }));
   const saved = lines.filter((l) => l.kind === "goal" || l.kind === "buffer").map((l) => ({ name: l.name, kind: l.kind, amount: l.pinned ? l.amount : toNearest50(l.amount), reason: l.reason, ...(l.goal_id ? { goal_id: l.goal_id } : {}), ...(l.need ? { need: l.need } : {}), ...(l.pinned ? { pinned: true } : {}) }));
   const roles = new Map(state.categories.map((c) => [c.id, c.role ?? guessType(c.name)]).filter(([, r]) => r));
   const fit = fitToIncome({ rows, others, saved, income: income.amount, roles, buckets, limit: r.paydays[0].total });
