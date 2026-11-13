@@ -26,7 +26,7 @@ const seeded = () => {
 // logos) lands while the window is open, as in run.mjs 5i (the logos are answered there) and on a phone that fetches its logos at start.
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkqGeoBwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 async function steps(extraCss, { wait = 400, blur = false, js = null, bgSave = false } = {}) {
-  const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
+  const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,   // 2x like a phone and like run.mjs 5i
     userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1" });
   await ctx.addInitScript(() => { Object.defineProperty(navigator, "standalone", { get: () => true }); sessionStorage.setItem("logOpen", "1"); });
   await ctx.clock.setFixedTime(new Date(TS));
@@ -73,7 +73,10 @@ for (const [name, css] of Object.entries(VARIANTS)) {
   console.log(`  diag sheet-scroll (${ENGINE}) ${name}: ${r.before} -> opened ${r.opened} -> chosen ${r.after} (height ${r.scrollHeight}/${r.clientHeight})`);
 }
 // the same steps typed at once (as run.mjs 5i, which failed on WebKit 138 to 46), each 3 times: which change keeps the window still
+const OLD_PRESS = "button:active { transform: scale(.98) !important; }";   // the press before F2: the button shrank under the finger
 const NOW = {
+  "old press look (shrink)": [OLD_PRESS, { wait: 0 }],
+  "old press look, background save while open": [OLD_PRESS, { wait: 0, bgSave: true }],
   "a background save lands while open": [null, { wait: 0, bgSave: true }],
   "typed at once": [null, { wait: 0 }],
   "typed at once, no slide-up": [".sheet.enter, #scrim.enter { animation: none !important; }", { wait: 0 }],
