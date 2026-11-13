@@ -15,7 +15,7 @@ export { budgetMonthFor, planBudgetRows, planBudgetMismatches, planWithBudgets }
 export { toNearest50, fitToIncome, savingsExplained, NO_INCOME_PROMPT, netsByKind, baseIncome, sharePerPayday, shares, tenths, showTenths, incomeChanged, savedRows, suggestBudgets, budgetChangesFromDraft } from "./budgetview.js";
 export { SUGGEST_DEFAULTS, resolveSettings } from "./suggest-settings.js";
 export { APP_BUILD, APP_BUILT_ON, isDevBuild } from "./version.js";
-export { overdrawOf, naturalBalance, cardOutstanding, reserveShortfalls, reserveCover, netPosition, countedEntries, earlyEntryChanges } from "./balances.js";
+export { overdrawOf, naturalBalance, cardOutstanding, reserveShortfalls, reserveCover, netPosition, countedEntries, earlyEntryChanges , BEFORE_START_NOTE, beforeAccountStart } from "./balances.js";
 export { paceAhead } from "./budget.js";
 export { countsTowardBudget, splitByBudgetStatus, repeatedIds, repeatsLine } from "./invariants.js";
 export * from "./payslipitems.js";
@@ -89,7 +89,7 @@ export { parsePesos, formatPesos, formatPesosWhole, AMOUNT_COMMA, AMOUNT_HINT } 
 export { defaultCategories, defaultPresets, UNLOGGED_CATEGORY_ID, UNCATEGORIZED_NAME, plainNames, categoryByRole, categoriesByRole, categoriesOfKind, LEGACY_ROLES, addCategory, renameCategory, ensureIncomeCategories, dropUnusedCardCategory, INCOME_CATEGORIES, CATEGORY_ROLES, ROLE_LABELS, roleNoticeRows, setCategoryRole } from "./seed.js";
 export { applyDrafts, planExpense, discardDraft, verifyDraft, editDraftFields, setAccountIcon, planAttachment, attachmentsFor, planSplitExpense, splitCategoryEntry, sameAmountElsewhere } from "./drafts.js";
 export { LEDGER_VERSION, emptyState, emptyLedger, nextLedger, parseLedger, chooseLedger, restoreLedger, summarizeLedger, backupFileName, daysSinceBackup, saveOutcome, ledgerBytes, formatBytes, ledgerHead, mayOverwrite, CHANGED_ELSEWHERE } from "./persist.js";
-export { monthOf, addMonths, monthLabel, spendingByCategory, spendingByRange, spendingByAccount, spendingTransactions, cardsSummary, accountsOverview, monthlySpending, dayTotal } from "./reports.js";
+export { monthOf, addMonths, monthLabel, spendingByCategory, spendingByRange, spendingByAccount, spendingTransactions, sharesOf, cardsSummary, accountsOverview, monthlySpending, dayTotal } from "./reports.js";
 export { parsePlan, addPlan, planInEffect, planTotals, planEmergencyTarget, emergencyFundStatus, emergencyFundFromBudgets, DEFAULT_EF, cutoffFor, planProgress, planIncome, planPayReceived } from "./plan.js";
 export { planTag, planTripDates, planTripOverride, tripMembership, tripEntries, tagSummary, overlappingTrip, tripDays, niceDay, AUTO_TAG_SKIPS } from "./trips.js";
 export { BANKS, CASH, pickerBanks, bankById, bankForName, planAccount, isPocket, setAccountPocket, linkAccountBank, setBankIconUrl, bankPicture, isPlaceholderAddress, dropPlaceholderAddresses, logosToFetch } from "./banks.js";

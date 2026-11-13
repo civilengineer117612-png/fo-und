@@ -1475,7 +1475,8 @@ await page.click('button:has-text("Delete")'); await page.click('button:has-text
   check(await seen(page, "#toast", "Test Phone is scheduled"), "the plan is saved (its first payment is not due yet, so no draft)");
   check((await text(page, "#screen")).includes("0 / 3 paid") && (await text(page, "#screen")).includes("\u20B16,000.00") && await page.locator("#screen .catrow .catbar").count() === 1, "the plan shows 0 / 3 paid with a bar, and what is still to pay");
   await page.click('#nav button:has-text("Log")');
-  check((await text(page, "#screen")).toLowerCase().includes("due soon") && (await text(page, "#screen")).includes("Test Phone") && /due in \d+ days/.test(await text(page, "#screen")), "Log lists it under Due soon with the days left");
+  // Before Nov 13 the heading was "Due soon"; L16 named it "Scheduled" (late payments sit first under it). The check is as exact as before.
+  check((await page.locator("#screen h2").allTextContents()).some((h) => h.trim() === "Scheduled") && (await text(page, "#screen")).includes("Test Phone") && /due in \d+ days/.test(await text(page, "#screen")), "Log lists it under Scheduled with the days left");
 
   // the link offer: a payment logged by hand while a scheduled draft waits
   await menuGo(page, "Scheduled");

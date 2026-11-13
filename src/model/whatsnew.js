@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-13-small-fixes", date: "2026-11-13", text: "Shares in lists now add up to 100%, Log's list of payments is called Scheduled with late ones first, and an entry dated before an account starts says so." },
   { id: "2026-11-13-one-press", date: "2026-11-13", text: "Every button now shows a press the same way: it darkens a little. Nothing shrinks or moves under your finger any more." },
   { id: "2026-11-13-ef-help", date: "2026-11-13", text: "Help now says the emergency fund target leaves Wants out, and how to count a payment you cannot stop: set its category to Fixed." },
   { id: "2026-11-13-keep-typed", date: "2026-11-13", text: "Tapping outside a window you typed in now asks first: Keep editing or Discard. Nothing you typed is lost by a stray tap." },

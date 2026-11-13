@@ -40,7 +40,22 @@ export function spendingByRange(state, { from, to, categoryMaps = [], asOf }) {
     .map(([category_id, amount]) => ({ category_id, name: expense.get(category_id)?.name ?? category_id, amount }))
     .sort((a, b) => b.amount - a.amount || a.name.localeCompare(b.name));
   const total = rows.reduce((n, r) => n + r.amount, 0);
-  return { total, pending, rows: rows.map((r) => ({ ...r, percent: r.amount > 0 && total > 0 ? Math.round((r.amount * 1000) / total) / 10 : 0 })) };
+  const pct = sharesOf(rows.map((r) => r.amount), total);
+  return { total, pending, rows: rows.map((r, i) => ({ ...r, percent: pct[i] })) };
+}
+
+// L14 (overhaul, Nov 13): the shares of a list twin, in percent with one decimal, ADD UP. Each row is rounded to the nearest tenth as before; if the column
+// then misses its total by a tenth or two, the difference goes to the LARGEST row (three equal rows read 33.4, 33.3, 33.3, never 33.3 three times = 99.9).
+// A column that already adds up is left exactly as it was. Only rows above zero take a share; with no row below zero the column is exactly 100.0.
+export function sharesOf(amounts, total) {
+  if (!(total > 0)) return amounts.map(() => 0);
+  const tenths = amounts.map((a) => (a > 0 ? Math.round((a * 1000) / total) : 0));
+  const pos = amounts.filter((a) => a > 0);
+  if (!pos.length) return tenths.map(() => 0);
+  const target = Math.round((pos.reduce((n, a) => n + a, 0) * 1000) / total);
+  let big = -1; amounts.forEach((a, i) => { if (a > 0 && (big < 0 || a > amounts[big])) big = i; });
+  tenths[big] += target - tenths.reduce((n, t) => n + t, 0);
+  return tenths.map((t) => t / 10);
 }
 
 // The same for one month. Categories are grouped as of `asOf` (the day the report is run), so a merge regroups history.
