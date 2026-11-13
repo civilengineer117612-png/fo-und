@@ -770,7 +770,10 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
      Loops (how-to clips, intro drawings, the listening wave, arranging) have their own rules that show the finished frame. */
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0s !important; transition-delay: 0s !important; }
     #screen.swap, .viewbody.fade, .sheet.enter, .sheet.center.enter, #scrim.enter, #menu .drawer.enter, #menu .scrim.enter, #menu.leaving .drawer, #menu.leaving .scrim, .chev.up.flip, #entries-list.drop { animation: none !important; } }
-  .rsum .rs > button.act { align-self: flex-start; margin-top: 6px; }   /* Check these amounts: one plain button per listed entry */
+  .acklist .ackrow { padding: 10px 0; border-top: 1px solid var(--line); } .acklist .ackrow:first-child { border-top: 0; }   /* Check these amounts */
+  .ack-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; } .ack-l { color: var(--muted); font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ack-f { font-weight: 600; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; } .ack-sub { color: var(--muted); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+  .ackrow > button.act { margin-top: 6px; }
 </style>
 </head>
 <body>

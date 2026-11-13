@@ -2435,11 +2435,12 @@ function amountCheckHtml() {
   const list = M.openAmountChecks(S(), ledger.settings);
   if (!list.length) return "";
   const cats = new Map(S().categories.map((c) => [c.id, c.name])), SHOWN = 12;
-  return `<div class="card" id="amount-check" style="margin-bottom:14px"><p><b>Check ${list.length === 1 ? "this amount" : "these " + list.length + " amounts"}.</b></p>
-    <p class="note small">A comma used to be dropped: 1,5 was saved as 15.00. ${list.length === 1 ? "This typed entry is" : "These typed entries are"} ten times the usual or more. Nothing was changed.</p>
-    <div class="rsum">${list.slice(0, SHOWN).map((r) => `<div class="rs" data-id="${esc(r.id)}"><span class="rs-l">${esc(listDate(r.date))} \u00b7 ${esc(r.payee.trim() || cats.get(r.category_id) || "")}${r.status === "draft" ? " \u00b7 draft" : ""}</span><b>${peso(r.amount)}</b><small>Usually about ${peso(r.usual)}</small><button class="act" data-action="amount-ok" data-id="${esc(r.id)}">This amount is right</button></div>`).join("")}</div>
-    ${list.length > SHOWN ? `<p class="note small">And ${list.length - SHOWN} more, older.</p>` : ""}
-    <p class="note small">Wrong one? Edit a draft in Verify, or use "Put right a verified entry" below. This card stays until each is done.</p></div>`;
+  // Few words (owner, Nov 13): a title with the count, one line per entry (name and date at the left, the amount at the right, what it usually is
+  // under it), one plain button each. A wrong one is put right where it always is: Verify for a draft, "Put right a verified entry" below.
+  return `<div class="card" id="amount-check" style="margin-bottom:14px"><p><b>Check ${list.length === 1 ? "1 amount" : list.length + " amounts"}</b></p>
+    <p class="note small">A comma may have been lost: 1,5 saved as 15.00.</p>
+    <div class="acklist">${list.slice(0, SHOWN).map((r) => `<div class="ackrow" data-id="${esc(r.id)}"><div class="ack-top"><span class="ack-l">${esc(r.payee.trim() || cats.get(r.category_id) || "")} \u00b7 ${esc(listDate(r.date))}${r.status === "draft" ? " \u00b7 draft" : ""}</span><b class="ack-f">${peso(r.amount)}</b></div><div class="ack-sub">usually ${peso(r.usual)}</div><button class="act" data-action="amount-ok" data-id="${esc(r.id)}">This amount is right</button></div>`).join("")}</div>
+    ${list.length > SHOWN ? `<p class="note small">+${list.length - SHOWN} more</p>` : ""}</div>`;
 }
 function repairCardHtml() {
   const st = M.repairStatus(S());

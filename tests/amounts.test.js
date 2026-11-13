@@ -95,7 +95,7 @@ test("the app says what is wrong under the box, keeps the list until each entry 
   assert.ok(AMOUNT_HINT.length < 90 && !/[—–]/.test(AMOUNT_HINT));
   const card = app.slice(app.indexOf("function amountCheckHtml()"), app.indexOf("function repairCardHtml()"));
   // before (Nov 12, #338): one "Got it" hid the card for good. After (owner, Nov 12): one "This amount is right" per entry; no Got it; the old mark is not read.
-  assert.ok(card.includes("M.openAmountChecks(S(), ledger.settings)") && card.includes("Nothing was changed.") && !card.includes("amount_check_seen") && !card.includes("Got it"));
+  assert.ok(card.includes("M.openAmountChecks(S(), ledger.settings)") && card.includes("A comma may have been lost: 1,5 saved as 15.00.") && !card.includes("amount_check_seen") && !card.includes("Got it"));
   assert.ok(!/commit\(|plan[A-Z]\w+\(|data-action="(?!amount-ok")/.test(card), "the card's only button is This amount is right, and the card makes nothing");
   assert.ok(card.includes('<button class="act" data-action="amount-ok" data-id="${esc(r.id)}">This amount is right</button>'), "one per listed entry");
   assert.match(app, /case "amount-ok": await commit\(S\(\), M\.markAmountRight\(ledger\.settings, id\), \{ quiet: true \}\); renderScreen\(\); break;/, "the mark only changes settings: S() is saved as it is");
