@@ -202,6 +202,17 @@ export function setPaydayAmount(state, settings, line, incomes, index, amount, c
 }
 
 // ---------- cutoff progress and pay received (kept from the old Pay plan screen) ----------
+// PAY ONLY (overhaul L7, Nov 13): "Received" is set against the expected pay, so it counts PAY only: the Salary and Overtime categories (by id) and any money
+// in of a payslip's own entry. Interest, cashback, refunds and other income are counted apart (`other`, `otherCount`), never as pay.
+const PAY_CATEGORY_IDS = ["cat-salary", "cat-overtime"];
+const payTest = (state) => {
+  const income = new Set(state.categories.filter((c) => c.kind === "income").map((c) => c.id)), slipTx = new Set((state.payslips ?? []).map((p) => p.transaction_id));
+  return (e, t) => (!income.has(e.category_id) ? null : PAY_CATEGORY_IDS.includes(e.category_id) || slipTx.has(t.id) ? "pay" : "other");
+};
+// EARLY PAY (overhaul L6, Nov 13): pay often lands a day or two BEFORE its payday (a payday on a weekend is paid on the Friday). A deposit belongs to the
+// payday it is nearest to, up to 5 days early: each payday's pay window runs from `early` days before it to the day before the next payday's window. `early`
+// is 5, or less when paydays are close (under half the shortest gap, so a weekly payday is never taken by its neighbour). Spending cutoffs do not move.
+const earlyDays = (dates) => { let gap = Infinity; for (let i = 1; i < dates.length; i++) gap = Math.min(gap, (ms(dates[i]) - ms(dates[i - 1])) / DAY); return Math.max(0, Math.min(5, Math.floor((gap - 1) / 2))); };
 // For each payday of `month`: its cutoff (from that payday to the day before the next one; the last payday runs into next month's first), what was
 // VERIFIED-spent in each category inside it (a held count gap and the entry that cancels it are not spending), and the pay that really arrived in it
 // (verified income entries). Nothing is stored. The result is keyed by payday index; `spent` by category id.
@@ -210,18 +221,22 @@ export function paydayProgress(state, settings, month, { categoryMaps = [] } = {
   if (!paydays.length) return [];
   const after = payDatesIn(scheduleOf(settings), nextMonth(month))[0]?.date ?? null;
   const expense = new Set(state.categories.filter((c) => c.kind === "expense").map((c) => c.id)), income = new Set(state.categories.filter((c) => c.kind === "income").map((c) => c.id));
-  const txById = new Map(state.transactions.map((t) => [t.id, t])), held = heldIds(state);
+  const txById = new Map(state.transactions.map((t) => [t.id, t])), held = heldIds(state), kindOf = payTest(state);
+  const early = earlyDays([...paydays.map((p) => p.date), ...(after ? [after] : [])]) * DAY;
   return paydays.map((p, i) => {
     const nextDate = paydays[i + 1]?.date ?? after, start = p.date, end = nextDate ? iso(ms(nextDate) - DAY) : `${month}-${String(dayIn("last", ...month.split("-").map((x) => Number(x)))).padStart(2, "0")}`, spent = {};
-    let received = 0, count = 0;
+    const payStart = iso(ms(start) - early), payEnd = nextDate ? iso(ms(nextDate) - early - DAY) : end;
+    let received = 0, count = 0, other = 0, otherCount = 0;
     for (const e of state.entries) {
       if (e.category_id == null) continue;
       const t = txById.get(e.transaction_id);
-      if (!t || t.status !== "verified" || held.has(t.id) || t.date < start || t.date > end) continue;
-      if (expense.has(e.category_id)) { const id = reportingCategory(categoryMaps, e.category_id, p.date); spent[id] = (spent[id] ?? 0) + e.amount; }
-      else if (income.has(e.category_id)) { received -= e.amount; count++; }   // income is a credit, stored negative
+      if (!t || t.status !== "verified" || held.has(t.id)) continue;
+      if (expense.has(e.category_id)) { if (t.date < start || t.date > end) continue; const id = reportingCategory(categoryMaps, e.category_id, p.date); spent[id] = (spent[id] ?? 0) + e.amount; continue; }
+      if (t.date < payStart || t.date > payEnd) continue;
+      const k = kindOf(e, t);   // income is a credit, stored negative
+      if (k === "pay") { received -= e.amount; count++; } else if (k === "other") { other -= e.amount; otherCount++; }
     }
-    return { ...p, start, end, spent, received, count };
+    return { ...p, start, end, payStart, payEnd, spent, received, count, other, otherCount };
   });
 }
 
@@ -232,17 +247,18 @@ export function payHeader(expected, received, count) {
   return { expected, received, difference: received - expected };
 }
 
-// Pay that was really logged in a calendar month (verified income entries; a held gap is not pay): {received, count}.
+// Pay that was really logged in a calendar month (verified PAY entries, L7; a held gap is not pay): {received, count, other, otherCount}; other money in apart.
 export function monthPay(state, month) {
-  const income = new Set(state.categories.filter((c) => c.kind === "income").map((c) => c.id)), txById = new Map(state.transactions.map((t) => [t.id, t])), held = heldIds(state);
-  let received = 0, count = 0;
+  const txById = new Map(state.transactions.map((t) => [t.id, t])), held = heldIds(state), kindOf = payTest(state);
+  let received = 0, count = 0, other = 0, otherCount = 0;
   for (const e of state.entries) {
-    if (e.category_id == null || !income.has(e.category_id)) continue;
+    if (e.category_id == null) continue;
     const t = txById.get(e.transaction_id);
     if (!t || t.status !== "verified" || held.has(t.id) || !t.date.startsWith(month + "-")) continue;
-    received -= e.amount; count++;
+    const k = kindOf(e, t);
+    if (k === "pay") { received -= e.amount; count++; } else if (k === "other") { other -= e.amount; otherCount++; }
   }
-  return { received, count };
+  return { received, count, other, otherCount };
 }
 
 // ---------- the Pay plan moves into Budget ----------
