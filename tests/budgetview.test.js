@@ -302,3 +302,36 @@ test("the Buffer row: named the same everywhere, set and cleared from its own wi
   assert.match(app, /case "clear-buffer-monthly": \{ const \{ buffer_monthly, \.\.\.rest \} = ledger\.settings;/, "No buffer removes the setting; no entry is touched");
   assert.ok(app.includes('<p class="note">Money kept for when a category goes over its budget. It is never counted as savings.</p>'));
 });
+
+// ---- L3 (Nov 13): Suggest a budget reads the scheduled payments; a payment's amount is part of its category's suggestion, never a loose line
+const withPlan = (s, amount) => { s.schedules = [{ id: "sc1", kind: "repeating", name: "Test Plan", category_id: "fun", account_id: "chk", start: "2026-01-10", amount, day: 10, created_at: TS }]; return s; };
+test("L3: with history, a category's suggestion is what it usually costs, its scheduled payment included, and the payment is not a loose line", () => {
+  const s = withPlan(monthly(), 50000);
+  const r = sug(s);
+  assert.equal(r.ok, true);
+  const fun = r.rows.find((x) => x.category_id === "fun");
+  assert.equal(fun.suggested, 300000, "Fun usually costs 3,000.00 a month, the 500.00 plan included: the suggestion is 3,000.00, not 2,500.00");
+  assert.equal(fun.reason, "Median of the last 6 usable months. Includes Test Plan, scheduled.");
+  assert.ok(!r.others.some((x) => x.name === "Test Plan"), "the payment is not a line of its own");
+  assert.ok(r.funding.fixed >= 50000, "and it is counted as Fixed in the order of funding");
+  const none = sug(s, { scheduled: [] });
+  assert.equal(none.rows.find((x) => x.category_id === "fun").suggested, 300000, "a caller can still pass its own list");
+});
+test("L3: with no history, a category that carries a scheduled payment is suggested exactly that payment, not a share on top", () => {
+  const s = withPlan(base(), 150000);
+  const r = sug(s, { pin: 2500000, rent: 0 });
+  assert.equal(r.ok, true);
+  const fun = r.rows.find((x) => x.category_id === "fun");
+  assert.equal(fun.suggested, 150000, "the 1,500.00 plan is Fun's figure");
+  assert.equal(fun.reason, "Includes Test Plan, scheduled.");
+  assert.ok(r.funding.fixed >= 150000);
+  // before this fix the engine never saw the schedule: Fun got a starter share of the wants instead
+  const before = sug(s, { pin: 2500000, rent: 0, scheduled: [] });
+  assert.notEqual(before.rows.find((x) => x.category_id === "fun").suggested, 150000);
+});
+test("L3: a payment that has ended, or an installment paid off, is not suggested", () => {
+  const s = withPlan(base(), 150000);
+  s.scheduleChanges = [{ id: "e1", schedule_id: "sc1", kind: "end", effective_from: "2026-09-30", created_at: TS }];
+  const r = sug(s, { pin: 2500000, rent: 0 });
+  assert.notEqual(r.rows.find((x) => x.category_id === "fun").reason, "Includes Test Plan, scheduled.");
+});

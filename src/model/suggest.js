@@ -132,7 +132,7 @@ export function suggestPlan(input) {
   for (const x of scheduled) {
     if (x.months_left === 0) continue;
     const left = x.kind === "installment" && x.months_left != null ? ` ${plural(x.months_left, "payment", "payments")} left.` : "";
-    fixedAt(x.name, "expense", x.amount, x.day, `${x.kind === "installment" ? "Installment" : "Scheduled payment"} due on day ${x.day}, so it is set aside on payday ${payOfDay(x.day) + 1}.${left}`, "history");
+    fixedAt(x.name, "expense", x.amount, x.day, `${x.kind === "installment" ? "Installment" : "Scheduled payment"} due on day ${x.day}, so it is set aside on payday ${payOfDay(x.day) + 1}.${left}`, "history", x.category_id);   // its category: Suggest a budget adds it to that category's line (L3)
     fixedNeeds += x.amount;
   }
   // Rent is fixed too, once there is history to learn its amount and its usual day from.
@@ -200,9 +200,11 @@ export function suggestPlan(input) {
     const tableWeight = (c) => (typeOf(c) === "rent" ? 0 : S.starter_weights[typeOf(c)] ?? (bk ? S.needs_other_weight : 0));
     // Learned from you first: the needs you have logged share the pool as you spend on them; a needs category with nothing logged takes its table weight,
     // scaled to the same total, so a new category still gets something. With nothing logged at all, the table alone.
-    const needCats = spendCats.filter((c) => isNeed(c) && typeOf(c) !== "rent"), loggedNeeds = needCats.reduce((n, c) => n + (logged.get(c.id) ?? 0), 0);
+    // A category that carries a scheduled payment is covered by it (L3, Nov 13): with no history to learn the rest from, the payment is its figure, not a share on top.
+    const scheduledOnly = (c) => schedulerCat.has(c.id);
+    const needCats = spendCats.filter((c) => isNeed(c) && typeOf(c) !== "rent" && !scheduledOnly(c)), loggedNeeds = needCats.reduce((n, c) => n + (logged.get(c.id) ?? 0), 0);
     const needWeight = (c) => (!loggedNeeds ? tableWeight(c) : (logged.get(c.id) ?? 0) > 0 ? logged.get(c.id) : Math.floor((loggedNeeds * tableWeight(c)) / 10000));
-    const needsList = needCats.filter((c) => needWeight(c) > 0), wantsList = spendCats.filter((c) => !isNeed(c) && typeOf(c) !== "rent" && !(bk && bk.get(c.id) === "savings"));   // rent is fixed: never a share
+    const needsList = needCats.filter((c) => needWeight(c) > 0), wantsList = spendCats.filter((c) => !isNeed(c) && typeOf(c) !== "rent" && !(bk && bk.get(c.id) === "savings") && !scheduledOnly(c));   // rent is fixed: never a share
     // Rent and fixed needs come first, but the everyday needs keep at least their floor of the needs part; what the fixed needs take past that comes out of
     // the wants part (and, when wants run out, out of savings, which only gets what is left).
     const needsPart = Math.floor((monthIncome * S.starter.needs) / 10000), keep = Math.floor((needsPart * S.needs_variable_floor) / 10000);

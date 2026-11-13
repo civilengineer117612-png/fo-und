@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-13-suggest-schedules", date: "2026-11-13", text: "Suggest a budget now counts your scheduled payments: each one is part of its category's suggestion, as Fixed." },
   { id: "2026-11-12-amount-check-open", date: "2026-11-12", text: "Check amounts now stays on Weekly review until each entry is put right or you tap This amount is right; the count goes down as you go." },
   { id: "2026-11-12-buffer-line", date: "2026-11-12", text: "Budget has a Buffer row you can tap to set it, Wants now sit above it, and Suggest a budget uses the same buffer and the same headings." },
   { id: "2026-11-12-feel", date: "2026-11-12", text: "Taps answer a little faster, the page no longer bounces at its top and bottom, and with Reduce Motion on nothing slides or fades." },
