@@ -40,8 +40,9 @@ function monthly(extra) { const s = base(); for (const m of M6) { slip(s, m + "-
 function twice() { const s = base(); for (const m of M6) { slip(s, m + "-15", 1000000); slip(s, m + "-30", 2000000); logMonth(s, m); } return s; }
 const sug = (s, o = {}) => suggestBudgets({ state: s, today: TODAY, month: MONTH, ...o });
 
-test("Budget lists its parts in the order of funding", () => {
-  assert.match(app, /const BUDGET_GROUPS = \["Fixed", "Needs", "Savings", "Buffer", "Wants", "Other"\];/);
+test("Budget lists its parts as the owner placed them: Wants before the Buffer (owner's marks, Nov 11); the funding order in the model is unchanged", () => {
+  assert.match(app, /const BUDGET_GROUPS = \["Fixed", "Needs", "Savings", "Wants", "Buffer", "Other"\];/);
+  assert.match(readFileSync(new URL("../src/model/suggest.js", import.meta.url), "utf8"), /Lowered: it comes after Fixed, Needs and your savings minimum\./, "the engine still funds the buffer before Wants");
 });
 
 test("Budget is ONE screen: the three views, no old switch, no Setup page for it (a saved setting is left alone, never deleted)", () => {
@@ -276,4 +277,28 @@ test("a real shortage stays Short: only what rounding added is trimmed, never a 
   assert.equal(t + r.unallocated, 1200000, "the lines and Unallocated (negative when short) are the income exactly");
   assert.equal(r.short, t - 1200000, "Short is exactly how far the lines pass the income");
   for (const x of r.trimmed) assert.ok(x.by <= 5000 * r.rows.length, `${x.name} is only trimmed by rounding`);
+});
+
+// ---- THE BUFFER LINE (overhaul A5, L4, L5; owner's marks Nov 11): one buffer figure for Budget and Suggest, set from its own row
+test("one buffer: Suggest a budget proposes exactly the monthly buffer Budget shows", async () => {
+  const { suggestSettingsOf, budgetPlan } = await import("../src/model/index.js");
+  const s = monthly(), set = { buffer_monthly: 250000, suggest_settings: { nudge_bps: 1000 } };
+  assert.deepEqual(suggestSettingsOf(set), { nudge_bps: 1000, buffer_amount: 250000 });
+  assert.equal(suggestSettingsOf({ suggest_settings: { nudge_bps: 1000 } }).buffer_amount, undefined, "none set: Suggest keeps its own starter buffer");
+  assert.equal(suggestSettingsOf({}), undefined);
+  const r = sug(s, { settings: suggestSettingsOf(set) });
+  assert.equal(r.ok, true);
+  const shown = budgetPlan(s, set, MONTH, TODAY).lines.find((l) => l.kind === "buffer")?.amount;
+  assert.equal(shown, 250000, "Budget shows 2,500.00");
+  assert.equal(r.saved.find((x) => x.kind === "buffer")?.amount, shown, "and Suggest proposes the same 2,500.00 (it used to propose its own figure)");
+  assert.match(app, /settings: M\.suggestSettingsOf\(set\),/, "the app's Suggest reads it through the one rule");
+});
+
+test("the Buffer row: named the same everywhere, set and cleared from its own window, offered empty when none is set", () => {
+  assert.match(app, /const BUFFER_NAME = "Buffer", BUFFER_SUB = "For overspending; not savings";/);
+  assert.match(app, /fig: "Not set", pct: null \}\]\) : "";/, "Month shows an empty Buffer row to tap when none is set");
+  assert.ok(app.includes('r.kind === "buffer" ? { action: "open-buffer-monthly", id: "buffer" }'), "the row opens the buffer window");
+  assert.match(app, /case "save-buffer-monthly": \{ const a = M\.parsePesos\(ui\.form\.amount \?\? ""\); if \(!a\.ok \|\| a\.centavos < 0\) break; ui\.sheet = null; renderSheet\(\); await commit\(S\(\), \{ \.\.\.ledger\.settings, buffer_monthly: a\.centavos \}\);/);
+  assert.match(app, /case "clear-buffer-monthly": \{ const \{ buffer_monthly, \.\.\.rest \} = ledger\.settings;/, "No buffer removes the setting; no entry is touched");
+  assert.ok(app.includes('<p class="note">Money kept for when a category goes over its budget. It is never counted as savings.</p>'));
 });

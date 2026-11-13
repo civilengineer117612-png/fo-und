@@ -296,3 +296,9 @@ export function applyPlanMigration(state, settings, choices, { newId, now = new 
   set.plan_moved = month;
   return { ok: true, state: st, settings: set, changes };
 }
+
+// ONE BUFFER (owner, Nov 12, L4): Suggest a budget reads the same monthly buffer the Budget shows (`buffer_monthly`), so the two never differ.
+// With none set, Suggest proposes its own starter amount, and Budget offers an empty Buffer row to tap.
+export function suggestSettingsOf(settings) {
+  return Number.isInteger(settings?.buffer_monthly) ? { ...(settings.suggest_settings ?? {}), buffer_amount: settings.buffer_monthly } : settings?.suggest_settings;
+}
