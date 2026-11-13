@@ -367,3 +367,25 @@ test("L3: the wants cap never lowers a want below its scheduled payments", () =>
   assert.equal(r.ok, true);
   assert.ok(r.rows.find((x) => x.category_id === "fun").suggested >= 1000000, "never below the 10,000.00 scheduled");
 });
+
+// ---- SOME MONTHS ONLY (owner, Nov 13): a median of 0 with spending in the usable months suggests the monthly average; nothing spent stays 0 ----
+const withUp = (s) => { s.categories.push({ id: "up", name: "Upskill", kind: "expense" }); return s; };
+test("a need paid in 2 of 6 months (4,500.00 each) is suggested its average, 1,500.00, not 0; the reason says why", () => {
+  const s = withUp(monthly((x) => { for (const [i, m] of M6.entries()) if (i % 3 === 0) spend(x, m + "-12", "up", 450000); }));
+  const up = sug(s, { overrides: { up: "need" } }).rows.find((x) => x.category_id === "up");
+  assert.equal(up.suggested, 150000, "9,000.00 over 6 months");
+  assert.equal(up.reason, "Average of the last 6 usable months (paid only in some months).");
+});
+test("a category paid every month keeps its median (one big month does not lift it), and one with no spending at all stays 0", () => {
+  const s = withUp(monthly((x) => { for (const [i, m] of M6.entries()) spend(x, m + "-12", "up", i === 5 ? 900000 : 150000); }));
+  const up = sug(s, { overrides: { up: "need" } }).rows.find((x) => x.category_id === "up");
+  assert.equal(up.suggested, 150000, "the median of 1,500.00 x 5 and 9,000.00 x 1 is 1,500.00, not the average 2,750.00");
+  assert.match(up.reason, /^Median of the last 6 usable months/);
+  const none = sug(withUp(monthly()), { overrides: { up: "need" } }).rows.find((x) => x.category_id === "up");
+  assert.equal(none.suggested, 0, "nothing spent: the owner types a figure for a known future cost");
+});
+test("Suggest a budget shows ONE order (Fixed and Needs, Savings, Wants, Buffer, Other) and rows in the owner's Setup order", () => {
+  assert.match(app, /const SUG_TOP = \["need", "savings", "want"\];/);
+  assert.match(app, /\.\.\.\[\.\.\.bk\.rows\]\.filter\(\(b\) => b\.bucket !== "other"\)\.sort\(\(p, q\) => SUG_TOP\.indexOf\(p\.bucket\) - SUG_TOP\.indexOf\(q\.bucket\)\)/, "the top card in the groups' order");
+  assert.ok(app.includes("const setupAt = new Map(orderedCats(S().categories).map((c, i) => [c.id, i]));") && app.includes("r.rows.sort((p, q) => (setupAt.get(p.category_id) ?? 1e9) - (setupAt.get(q.category_id) ?? 1e9));"), "rows in the Setup order");
+});

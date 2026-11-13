@@ -2548,7 +2548,8 @@ const bvNextReg = (v, w) => v.perPayday.slice(w + 1).find((p) => !p.extra) ?? nu
 const bvAmounts = (v, key) => { const line = v.lines.find((l) => l.key === key); return line ? M.paydayShares(ledger.settings, line, bvIncomes(v)).map(M.amountText) : []; };
 // The buffer is named the same way everywhere (Budget, Suggest, the Buffer screen): what it is for, and that it is not savings.
 const BUFFER_NAME = "Buffer", BUFFER_SUB = "For overspending; not savings";
-const BUDGET_GROUPS = ["Fixed", "Needs", "Savings", "Wants", "Buffer", "Other"];   // the order on screen (owner, Nov 11): Wants before the Buffer. The ORDER OF FUNDING in the model is unchanged: Fixed, Needs, savings, the buffer, then Wants.
+const BUDGET_GROUPS = ["Fixed", "Needs", "Savings", "Wants", "Buffer", "Other"];
+const SUG_TOP = ["need", "savings", "want"];   // the top card of Suggest a budget in the same order (owner, Nov 13)   // the order on screen (owner, Nov 11): Wants before the Buffer. The ORDER OF FUNDING in the model is unchanged: Fixed, Needs, savings, the buffer, then Wants.
 const incomeWords = (inc) => (inc.source === "pinned" ? "Your own figure" : inc.source === "payslips" ? "From your payslips" : inc.source === "plan" ? "From your Pay plan" : "");
 // The offer "Add to savings" for an amount that is Left: {add: {goal_id: centavos}, total, left} (model: placeSurplus). Used by the Budget and by its own tap.
 function savingsOffer(left) {
@@ -3215,12 +3216,16 @@ function renderSheet() {
       const top = barCard([
         { name: "Income", sub: esc(r.income.text), fig: `${peso(r.income.amount)} a month`, pct: null, action: "open-income-base", id: "x" },
         ...(r.income.other ? [{ name: "Your payslips say", sub: "Not used: your own figure is", fig: `${peso(r.income.other.amount)} a month`, pct: null }] : []),
-        ...bk.rows.map((b) => ({ name: esc(b.bucket === "need" ? "Fixed and Needs" : b.label), sub: b.target != null ? `target ${M.showTenths(b.target)}` : "", fig: `${peso(b.amount)} \u00b7 ${b.tenths == null ? "" : M.showTenths(b.tenths)}`, pct: b.tenths == null ? 0 : Math.min(100, b.tenths / 10), label: `${b.label}: ${b.tenths == null ? "" : M.showTenths(b.tenths)} of income` })),
+        // One order for the whole window (owner, Nov 13): Fixed and Needs, Savings, Wants, Buffer, Other, as the groups below.
+        ...[...bk.rows].filter((b) => b.bucket !== "other").sort((p, q) => SUG_TOP.indexOf(p.bucket) - SUG_TOP.indexOf(q.bucket)).map((b) => ({ name: esc(b.bucket === "need" ? "Fixed and Needs" : b.label), sub: b.target != null ? `target ${M.showTenths(b.target)}` : "", fig: `${peso(b.amount)} \u00b7 ${b.tenths == null ? "" : M.showTenths(b.tenths)}`, pct: b.tenths == null ? 0 : Math.min(100, b.tenths / 10), label: `${b.label}: ${b.tenths == null ? "" : M.showTenths(b.tenths)} of income` })),
         ...(bufferAmt > 0 ? [{ name: BUFFER_NAME, sub: "", fig: `${peso(bufferAmt)} \u00b7 ${M.showTenths(bk.buffer.tenths)}`, pct: Math.min(100, bk.buffer.tenths / 10), label: `${BUFFER_NAME}: ${M.showTenths(bk.buffer.tenths)} of income` }] : []),
+        ...bk.rows.filter((b) => b.bucket === "other").map((b) => ({ name: esc(b.label), sub: b.target != null ? `target ${M.showTenths(b.target)}` : "", fig: `${peso(b.amount)} \u00b7 ${b.tenths == null ? "" : M.showTenths(b.tenths)}`, pct: b.tenths == null ? 0 : Math.min(100, b.tenths / 10), label: `${b.label}: ${b.tenths == null ? "" : M.showTenths(b.tenths)} of income` })),
       ]);
       const max = Math.max(1, ...r.rows.map((x) => sugAmt(x)));
       const fixedIds = M.fixedMap(S(), ledger.settings, today()), catById = new Map(S().categories.map((c) => [c.id, c]));
       const groupOf = (id) => (fixedIds.has(id) ? "Fixed" : M.BUCKET_LABELS[M.bucketOf(catById.get(id), ledger.settings.bucket_overrides ?? {})] ?? "Other");
+      const setupAt = new Map(orderedCats(S().categories).map((c, i) => [c.id, i]));   // rows inside a group: the owner's own order from Setup, Categories (owner, Nov 13)
+      r.rows.sort((p, q) => (setupAt.get(p.category_id) ?? 1e9) - (setupAt.get(q.category_id) ?? 1e9));   // the window's own copy of the suggestion, not the ledger
       const rowOf = (x) => { const why = rowWhy(x), cur = sugAmt(x); return { name: esc(x.name), sub: why ? esc(why) : "", fig: `<b>${x.suggested === null ? "none" : peso(x.suggested)}</b>`, pct: Math.round((cur * 100) / max), label: `${x.name}: suggested ${x.suggested === null ? "none" : peso(x.suggested)}`,
         extra: !f.sugEdit ? "" : `<div class="sugyours"><label for="y_${esc(x.category_id)}">Yours</label><input id="y_${esc(x.category_id)}" data-field="y_${esc(x.category_id)}" inputmode="decimal" value="${esc(yoursOf(x, f))}" placeholder="\u20B1 a month" autocomplete="off">${x.suggested === null ? "" : `<button class="act" data-action="use-sug" data-id="${esc(x.category_id)}">Use</button>`}</div>` }; };
       const savedRow = (x) => (x.kind === "buffer" ? { name: BUFFER_NAME, sub: BUFFER_SUB, fig: peso(x.amount), pct: null, action: "open-buffer-monthly", id: "buffer" } : { name: esc(x.name), sub: x.need ? `Needs ${peso(x.need)} a month` : "", fig: peso(x.amount), pct: null, ...(x.goal_id ? { action: "open-goal-monthly", id: x.goal_id } : {}) });
