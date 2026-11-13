@@ -153,7 +153,7 @@ const stars = async (page) => page.locator("#sheet label .req").count();   // ho
 
 
 // The app has no way to load a plan file any more (nobody has one yet), so tests that need a plan put one in the phone's settings, as parsed by the model.
-import { parsePlan, planWithBudgets, CHANGES, emptyState, recordFromParse, addSchedule, makeDueDrafts } from "../src/model/index.js";
+import { parsePlan, planWithBudgets, CHANGES, emptyState, recordFromParse, addSchedule, makeDueDrafts, BANKS } from "../src/model/index.js";
 async function writeLedger(page, led) {
   const text = JSON.stringify(led);
   await page.evaluate(async ([text]) => { localStorage.setItem("financialTracker.ledger", text); await new Promise((res) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => { const tx = r.result.transaction("kv", "readwrite"); tx.objectStore("kv").put(text, "ledger"); tx.oncomplete = () => { r.result.close(); res(); }; }; }); }, [text]);
@@ -2642,7 +2642,9 @@ console.log("Space, pictures and the photo reader");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 100000, opening_date: "2026-10-01" };
   const TS = "2026-10-03T09:00:00.000+08:00";
   const tx = { id: "slip", date: "2026-10-03", payee: "Corner Cafe", memo: "", status: "verified", source: "manual", created_at: TS, verified_at: TS };
-  const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, last_backup_at: "2026-09-01T09:00:00.000+08:00" }, state: { ...OWNER_STYLE.state, accounts: [acct], transactions: [tx], entries: [{ transaction_id: "slip", category_id: "cat-food", amount: 5000 }, { transaction_id: "slip", account_id: "w", amount: -5000 }],
+  // this block keeps the service worker, and Playwright cannot stage a request on WebKit while one is running: so the app is given no logo to
+  // look up (every bank marked as tried), and it asks the outside for nothing (it used to reach the live logo services and fail e2e-webkit)
+  const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, last_backup_at: "2026-09-01T09:00:00.000+08:00", bankLogosTried: Object.fromEntries(BANKS.map((b) => [b.id, "2099-01-01"])) }, state: { ...OWNER_STYLE.state, accounts: [acct], transactions: [tx], entries: [{ transaction_id: "slip", category_id: "cat-food", amount: 5000 }, { transaction_id: "slip", account_id: "w", amount: -5000 }],
     attachments: [{ id: "att1", transaction_id: "slip", type: "photo", file: "att1.jpg", file_timestamp: TS }, { id: "att2", transaction_id: "slip", type: "photo", file: "att2.jpg", file_timestamp: TS }] } };
   ({ ctx, page, errors } = await open({ seed, blockSw: false }));   // the reader's download is kept by the service worker, so this block needs it (on WebKit too)
   await menuGo(page, "Setup");
