@@ -46,12 +46,11 @@
   .note { color: var(--mid); }
   button { font: inherit; color: var(--ink); background: var(--wash); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-height: 48px; }
   button { transition: transform var(--t-press) ease, background-color var(--t-press) ease; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-  .hub button:active, .glance:active, .entrieshead:active, .choice:active { transform: scale(.99); }
-  .row.rowbtn:active { background: var(--wash); }
-  button:active { background: var(--line); transform: scale(.98); }
-  button.rowbtn:active, .brow:active, .choice:active, .bankrow:active, #nav button:active, button.link:active { transform: none; }
-  button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); width: 100%; font-size: 16px; min-height: 52px; }
-  button.primary:active { background: var(--mid); }
+  .hub button:active, .glance:active, .entrieshead:active, .choice:active { background: var(--line); }   /* F2 (Nov 13): ONE pressed look: the surface darkens within 100 ms; nothing shrinks, fades or moves */
+  .row.rowbtn:active { background: var(--line); }
+  button:active { background: var(--line); }
+    button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); width: 100%; font-size: 16px; min-height: 52px; }
+  button.primary:active { background: var(--ink); filter: brightness(.92); }
   button.primary.compact { display: block; width: 78%; margin: 14px auto 0; min-height: 52px; font-size: 16px; }
   button:disabled { opacity: .4; }
   .filebtn { display: flex; align-items: center; justify-content: center; background: var(--ink); color: var(--paper); border-radius: 10px; font-size: 16px; min-height: 56px; margin-top: 12px; cursor: pointer; }
@@ -133,7 +132,7 @@
   @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
   #screen.swap { animation: fadein var(--t-move) ease-out; } .viewbody.fade { animation: fadein var(--t-move) ease-out; }
   @media (prefers-reduced-motion: reduce) { #screen.swap, .viewbody.fade { animation: none; } }
-  .paytitle { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .editbtn { width: 44px; min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; color: var(--mid); border-radius: 10px; } .editbtn:active { background: var(--wash); }
+  .paytitle { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .editbtn { width: 44px; min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; color: var(--mid); border-radius: 10px; } .editbtn:active { background: var(--line); }
   .tile { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
   .tile .tcat { display: block; font-style: normal; font-size: 11px; color: var(--soft); opacity: .8; margin-top: 1px; }
   .tiles.arranging .tile { touch-action: none; cursor: grab; transition: transform var(--t-move) ease, opacity var(--t-move) ease; position: relative; background: var(--wash); border: 1px solid var(--line); padding: 12px 14px; }   /* a div here, so it gets the look of the button tiles */
@@ -147,7 +146,7 @@
   .tiles.arranging .tile.addtile { background: none; color: var(--mid); } .tile.addtile b { font-size: 26px; font-weight: 400; }
   .l4 { color: var(--muted); font-size: 12px; font-weight: 400; }
   .tiles.two { grid-template-columns: repeat(2, 1fr); margin: 8px 0; } .tiles.two .tile { min-height: 72px; } .tiles.two .tile b { font-size: 17px; }
-  .tile { border-radius: 12px; } .tile:active { transform: scale(.96); }
+  .tile { border-radius: 12px; } .tile:active { background: var(--line); }
   .tile { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 84px; gap: 2px; }
   .tile b { font-size: 15px; }
   .tile span { color: var(--mid); }
@@ -157,9 +156,9 @@
   .daycapbtn { background: none; border: 0; padding: 2px 8px; min-height: 0; color: var(--mid); font-size: 14px; }
   .camicon.micbtn { margin-left: auto; padding: 0; border: 0; font-size: inherit; }
   .micbtn + .camicon { margin-left: 0; }
-  .camicon { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 12px; background: var(--ink); color: var(--paper); cursor: pointer; box-shadow: none; transition: transform var(--t-press) ease; } .camicon:active { transform: scale(.94); }
+  .camicon { margin-left: auto; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 12px; background: var(--ink); color: var(--paper); cursor: pointer; box-shadow: none; transition: transform var(--t-press) ease; } .camicon:active { filter: brightness(.92); }
   .menubtn { width: 44px; height: 44px; min-height: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0; border-radius: 10px; margin-left: -6px; }
-  .menubtn:active { background: var(--wash); }
+  .menubtn:active { background: var(--line); }
   .menubtn svg { display: block; }
   #menu .scrim { position: fixed; inset: 0; z-index: 20; background: var(--scrim); }
   #menu .drawer { position: fixed; top: 0; bottom: 0; left: 0; z-index: 21; width: min(80%, 320px); background: var(--paper); border-radius: 0 16px 16px 0; box-shadow: 10px 0 40px var(--shade);
@@ -191,7 +190,7 @@
   .daycap { color: var(--mid); margin: 0; }
   .ptitle { flex: 1; border: 0; background: none; font-weight: 700; font-size: 16px; min-height: 48px; }
   .stepper.single .ptitle { text-align: center; }
-  .flip { cursor: pointer; } .flip:active { opacity: .8; }
+  .flip { cursor: pointer; } .flip:active { background: var(--line); }
   .mgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 8px 0; } .mgrid button { min-height: 48px; } .mgrid button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); } .mgrid button:disabled { opacity: .3; }
   .rangepick { display: flex; gap: 8px; margin: 8px 0; }
   .rangepick button { flex: 1; text-align: left; display: flex; flex-direction: column; padding: 8px 12px; min-height: 56px; }
@@ -281,7 +280,7 @@
   .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .bars { margin: 12px 0 4px; }
   .brow { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 0; padding: 8px 0; min-height: 52px; }
-  .brow:active { background: var(--wash); }
+  .brow:active { background: var(--line); }
   .brow.dim { opacity: .45; }
   .brow[disabled] { opacity: 1; }
   .btop { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 5px; }
@@ -292,7 +291,7 @@
   .caption { min-height: 44px; color: var(--mid); margin: 6px 0; }
   .cols { display: flex; align-items: flex-end; gap: 6px; height: 190px; border-bottom: 1px solid var(--line); margin-top: 12px; }
   .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: none; border: 0; border-radius: 0; padding: 0; height: 100%; min-height: 44px; }
-  .col:active { background: var(--wash); }
+  .col:active { background: var(--line); }
   .col.dim { opacity: .45; }
   .cbar { display: block; width: 24px; background: var(--chart); border-radius: 4px 4px 0 0; }
   .cval { font-size: 12px; color: var(--mid); min-height: 16px; margin-bottom: 3px; white-space: nowrap; }
@@ -330,7 +329,7 @@
   .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
   button.rowbtn { width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; min-height: 56px; }
-  button.rowbtn:active { background: var(--wash); }
+  button.rowbtn:active { background: var(--line); }
   .bigamt { font-size: 24px; font-weight: 700; margin: 4px 0 12px; font-variant-numeric: tabular-nums; }
   .txdl { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 0 0 14px; } .txdl dt { color: var(--mid); } .txdl dd { margin: 0; text-align: right; } .txdl dd.who { justify-content: flex-end; }
   .row small { color: var(--mid); display: block; }
@@ -398,7 +397,7 @@
   svg .tlline { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; } svg .tlbase { stroke: var(--line); stroke-width: 1; }
   svg .tlband { fill: var(--accent); fill-opacity: .08; } svg .tlcur { stroke: var(--ink); stroke-width: 1; stroke-opacity: .5; } svg .tldot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
   svg .tlv { font-size: 10px; fill: var(--ink); font-variant-numeric: tabular-nums; } svg .tlx { font-size: 10px; fill: var(--muted); }
-  .swcard[data-action], .row.tapcard { cursor: pointer; } .row.tapcard:active, .swcard[data-action]:active { background: var(--track); }
+  .swcard[data-action], .row.tapcard { cursor: pointer; } .row.tapcard:active, .swcard[data-action]:active { background: var(--line); }
   .pmonths { display: flex; gap: 4px; align-items: flex-end; margin: 4px 0 12px; } .pmcol { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; } .pmval { font-size: 11px; color: var(--mid); font-variant-numeric: tabular-nums; min-height: 14px; } .pmbar { width: 14px; border-radius: 3px; background: var(--accent); } .pmcol small { color: var(--mid); }
   .ghostline { visibility: hidden; user-select: none; -webkit-user-select: none; }
   .veil { position: relative; display: inline-block; max-width: 100%; } .veil .ghost { visibility: hidden; user-select: none; -webkit-user-select: none; } .veil .ghost::before { content: attr(data-w); }
@@ -633,10 +632,10 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .daytotal, .hero, .bigamt, .card .big { font-weight: 600; }
   /* buttons: outlined by default, ONE filled (accent) per screen */
   button { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; color: var(--ink); min-height: 44px; }
-  button:active { background: var(--track); }
+  button:active { background: var(--line); }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); font-weight: 600; }
   button.primary:active { background: var(--accent); filter: brightness(.92); }
-  button.link { background: none; border: 0; min-height: 0; color: var(--ink); } button.link:active { background: none; }
+  button.link { background: none; border: 0; min-height: 0; color: var(--ink); } button.link:active { background: var(--line); }
   .filebtn { background: var(--accent); color: var(--surface); } .filebtn.alt { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
   .card, .bcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: none; }
   /* segmented control */
@@ -677,7 +676,7 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .catrow .ctn { min-width: 0; } .catrow .amt { white-space: nowrap; } .catrow .ctn .ico { vertical-align: middle; margin-right: 10px; } .catrow .ctn small { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--muted); }
   .catrow.g-good .catbar span { background: var(--good); } .catrow.g-warning .catbar span { background: var(--warn); } .catrow.g-serious .catbar span { background: var(--serious); } .catrow.g-critical .catbar span { background: var(--critical); }
   .catrow .catbar { position: relative; } .catrow .catbar .flatmark { top: 0; bottom: 0; }
-  button.catrow { display: block; width: 100%; min-height: 0; text-align: left; font: inherit; font-weight: 400; color: inherit; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; } button.catrow:last-child { border-bottom: 0; } button.catrow:active { background: var(--wash); }
+  button.catrow { display: block; width: 100%; min-height: 0; text-align: left; font: inherit; font-weight: 400; color: inherit; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; } button.catrow:last-child { border-bottom: 0; } button.catrow:active { background: var(--line); }
   .goalact { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 12px; } .goalact .link { font-size: 14px; min-height: 0; } .catrow .gname { display: inline-flex; align-items: center; gap: 10px; } .catrow .gname .ico { margin-right: 0; } .catrow .goaldet { margin-top: 10px; }
   .chartcard { padding: 14px 14px 10px; margin: 10px 0; } .chartcard .eyebrow { margin: 0 0 6px; } .chartcard .tlbox { margin: 0; }
   .catrow.whosub { padding-left: 14px; color: var(--mid); }
@@ -727,25 +726,25 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .hub + .note, .hub ~ .note:first-of-type { margin-top: 16px; }
   /* ACTIONS ARE BUTTONS (owner, Nov 11, docs/UI.md): every action that used to be an underlined word is an outlined button. Underlined links stay only inside Help. */
   button.act { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: auto; min-height: 48px; margin: 0; padding: 10px 14px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; font-size: 15px; font-weight: 400; font-style: normal; text-decoration: none; }
-  button.act:active { background: var(--track); transform: none; }
+  button.act:active { background: var(--line); }
   .entrylink > button.act { width: 100%; }
   button.act.sm { min-height: 44px; padding: 8px 12px; font-size: 14px; }
   .actrow { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; } .actrow > button.act { flex: 1 1 auto; }
   /* ROWS THAT GO SOMEWHERE, and the controls that sit on the line they control (docs/UI.md) */
   .navcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 16px; margin: 12px 0; }
   button.navrow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 10px 0; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; text-align: left; font-size: 16px; color: var(--ink); }
-  button.navrow:last-child { border-bottom: 0; } button.navrow:active { background: none; transform: none; opacity: .6; }
+  button.navrow:last-child { border-bottom: 0; } button.navrow:active { background: var(--line); }
   .navrow .nr-t { flex: 1; min-width: 0; } .navrow .nr-t small { display: block; color: var(--muted); font-size: 13px; } .navrow .nr-r { color: var(--muted); font-size: 14px; white-space: nowrap; } .nr-chev { color: var(--muted); flex: none; }
-  button.datebtn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 10px; margin-left: -10px; background: none; border: 0; border-radius: 10px; color: var(--muted); font-size: 14px; } button.datebtn:active { background: var(--track); transform: none; }
+  button.datebtn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 10px; margin-left: -10px; background: none; border: 0; border-radius: 10px; color: var(--muted); font-size: 14px; } button.datebtn:active { background: var(--line); }
   button.addtile { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; background: none; border: 1px dashed var(--dashed); border-radius: 14px; color: var(--muted); font-size: 15px; }
-  .acctrow { padding: 0; } button.acctopen { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 68px; padding: 10px 0; background: none; border: 0; border-radius: 0; text-align: left; color: var(--ink); } button.acctopen:active { background: none; transform: none; opacity: .6; }
+  .acctrow { padding: 0; } button.acctopen { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 68px; padding: 10px 0; background: none; border: 0; border-radius: 0; text-align: left; color: var(--ink); } button.acctopen:active { background: var(--line); }
   .acctopen .who { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; } .acctopen .who small { display: block; color: var(--muted); font-size: 13px; } .acctopen .amt { white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
   .h2row { align-items: center; } .h2row h2 { margin: 0; } button.addtile { margin-top: 16px; }
   .gridcards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0; }
   .gcard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; min-width: 0; cursor: pointer; }
   .gcard .gtop { display: flex; align-items: center; gap: 8px; min-width: 0; } .gcard .gname { font-size: 15px; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .gcard .gamt { margin-top: 14px; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; } .gcard .gtype { color: var(--muted); font-size: 13px; margin-top: 2px; } .gcard .cover { margin-top: 8px; }
-  .seeallrow { text-align: center; margin: 8px 0; } button.seeall { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 12px; background: none; border: 0; color: var(--ink); font-size: 15px; font-weight: 600; } button.seeall:active { background: none; transform: none; opacity: .6; }
+  .seeallrow { text-align: center; margin: 8px 0; } button.seeall { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 12px; background: none; border: 0; color: var(--ink); font-size: 15px; font-weight: 600; } button.seeall:active { background: var(--line); }
   .actrow2 { display: flex; gap: 8px; margin: 8px 0 16px; } .actrow2 > button.act { flex: 1 1 0; padding: 8px 6px; font-size: 14px; }
   .gcard .ico { border: 0; padding: 0; border-radius: 10px; }
   .logbtns { display: flex; gap: 10px; margin: 14px 0 0; } .logbtns > button { margin: 0; min-height: 52px; font-size: 16px; } .logbtns > button.primary { flex: 3 1 0; width: auto; } .logbtns > button.act { flex: 2 1 0; }
@@ -753,14 +752,14 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   #nav button.navscan { min-height: 52px; padding: 0; margin-top: -24px; overflow: visible; color: var(--accent); }
   #nav button.navscan .navring { display: flex; align-items: center; justify-content: center; width: 62px; height: 62px; border-radius: 50%; color: var(--accent); border: 2px solid var(--accent);
     background: linear-gradient(180deg, var(--surface), var(--track)); box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 28%, transparent), 0 1px 2px color-mix(in srgb, var(--ink) 18%, transparent); }
-  #nav button.navscan:active .navring { background: var(--track); box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 24%, transparent); }
+  #nav button.navscan:active .navring { background: var(--line); box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 24%, transparent); }
   .navcard.compact { padding: 0 14px; margin: 8px 0; } .navcard.compact button.navrow { min-height: 44px; padding: 6px 0; font-size: 14px; }
   body { padding-bottom: calc(108px + env(safe-area-inset-bottom)); }
   /* ONE floating reminder (verify or backup): a pill that rides above the content, not a row of buttons */
   .floatnote { position: sticky; top: 8px; z-index: 3; display: flex; align-items: center; margin: 8px 0 14px; min-height: 44px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line);
     box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 14%, transparent); }
   .floatnote button { background: none; border: 0; border-radius: 0; min-height: 44px; color: var(--ink); font-size: 14px; }
-  .floatnote button:active { background: none; transform: none; opacity: .6; }
+  .floatnote button:active { background: var(--line); }
   .floatnote .fn-go { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 4px 0 16px; text-align: left; }
   .floatnote .fn-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
   .floatnote .fn-x { flex: none; width: 44px; padding: 0; color: var(--muted); display: flex; align-items: center; justify-content: center; }

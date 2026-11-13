@@ -82,6 +82,25 @@ console.log(`  diag sheet-scroll (${ENGINE}) as shipped: ${r.before} -> opened $
 ok(r.before > 50, "the window is taller than the short screen and was scrolled to its bottom (" + r.before + ")");
 ok(/GCash/.test(r.chosen), "GCash is chosen as Paid from");
 ok(r.after >= r.before - 2, "choosing something at the bottom does not throw the window back up (" + r.before + " to " + r.after + ")");
+// F4 (Nov 13): DRAW ONCE AT START. With nothing touched for 4 seconds (the bank logos tried, the start-up saves done), the header, the screen and the
+// bottom bar are each written once: a part rebuilt again under a finger loses the tap (Phase 1 counted 3 writes).
+{ const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(() => { Object.defineProperty(navigator, "standalone", { get: () => true }); sessionStorage.setItem("logOpen", "1");
+    window.__draws = { top: 0, screen: 0, nav: 0 };
+    new MutationObserver(() => { for (const id of Object.keys(window.__draws)) { const el = document.getElementById(id); if (el && !el.__watched) { el.__watched = true;
+      new MutationObserver((ms) => { window.__draws[id] += ms.filter((m) => m.target === el && m.addedNodes.length).length; }).observe(el, { childList: true }); } } }).observe(document, { childList: true, subtree: true }); });
+  await ctx.clock.setFixedTime(new Date(TS));
+  const page = await ctx.newPage(); page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto(base); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 });
+  await page.evaluate(async (text) => { localStorage.setItem("financialTracker.ledger", text);
+    await new Promise((res) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => { const tx = r.result.transaction("kv", "readwrite"); tx.objectStore("kv").put(text, "ledger"); tx.oncomplete = () => res(); }; }); }, JSON.stringify(seeded()));
+  await page.reload(); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 });
+  await page.waitForTimeout(4000);
+  const d = await page.evaluate(() => window.__draws);
+  console.log(`  diag sheet-scroll (${ENGINE}) start-up writes: header ${d.top}, screen ${d.screen}, bottom bar ${d.nav}`);
+  ok(d.top === 1 && d.screen === 1 && d.nav === 1, "start-up draws the header, the screen and the bottom bar once each (" + d.top + ", " + d.screen + ", " + d.nav + ")");
+  await ctx.close(); }
+
 // THE OWNER'S BAR (Nov 13): typed at once, as a quick thumb does, 20 times in a row in one job; every run must keep the window where it was.
 const runs = [];
 for (let i = 0; i < 20; i++) runs.push(await steps(null, { wait: 0 }));
