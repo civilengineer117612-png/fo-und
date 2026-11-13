@@ -167,8 +167,12 @@ export function suggestPlan(input) {
   const split = (total, name, kind, reason, source, category_id) => put(name, kind, splitBy(total, days1, days2), reason, source, category_id);
   if (learn) {
     for (const c of spendCats) {
-      const total = median(monthly(c.id));
-      split(total, c.name, "expense", `Median of the last ${plural(months.length, "usable month", "usable months")}, split by days covered (${days1} and ${days2} days).`, "history", c.id);
+      // SOME MONTHS ONLY (owner, Nov 13): a category paid in fewer than half the usable months has a median of 0 (a course twice a year read as nothing).
+      // Then, and only then, its monthly AVERAGE is suggested (rounded down to the centavo); a category with no spending at all stays 0 (the owner types a
+      // figure for a known future cost). Every other category keeps its median, so one big month still does not lift a whole year.
+      const amounts = monthly(c.id), med = median(amounts), sum = amounts.reduce((n, a) => n + a, 0), avg = med === 0 && sum > 0;
+      const total = avg ? Math.floor(sum / amounts.length) : med;
+      split(total, c.name, "expense", `${avg ? "Average" : "Median"} of the last ${plural(months.length, "usable month", "usable months")}${avg ? " (paid only in some months)" : ""}, split by days covered (${days1} and ${days2} days).`, "history", c.id);
     }
     // A step toward your targets: the median copies your habits, so when spending is over the needs + wants targets, the want lines are lowered by a share of
     // the amount over (nudge_bps), shared by their size. Needs, rent, fixed payments and anything you typed are never lowered here.
