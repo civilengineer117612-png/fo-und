@@ -11,6 +11,7 @@ import { bucketMap, resolveTargets, starterFromTargets } from "./buckets.js";
 import { guessType } from "./types.js";
 import { SUGGEST_DEFAULTS } from "./suggest-settings.js";
 import { emergencyFund } from "./emergency.js";
+import { suggestInputs } from "./schedules.js";
 
 // Suggestions are shown rounded to the nearest 50 pesos (5,000 centavos), halves going up: 126 becomes 150, 124 becomes 100, 125 becomes 150.
 // Only what is SUGGESTED is rounded; a figure the owner typed is kept exactly as typed.
@@ -137,7 +138,10 @@ export function engineSettings(state, settings, overrides = {}, targets) {
 // A suggested budget for one month, built by the engine for ONE monthly payday on the base income. Lines are mapped by category id, never by name.
 // rent: the monthly rent the owner typed (centavos, 0 for none), needed only while there is too little history to learn it from: without it the answer is {ok: false, code: "NEEDS_RENT"}.
 // pins: {category_id: centavos} the owner typed; they come back as the owner's, and the engine's own figure is kept as the suggestion.
-export function suggestBudgets({ state, plan = null, pin = null, today, month, settings, pins = {}, scheduled = [], rent, overrides = {}, targets, goalPins = {}, goalShares = {}, hidden = [], fixed = {} }) {
+// SCHEDULES (L3, Nov 13): the scheduled payments and installments still to come are read from the ledger (`suggestInputs`) unless a caller passes its own
+// list. A payment sets its category's MINIMUM (at least the scheduled total) and never its group: the category stays in Needs or Wants by its own role or
+// bucket, and a schedule never makes it Fixed (owner, Nov 13).
+export function suggestBudgets({ state, plan = null, pin = null, today, month, settings, pins = {}, scheduled = suggestInputs(state, today), rent, overrides = {}, targets, goalPins = {}, goalShares = {}, hidden = [], fixed = {} }) {
   const income = baseIncome(state, { plan, pin });
   if (!income.amount) return { ok: false, code: "NO_INCOME", message: NO_INCOME_PROMPT };
   const names = new Map(state.categories.filter((c) => c.kind === "expense" && c.id !== UNLOGGED_CATEGORY_ID && !hidden.includes(c.id)).map((c) => [c.id, c.name]));   // a hidden category gets no suggestion and no line

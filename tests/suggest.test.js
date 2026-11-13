@@ -191,9 +191,13 @@ test("subscriptions, scheduled payments and installments are placed first, on th
   assert.equal(line(r, 0, "Test Streaming").amount, 25000, "day 20 is after the 15th, before the last: payday 1");
   assert.equal(line(r, 1, "Test Loan").amount, 150000, "day 5 is before the 15th, so the cutoff that began on the last day of last month: payday 2");
   assert.match(line(r, 1, "Test Loan").reason, /4 payments left/);
-  assert.equal(line(r, 0, "Test Insurance").amount, 60000);
+  // Before Nov 13 a payment with a category was its own Fixed line ("Test Insurance" 600.00) and Fun's median was reduced by it. Now (L3) it is Fun's
+  // MINIMUM: no line of its own, and Fun keeps its usual 3,000.00 because that is already more than the 600.00.
+  assert.equal(r.paydays.flatMap((p) => p.lines).some((l) => l.name === "Test Insurance"), false, "a payment with a category is not a line of its own");
   assert.equal(r.paydays.flatMap((p) => p.lines).some((l) => l.name === "Test Done"), false, "an installment with no payments left is dropped");
-  assert.equal(line(r, 0, "Fun").amount + line(r, 1, "Fun").amount, 300000 - 60000, "Fun's median is reduced by the scheduled payment paid under it");
+  assert.equal(line(r, 0, "Fun").amount + line(r, 1, "Fun").amount, 300000, "Fun's median, which already covers the 600.00 scheduled under it");
+  assert.ok(line(r, 0, "Fun").amount >= 60000, "the 600.00 due on day 16 is set aside on payday 1");
+  assert.match(line(r, 0, "Fun").reason, /At least its scheduled payments \(Test Insurance\)\./);
   assert.ok(balances(r));
 });
 

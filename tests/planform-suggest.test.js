@@ -77,7 +77,9 @@ test("a fixed bill is set aside on the payday before its due day: rent paid on t
   s.schedules = [{ id: "sc1", kind: "repeating", name: "Test Plan", category_id: "fun", account_id: "chk", start: "2026-01-10", amount: 50000, day: 10, created_at: TS }];
   const r = planFormSuggestion(s, form(), { today: TODAY });
   assert.equal(r.rows.rent.first, 0); assert.equal(r.rows.rent.second, 800000, "rent comes due on the 1st, so the last-day payday carries it");
+  // Before Nov 13: the payment was its own Fixed line on the last-day payday. Now (L3) it is Fun's minimum, still set aside on that payday.
   assert.ok(r.rows.fun.second >= 50000, "the scheduled payment sits on its category's line, on the last-day payday");
+  assert.ok(r.rows.fun.first + r.rows.fun.second >= 50000, "at least the scheduled payment in the month");
   assert.deepEqual(suggestInputs(s, TODAY).map((x) => [x.name, x.day, x.amount]), [["Test Plan", 10, 50000]]);
 });
 
