@@ -731,8 +731,9 @@ check((await page.locator("#menu .drawer").count()) === 0 && (await text(page, "
 check((await page.locator("#nav [aria-current]").count()) === 0, "no bottom button is marked while a menu screen is open");
 
 // ---- setting budgets ----
-var budgetRows = await page.locator("button.catrow").allInnerTexts();
-check(budgetRows.length === 8 && !budgetRows.some((r) => r.includes("Unlogged")) && budgetRows.every((r) => r.includes("No budget")), "every spending category can have a budget, except Unlogged; none set yet");
+// (Nov 12, A5) Month now also shows the Buffer row, "Not set", before any buffer is set: it is counted apart, the category rows are checked as before
+var budgetRows = await page.locator('button.catrow[data-action="open-budget"]').allInnerTexts();
+check(budgetRows.length === 8 && !budgetRows.some((r) => r.includes("Unlogged")) && budgetRows.every((r) => r.includes("No budget")) && (await page.locator("button.catrow").count()) === 9 && (await page.locator('button.catrow[data-action="open-buffer-monthly"]').innerText()).includes("Not set"), "every spending category can have a budget, except Unlogged; none set yet; and one Buffer row, not set");
 await shot(page, "18-budget");
 var setBudget = async (cat, amount, startLabel) => {
   await page.click(`button.catrow:has-text("${cat}")`);
@@ -3992,7 +3993,7 @@ console.log("\n-- Suggest a budget --");
   await page.click('button[data-action="open-suggest"]'); await page.waitForSelector("#sheet .catcard");
   const t = (await text(page, "#sheet")).replace(/\s+/g, " ");
   check(t.includes("Suggest a budget") && t.includes("Income") && t.includes("\u20B125,000.00 a month") && t.includes("Needs") && t.includes("Wants") && t.includes("Savings") && /target 50\.0%/.test(t), "the window shows the income and the needs, wants and savings against their targets");
-  { const heads = (await page.locator("#sheet h4.sugh").allInnerTexts()).map((h) => h.trim()), order = ["Fixed", "Needs", "Savings", "Wants", "Buffer", "Other"];
+  { const heads = (await page.locator("#sheet h4.sugh").allTextContents()).map((h) => h.trim()), order = ["Fixed", "Needs", "Savings", "Wants", "Buffer", "Other"];
     check(await page.locator("#sheet .catrow .catbar").count() >= 8 && heads.includes("Buffer") && heads.every((h, i) => order.includes(h) && (i === 0 || order.indexOf(heads[i - 1]) < order.indexOf(h))) && t.includes("Buffer For overspending; not savings"), "each category has its suggested figure and a thin bar, grouped under the same headings as Budget in the same order (Wants before the Buffer), and the buffer is named as on Budget"); }
   check(/^Paid in this order: Fixed, Needs, your savings minimum, the buffer, then Wants \(up to \u20B17,500\.00\)\. Left: /.test((await text(page, "#sug-left")).trim()), "the note under the list says the order of funding and the wants cap (30% of 25,000.00)");
   check(await page.locator('#sheet input[data-field^="y_"]').count() === 0, "the own-figure boxes are hidden until asked for");
