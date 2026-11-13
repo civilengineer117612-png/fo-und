@@ -2776,6 +2776,7 @@ function renderSheet() {
   if (!sh) { $("sheet").innerHTML = ""; lastSheetKey = null; lockPage(false); return; }
   const key = [sh.type, sh.id ?? "", sh.queueId ?? ""].join(":"), opening = lastSheetKey !== key, keepAt = lastSheetKey === key ? document.querySelector("#sheet .sheet")?.scrollTop ?? 0 : 0;
   lastSheetKey = key; lockPage(true);
+  if (opening) ui.sheetTyped = false;   // F3: nothing typed yet in a window that just opened
   let body = "";
   if (sh.type === "pay") {
     const p = S().presets.find((x) => x.id === sh.id);
@@ -3951,6 +3952,17 @@ function answerOverdraw(save, thenIncome) {
   if (thenIncome) { ui.sheet = { type: "income" }; ui.form = { amount: "", date: today(), account_id: accountsFor(null)[0]?.id ?? null, category_id: null }; renderSheet(); }
   done?.(save);
 }
+// F3 (owner, Nov 13): a tap outside a window where something was typed asks before throwing it away. "Keep editing" (the filled one) leaves the window as it is;
+// "Discard" closes it. A Cancel or close button inside the window still closes it at once: only the tap outside asks.
+function askDiscard() {
+  return new Promise((resolve) => {
+    warnAnswer = resolve;
+    $("warn").innerHTML = `<div class="wscrim" data-action="warn-cancel"></div><div class="sheet center enter" role="alertdialog" aria-labelledby="warn-h">
+      <h3 class="wl-title" id="warn-h">Discard what you typed?</h3>
+      <p><button class="primary" data-action="warn-cancel" style="width:100%">Keep editing</button></p>
+      <p><button data-action="warn-save" style="width:100%">Discard</button></p></div>`;
+  });
+}
 // An entry typed or tapped by hand (Add expense, a tile, a whole spoken sentence) that repeats one a statement import, a photo or a scan already brought in: asked first,
 // in the same small window. A hand entry that repeats another hand entry (a tile tapped every day) is never asked about.
 const DUP_SOURCES = ["import", "statement", "photo"];
@@ -5106,7 +5118,8 @@ async function onClick(el) {
       break;
     }
     case "plan-cancel": ui.planDraft = null; ui.sheet = null; renderSheet(); break;
-    case "close-sheet": { voiceListener?.stop(); if (pdfPasswordResolve) { const go = pdfPasswordResolve; pdfPasswordResolve = null; go(null); } if (ui.sheet?.type === "planform") ui.planDraft = ui.form;
+    case "close-sheet": { if (el.id === "scrim" && ui.sheet && ui.sheetTyped && !(await askDiscard())) break;   // F3: keep what was typed unless the owner says Discard
+      voiceListener?.stop(); if (pdfPasswordResolve) { const go = pdfPasswordResolve; pdfPasswordResolve = null; go(null); } if (ui.sheet?.type === "planform") ui.planDraft = ui.form;
       if (ui.sheet?.type === "intro") { const sh = ui.sheet; await commit(S(), M.markIntro(ledger.settings, sh.id, ui.introOff === true, !sh.manual), { quiet: true }); if (sh.back) { ui.sheet = sh.back; renderSheet(); break; } }   // a tap outside the popup counts as seen, too   // a tap outside the plan keeps the work for next time; Cancel throws it away
       if (ui.sheet?.type === "budget-suggest") await savePinsFromForm(); const wasNotice = ui.sheet?.type === "notice"; ui.sheet = null; renderSheet(); if (wasNotice) maybeWelcome(); break; }
     case "cat-card-later": ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, cat_card_seen: M.phTimestamp() }, { quiet: true }); break;
@@ -5799,6 +5812,8 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && ui.menu)
 document.addEventListener("focusout", () => { if (ui.sheet?.type === "payslip") setTimeout(refreshSave, 0); });   // the lines fold away once you leave them and everything matches
 document.addEventListener("toggle", (e) => { const k = e.target?.dataset?.keep; if (k) ui.pdet = { ...ui.pdet, [k]: e.target.open }; }, true);
 document.addEventListener("input", (e) => {
+  // F3 (owner, Nov 13): something typed in a window is never thrown away by a tap outside it; a tap outside then asks first (askDiscard).
+  if (e.target.closest?.("#sheet .sheet") && /^(INPUT|TEXTAREA)$/.test(e.target.tagName) && !e.target.classList.contains("picksearch") && !["checkbox", "radio", "password", "file"].includes(e.target.type)) ui.sheetTyped = true;   // a passphrase is never kept for its own sake
   if (e.target.classList?.contains("picksearch")) {   // the search box in a long dropdown list: hide what does not match, and a heading with nothing left under it
     const q = e.target.value.trim().toLowerCase(), list = e.target.closest(".picklist");
     let head = null, any = 0, headShown = false;

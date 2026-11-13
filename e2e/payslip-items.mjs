@@ -230,10 +230,10 @@ try {
     // payslip 2, same employer: the same label has its category already; another employer's does not
     await save("Sample Employer Inc", [["Meal Subsidy", "800"]]);
     assert.equal((await rows(page, "e").locator(".pl-cat").first().textContent()).replace(/\s+/g, " ").trim(), "Allowances ›", "the same employer and label: the choice is remembered");
-    await page.evaluate(() => document.querySelector('#sheet [data-action="close-sheet"]')?.click());
+    await page.evaluate(() => [...document.querySelectorAll('#sheet [data-action="close-sheet"]')].at(-1)?.click());   // the window's own close button (the first match is the dark outside, which asks first since F3)
     await save("Another Company", [["Meal Subsidy", "800"]]);
     assert.equal(await rows(page, "e").locator(".pl-cat.need").count(), 1, "another employer with the same label gets nothing");
-    await page.evaluate(() => document.querySelector('#sheet [data-action="close-sheet"]')?.click());
+    await page.evaluate(() => [...document.querySelectorAll('#sheet [data-action="close-sheet"]')].at(-1)?.click());   // the window's own close button (the first match is the dark outside, which asks first since F3)
     // a past line: change the category of the line that has none (Basic Salary was suggested and saved as Basic pay)
     await goIncome(page); await page.locator('[data-action="open-payslips"]').click();
     await page.locator("#sheet details.slipc summary").first().click();
@@ -251,8 +251,8 @@ try {
     await page.waitForFunction(() => document.querySelector("#sheet")?.innerText.includes("Changed"), null, { timeout: 5000 }).catch(() => {});
     assert.ok((await page.locator("#sheet").innerText()).includes("Changed"), "the record shows in the window");
     // Income groups the printed lines by category; tapping a category shows its lines
-    await page.evaluate(() => document.querySelector('#sheet [data-action="close-sheet"]')?.click());
-    await page.evaluate(() => document.querySelector('#sheet [data-action="close-sheet"]')?.click());
+    await page.evaluate(() => [...document.querySelectorAll('#sheet [data-action="close-sheet"]')].at(-1)?.click());   // the window's own close button (the first match is the dark outside, which asks first since F3)
+    await page.evaluate(() => [...document.querySelectorAll('#sheet [data-action="close-sheet"]')].at(-1)?.click());   // the window's own close button (the first match is the dark outside, which asks first since F3)
     await page.locator('[data-action="income-view"][data-view="earnings"]').click();
     const block = page.locator("#screen details.crow", { hasText: "Other earnings" }).first();
     await block.locator("summary").click();
