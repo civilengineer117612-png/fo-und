@@ -384,8 +384,18 @@ test("a category paid every month keeps its median (one big month does not lift 
   const none = sug(withUp(monthly()), { overrides: { up: "need" } }).rows.find((x) => x.category_id === "up");
   assert.equal(none.suggested, 0, "nothing spent: the owner types a figure for a known future cost");
 });
-test("Suggest a budget shows ONE order (Fixed and Needs, Savings, Wants, Buffer, Other) and rows in the owner's Setup order", () => {
+test("Suggest a budget shows ONE order (Fixed, Needs, Savings, Wants, Buffer, Other) and rows in the owner's Setup order", () => {
   assert.match(app, /const SUG_TOP = \["need", "savings", "want"\];/);
   assert.match(app, /\.\.\.\[\.\.\.bk\.rows\]\.filter\(\(b\) => b\.bucket !== "other"\)\.sort\(\(p, q\) => SUG_TOP\.indexOf\(p\.bucket\) - SUG_TOP\.indexOf\(q\.bucket\)\)/, "the top card in the groups' order");
   assert.ok(app.includes("const setupAt = new Map(orderedCats(S().categories).map((c, i) => [c.id, i]));") && app.includes("r.rows.sort((p, q) => (setupAt.get(p.category_id) ?? 1e9) - (setupAt.get(q.category_id) ?? 1e9));"), "rows in the Setup order");
+});
+
+test("Fixed and Needs are two rows in the top card: Fixed is returned on its own, still counted inside Needs (the 50)", async () => {
+  const { bucketRows } = await import("../src/model/index.js");
+  const cats = [{ id: "rent", name: "Rent", kind: "expense" }, { id: "food", name: "Food", kind: "expense" }, { id: "fun", name: "Fun", kind: "expense" }];
+  const bk = bucketRows({ categories: cats, overrides: { fun: "want" }, budgets: { rent: 800000, food: 500000, fun: 200000 }, income: 2500000, fixedIds: new Set(["rent"]) });
+  assert.deepEqual(bk.fixed, { amount: 800000, tenths: 320 }, "Fixed 8,000.00 is 32.0% of 25,000.00");
+  assert.equal(bk.rows.find((r) => r.bucket === "need").amount, 1300000, "the need total still holds Fixed (the 50% target is for both)");
+  assert.ok(!app.includes('"Fixed and Needs"'), "no joined row on screen");
+  assert.ok(app.includes('...(bk.fixed.amount > 0 ? [{ name: "Fixed",') && app.includes('`target ${M.showTenths(b.target)}${b.withFixed ? " with Fixed" : ""}`'), "a Fixed row first; Needs shows what is not Fixed, its target says with Fixed");
 });

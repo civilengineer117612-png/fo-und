@@ -4000,8 +4000,9 @@ console.log("\n-- Suggest a budget --");
     check(await page.locator("#sheet .catrow .catbar").count() >= 8 && heads.includes("Buffer") && heads.every((h, i) => order.includes(h) && (i === 0 || order.indexOf(heads[i - 1]) < order.indexOf(h))) && t.includes("Buffer For overspending; not savings"), "each category has its suggested figure and a thin bar, grouped under the same headings as Budget in the same order (Wants before the Buffer), and the buffer is named as on Budget"); }
   // ONE ORDER (owner, Nov 13): the top card runs like the groups below, and inside a group the rows follow Setup's order (A to Z until arranged)
   { const tops = await page.evaluate(() => [...document.querySelector("#sheet .catcard").querySelectorAll(".catrow .ctn")].map((n) => n.firstChild?.textContent.trim() ?? ""));
-    const topOrder = ["Fixed and Needs", "Savings", "Wants", "Buffer", "Other"], seenTop = tops.filter((x) => topOrder.includes(x));
-    check(seenTop.length >= 4 && seenTop.every((x, i) => i === 0 || topOrder.indexOf(seenTop[i - 1]) < topOrder.indexOf(x)), "the top card runs Fixed and Needs, Savings, Wants, Buffer, Other: " + seenTop.join(", "));
+    // Before Nov 13 (second pass) the card had one joined row "Fixed and Needs"; the owner wants Fixed and Needs as TWO rows, Fixed first.
+    const topOrder = ["Fixed", "Needs", "Savings", "Wants", "Buffer", "Other"], seenTop = tops.filter((x) => topOrder.includes(x));
+    check(!tops.includes("Fixed and Needs") && seenTop[0] === "Fixed" && seenTop[1] === "Needs" && seenTop.length >= 5 && seenTop.every((x, i) => i === 0 || topOrder.indexOf(seenTop[i - 1]) < topOrder.indexOf(x)), "the top card runs Fixed, Needs (two rows), Savings, Wants, Buffer, Other: " + seenTop.join(", "));
     const groupRows = await page.evaluate(() => [...document.querySelectorAll("#sheet h4.sugh")].map((h) => [h.textContent.trim(), [...(h.nextElementSibling?.querySelectorAll(".catrow .ctn") ?? [])].map((n) => n.firstChild?.textContent.trim() ?? "")]));
     const catRows = groupRows.filter(([g]) => !["Savings", "Buffer"].includes(g));
     check(catRows.length >= 3 && catRows.every(([, names]) => names.every((n, i) => i === 0 || names[i - 1].localeCompare(n) <= 0)), "inside each group the rows follow Setup's order (A to Z here): " + JSON.stringify(catRows)); }

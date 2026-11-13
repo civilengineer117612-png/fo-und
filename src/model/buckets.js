@@ -69,12 +69,13 @@ export function starterFromTargets(targets, buffer) {
 // fixedIds (fixed.js): a Fixed category is counted INSIDE the Needs part (owner, Nov 8), so rent and a Fixed subscription both come out of the 50.
 export function bucketRows({ categories, overrides, targets, budgets, goals = 0, buffer = 0, income, skipId, fixedIds = null }) {
   const t = resolveTargets(targets), sum = { need: 0, want: 0, savings: 0, other: 0 };
-  let invested = 0;
+  let invested = 0, fixed = 0;
   const unsure = [];   // unclear names with a budget, not yet answered: counted in Other and flagged
   for (const c of categories) {
     if (c.kind !== "expense") continue;
     const amount = budgets[c.id] ?? 0, b = fixedIds?.has(c.id) ? "need" : bucketOf(c, overrides);
     sum[b] += amount;
+    if (fixedIds?.has(c.id)) fixed += amount;   // Fixed counts INSIDE Needs (the 50); it is also returned on its own so a screen can show it as its own row
     if (b === "savings") invested += amount;
     if (c.id !== skipId && amount > 0 && !CHOICES.includes(overrides?.[c.id]) && readBucket(c.name).bucket === null) unsure.push({ id: c.id, name: c.name, amount });
   }
@@ -82,6 +83,6 @@ export function bucketRows({ categories, overrides, targets, budgets, goals = 0,
   const pct = (a) => (income > 0 ? Math.floor((a * 2000 + income) / (2 * income)) : null);
   const rows = BUCKETS.map((b) => ({ bucket: b, label: BUCKET_LABELS[b], amount: sum[b], tenths: pct(sum[b]), target: t[b] / 10 }));
   if (sum.other > 0) rows.push({ bucket: "other", label: BUCKET_LABELS.other, amount: sum.other, tenths: pct(sum.other), target: null });
-  return { rows, invested: { label: INVESTED_LABEL, amount: invested }, buffer: { label: "Overrun buffer", amount: buffer, tenths: pct(buffer) }, targets: t,
+  return { rows, fixed: { amount: fixed, tenths: pct(fixed) }, invested: { label: INVESTED_LABEL, amount: invested }, buffer: { label: "Overrun buffer", amount: buffer, tenths: pct(buffer) }, targets: t,
     unconfirmed: { amount: unsure.reduce((n, x) => n + x.amount, 0), count: unsure.length, ids: unsure.map((x) => x.id) } };
 }
