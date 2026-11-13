@@ -5019,6 +5019,28 @@ console.log("\n-- Uncategorized and Not yet explained --");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
+// ===== F3: a tap outside a window never throws away what was typed (owner, Nov 13) =====
+try { blockName = "F3: a tap outside a window never throws away what was typed (owner, Nov 13)";
+console.log("\n-- Tap outside keeps typed text --");
+{ ({ ctx, page, errors } = await open({ blockSw: true, keepWarn: true }));   // keepWarn: the helper must not answer the question for the test
+  await addAccount(page, "Test Debit", "asset", "1000"); await page.click('#nav button:has-text("Log")');
+  var outside = async () => page.click("#scrim", { position: { x: 20, y: 20 } });   // above the window, as a finger would
+  await page.click('button:has-text("Add expense")'); await page.waitForSelector("#f-amount");
+  await outside();
+  check(await page.locator("#sheet .sheet").count() === 0 && await page.locator("#warn .sheet").count() === 0, "with nothing typed, a tap outside closes the window at once and asks nothing");
+  await page.click('button:has-text("Add expense")'); await page.fill("#f-amount", "456.78");
+  await outside();
+  check(await seen(page, "#warn", "Discard what you typed?"), "with something typed, a tap outside asks first");
+  check(await page.locator("#sheet .sheet").count() === 1, "and the window stays open while it asks");
+  await page.click('#warn button:has-text("Keep editing")');
+  check(await page.locator("#warn .sheet").count() === 0 && await page.inputValue("#f-amount") === "456.78", "Keep editing: the window is still there with 456.78 typed");
+  await outside(); await page.click('#warn button:has-text("Discard")');
+  check(await page.locator("#sheet .sheet").count() === 0, "Discard closes the window");
+  await page.click('button:has-text("Add expense")'); await page.waitForSelector("#f-amount");
+  check(await page.inputValue("#f-amount") === "", "and it opens empty next time");
+  check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
+} catch (e) { await blockFailed(e); }
+
 try { blockName = "storage protection"; await protectionChecks({ browser, base: BASE, open, addAccount, menuGo, check }); } catch (e) { await blockFailed(e); }
 try { blockName = "app lock"; if (TOOLS.virtualAuthenticator) await appLockChecks({ browser, base: BASE, open, menuGo, check, seen, text, stored, OWNER_STYLE, ANDROID });
 else skipped("App lock (the virtual Face ID checks)", "Chrome DevTools virtual authenticator (WebAuthn)"); } catch (e) { await blockFailed(e); }
