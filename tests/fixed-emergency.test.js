@@ -158,3 +158,9 @@ test("the Budget offers Add to savings from Left: a tap, never automatic", () =>
   assert.match(app, /Add .* to savings/); assert.match(app, /case "add-left-to-savings"/);
   assert.doesNotMatch(app, /placeSurplus[^;]*\n[^\n]*commit\([^\n]*\n[^\n]*render/, "the offer is only ever run by its own action");
 });
+
+test("Help says the emergency target leaves Wants out, and how to count a payment that cannot be stopped (owner's words, Nov 13)", async () => {
+  const { TOPICS: HELP_TOPICS } = await import("../src/model/help.js");
+  const goals = HELP_TOPICS.find((t) => t.tab === "goals"), at = goals.lines.findIndex((l) => l.startsWith("The emergency fund target is"));
+  assert.equal(goals.lines[at + 1], "Wants are not counted. If a payment cannot be stopped, set its category to Fixed.", "right under the line that gives the formula");
+});
