@@ -5,7 +5,7 @@
 // Nothing is stored here: planCheckIn returns what WOULD be saved, already checked
 // by the same save-time rules as any other transaction.
 import { validateShape } from "./schema.js";
-import { naturalBalance, cardOutstanding, countedEntries } from "./balances.js";
+import { naturalBalance, cardOutstanding, countedEntries, isOwed } from "./balances.js";
 import { checkTransactionSave } from "./index.js";
 import { phTimestamp } from "./util.js";
 import { planTransfer } from "./transfers.js";
@@ -47,6 +47,7 @@ export function pendingPurchases(state, account) {
 export function planCheckIn(state, input, now = new Date()) {
   const account = state.accounts.find((a) => a.id === input.account_id);
   if (!account) return fail("UNKNOWN_ACCOUNT", "no account " + input.account_id);
+  if (isOwed(account)) return fail("NOT_COUNTED", "what people owe you is not counted: it is settled when they pay you back");   // A4: there is no balance to look up at a bank
   if (!state.categories.some((c) => c.id === input.unlogged_category_id)) {
     return fail("UNKNOWN_CATEGORY", "no category " + input.unlogged_category_id);
   }

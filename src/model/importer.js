@@ -189,11 +189,14 @@ function ledgerIndex(state) {
   let hit = indexes.get(state.entries);
   if (hit && hit.tx === state.transactions && hit.nt === state.transactions.length && hit.ne === state.entries.length) return hit;   // a list that grew or shrank in place is never trusted
   const cancelled = new Set(state.transactions.filter((t) => t.reverses).map((t) => t.reverses));
-  const spent = new Map(), accounts = new Map();
+  const spent = new Map(), accounts = new Map(), owed = new Map();
   for (const e of state.entries) {
     if (e.category_id && !spent.has(e.transaction_id)) spent.set(e.transaction_id, e.amount);   // the first line with a category, as before
     if (e.account_id) { let set = accounts.get(e.transaction_id); if (!set) accounts.set(e.transaction_id, (set = new Set())); set.add(e.account_id); }
+    if (e.person_id && e.amount > 0) owed.set(e.transaction_id, (owed.get(e.transaction_id) ?? 0) + e.amount);
   }
+  // A purchase split with others (A4): the bank shows the WHOLE amount leaving the account, so that is what a statement or a list line is matched against.
+  for (const [id, more] of owed) if (spent.has(id)) spent.set(id, spent.get(id) + more);
   const byAmount = new Map();
   for (const t of state.transactions) {
     if (t.reverses || cancelled.has(t.id) || !spent.has(t.id)) continue;

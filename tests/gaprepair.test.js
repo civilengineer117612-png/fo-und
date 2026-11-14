@@ -161,7 +161,7 @@ test("SAFETY COPY: the screen's repair goes only through the copy, with the pre-
   assert.ok(!/await commit\(/.test(run) && !/await writeBoth\(JSON/.test(run), "the repair never saves the ledger by any other way");
   assert.match(run, /if \(!r\.ok\)[^]*?break;/, "a failed copy stops before the ledger is replaced");
   assert.match(app, /c\.kind === "repair"/, "Setup names the copy from before the repair");
-  assert.equal(LEDGER_VERSION, 11, "the repair adds entries only: it raises no data version of its own (11 is the payslip lines' step)");
+  assert.equal(LEDGER_VERSION, 12, "the repair adds entries only: it raises no data version of its own (12 is the Owed to me step)");
 });
 
 test("P0-7: the move is verified by count ONLY when the owner's confirming tap made it; made without a tap it stays a draft", () => {

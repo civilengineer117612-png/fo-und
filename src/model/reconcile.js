@@ -7,7 +7,7 @@
 import { accountLines, proveMonths } from "./proof.js";
 import { accountByLast4, planTransfer, setAccountLast4 } from "./transfers.js";
 import { isPocket, planAccount } from "./banks.js";
-import { countedEntries } from "./balances.js";
+import { countedEntries, isOwed } from "./balances.js";
 import { categoryFor, loggedMatch, loggedMove } from "./importer.js";
 import { applyDrafts, planExpense, verifyDraft } from "./drafts.js";
 import { planPayReceived } from "./plan.js";
@@ -260,7 +260,7 @@ export function moveTarget(state, moveTo, bankId = null) {
 // `chosen` ({cash, card, own}): the account the owner picked for lines that have no obvious target ("Not imported: choose the account"); it is used only when it is a real,
 // open account of the right kind (Cash: a bank, wallet or cash account; card: a credit card) other than the statement's own. A row with no match and no target says
 // `needs: true`: the window lists it under that heading and it imports like any line once an account is picked. Nothing is ever silently dropped.
-const chosenFor = (state, kind, id, account_id) => { const a = id ? state.accounts.find((x) => x.id === id) : null; return a && !a.archived && a.id !== account_id && a.class === (kind === "card" ? "liability" : "asset") ? a.id : null; };
+const chosenFor = (state, kind, id, account_id) => { const a = id ? state.accounts.find((x) => x.id === id) : null; return a && !a.archived && !isOwed(a) && a.id !== account_id && a.class === (kind === "card" ? "liability" : "asset") ? a.id : null; };
 export function statementMoves(state, lines, { account_id, bankId = null, chosen = {} }) {
   const used = new Set();
   return lines.filter((l) => (l.moveTo && l.direction === "out") || l.own).map((l) => {

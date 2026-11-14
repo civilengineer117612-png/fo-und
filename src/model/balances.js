@@ -8,6 +8,12 @@
 // What counts toward a balance: the opening balance is what the account held on the day it was added ("How much is in it today"), so an entry dated
 // BEFORE that day is already inside it and is not counted again. Entries on that day or later count (on the day itself they count: showing a little too
 // little is the safer mistake). History, reports and budgets still see every entry; only balances skip the early ones.
+// "Owed to me" (A4, src/model/owed.js): the one account of role "owed" holds what people owe the owner, not money. `holdsMoney` is a bank, wallet, cash or
+// pocket account: only those are in "in your accounts", net worth, the pickers and the counts.
+export const OWED_ROLE = "owed";
+export const isOwed = (a) => a?.role === OWED_ROLE;
+export const holdsMoney = (a) => !!a && a.class === "asset" && !isOwed(a);
+
 const cache = new WeakMap();
 export function countedEntries(state) {
   const entries = state.entries ?? [], hit = cache.get(entries);

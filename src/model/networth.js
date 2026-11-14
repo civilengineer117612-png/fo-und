@@ -2,11 +2,12 @@
 // figure the Cards screen calls "free", so the last point always equals it. An account counts from the day it was added (the same rule as every balance);
 // drafts count, as they do on Cards. Nothing is stored. Pure.
 import { addMonths } from "./reports.js";
+import { isOwed } from "./balances.js";
 
 // state; options: today ("YYYY-MM-DD"), months: how many month-ends to go back (a number) or "all" (from the month of the oldest account).
 // Returns {points: [{date, assets, owed, net}], change}: oldest first, the last point is today; change = the last net minus the first net shown (null with fewer than two points).
 export function netWorthSeries(state, { today, months = 12 }) {
-  const accounts = state.accounts ?? [];
+  const accounts = (state.accounts ?? []).filter((a) => !isOwed(a));   // what people owe you is not money yet (owner, A4): it is in no net worth figure
   if (!accounts.length) return { points: [], change: null };
   const dateOf = new Map(state.transactions.map((t) => [t.id, t.date])), byAccount = new Map(accounts.map((a) => [a.id, []]));
   for (const e of state.entries) {

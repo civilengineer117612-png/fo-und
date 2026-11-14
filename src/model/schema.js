@@ -60,7 +60,10 @@ export const SCHEMAS = {
     account_id: optional(id), category_id: optional(id), envelope_id: optional(id),
     amount: centavos,            // signed: debit +, credit -; a transaction's entries sum to 0
     card_state: optional(oneOf("pending", "posted")),   // "Card entry state" row
+    person_id: optional(id),     // ADDED (data version 12): on a line of the "Owed to me" account, the person who owes it (src/model/owed.js)
   },
+  // ADDED (data version 12): someone who owes the owner part of a payment. Only a name, kept on this phone; a rename keeps the id.
+  Person: { id, name },
   Category: { id, name, kind: oneOf("income", "expense"),
     role: optional(oneOf("food", "essentials", "subscription", "rent", "transport", "health", "utilities", "debt", "shopping", "fun", "dining", "invest", "family", "bank_fees", "interest_fees", "other")) },   // ADDED: what the category is FOR (the scanner guesses by role, so renaming cannot break a guess)
   CategoryMap: { from: id, to: id, effective_from: date },
@@ -167,6 +170,7 @@ const CROSS_FIELD = {
     if ((e.account_id == null) === (e.category_id == null)) out.push("exactly one of account_id or category_id is required");
     if (e.envelope_id != null && e.account_id == null) out.push("envelope_id requires account_id");
     if (e.card_state != null && e.account_id == null) out.push("card_state requires account_id");
+    if (e.person_id != null && e.account_id == null) out.push("person_id requires account_id");
     return out;
   },
   Payslip: (p) => [
