@@ -193,6 +193,22 @@ test("a cancelled split is not a debt: cancelling the LATER of two leaves the ea
   assert.equal(M.owedBy(s, "p1"), 100000);
 });
 
+test("Verify's 'same amount as another entry' note: a pay-back and an unpaid share are never called the same payment twice; a second copy of the purchase still is", () => {
+  // Ana pays her 1,000.00 back and Ben's 1,000.00 is counted as spending on the same day: equal by design, not one payment shown twice.
+  let s = verify(dinner(), "t1");
+  s = M.planPayBack(s, { transaction_id: "t2", person_id: "p1", amount: 100000, to_account_id: "wal", date: "2026-11-10" }, NOW).state;
+  s = M.planNotPaid(s, { transaction_id: "t3", person_id: "p2", date: "2026-11-10" }, NOW).state;
+  assert.deepEqual(M.sameAmountElsewhere(s, "t3"), [], "the unpaid share is not a twin of the pay-back");
+  assert.deepEqual(M.sameAmountElsewhere(s, "t2"), [], "nor the other way round");
+  const other = M.planExpense(s, { transaction_id: "t4", date: "2026-11-10", category_id: "food", amount: 100000, account_id: "chk", payee: "Lunch" }, NOW);
+  s = M.applyDrafts(s, other.drafts);
+  assert.deepEqual(M.sameAmountElsewhere(s, "t4"), [], "an ordinary 1,000.00 the same day is not matched to a pay-back either");
+  assert.deepEqual([M.sameAmountElsewhere(s, "t3"), M.sameAmountElsewhere(s, "t2")], [[], []], "and the unpaid share and the pay-back never ask about that lunch: a button made them, not a second capture");
+  const twin = M.planExpense(s, { transaction_id: "t5", date: "2026-11-08", category_id: "food", amount: 300000, account_id: "chk", payee: "Dinner", source: "photo" }, NOW);
+  s = M.applyDrafts(s, twin.drafts);
+  assert.deepEqual(M.sameAmountElsewhere(s, "t5").map((x) => x.id), ["t1"], "a receipt photo of the same 3,000.00 dinner still asks: the split's size is what was paid");
+});
+
 test("a statement or list line of the WHOLE amount is the split already logged, not a second purchase", () => {
   const s = dinner();
   assert.equal(M.loggedMatch(s, { date: "2026-11-09", name: "Restaurant", amount: 300000, accountId: "chk" })?.id, "t1", "the bank shows 3,000.00 leaving");

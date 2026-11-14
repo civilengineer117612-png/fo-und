@@ -335,6 +335,12 @@
   .row small { color: var(--mid); display: block; }
   .row.pocket { padding-left: 28px; } .row.pocket, .row.pocket .amt { color: var(--muted); }   /* a savings pocket under its bank's main account on Cards */
   .row.pocketrow { align-items: center; }
+  /* Split with others and Owed to me (A4): a person's row (name, what they owe), your share, and what one person's debt is made of */
+  .row.sharetoggle { margin-top: 14px; }
+  .owerow { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 8px; margin-bottom: 8px; } .owerow input { margin: 0; } .owerow input + input { text-align: right; font-variant-numeric: tabular-nums; }
+  .sharerow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 0 2px; border-top: 1px solid var(--line); margin-top: 12px; font-size: 16px; } .sharerow span { color: var(--muted); } .sharerow b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .owefor { margin: 0 0 12px; color: var(--muted); font-size: 15px; }
+  .owelist { margin: 0 0 8px; } .owelist .rc-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; font-size: 15px; } .owelist .rc-row span { color: var(--muted); } .owelist .rc-row b { font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .row .amt { white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }   /* the small line under an amount ("you owe", "Remove") lines up with the amount's right edge */
   .card { border: 1px solid var(--ink); border-radius: 12px; padding: 16px; margin: 10px 0; }
   .card .big { font-size: 26px; font-weight: bold; margin: 6px 0 10px; font-variant-numeric: tabular-nums; }

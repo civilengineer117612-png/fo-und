@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-14-owed-to-me", date: "2026-11-14", text: "Paid for others too? Turn on Split with others: only your share is spending, the rest shows under Owed to me on Cards until they pay you back." },
   { id: "2026-11-13-fixed-row", date: "2026-11-13", text: "Suggest a budget shows Fixed and Needs as two rows at the top, Fixed first, and lists each group from the highest budget to the lowest." },
   { id: "2026-11-13-suggest-some-months", date: "2026-11-13", text: "Suggest a budget now counts a cost you pay only some months (its average), and lists everything in one order, rows as you arranged them in Setup." },
   { id: "2026-11-13-small-fixes", date: "2026-11-13", text: "Shares in lists now add up to 100%, Log's list of payments is called Scheduled with late ones first, and an entry dated before an account starts says so." },
