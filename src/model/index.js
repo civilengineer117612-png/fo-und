@@ -75,7 +75,7 @@ export { heldIds, unexplainedGaps, spentGaps, explainableGaps, findOpenGap, bigG
 export { replaceWithCopy, copyHolds, holdsData, RESTORE_COPIES_KEPT } from "./restorecopy.js";
 export { PART_BYTES, planParts, partFileName, sealPictures, openPictures } from "./picturebackup.js";
 export { BACKUP_PART_BYTES, newBackupId, backupFileName as oneBackupFileName, planBackupParts, sealBackupPart, openBackupPart, readBackupHeader, sniffBackupFile, checkBackupSet, openBackupSet, backupDoneText } from "./onebackup.js";
-export { correctable, groupByDay, planCorrection, applyCorrection, alreadyCancelled, isReversed, correctionTag, CORRECTION_DAYS } from "./corrections.js";
+export { correctable, groupByDay, planCorrection, applyCorrection, alreadyCancelled, isReversed, correctionTag, CORRECTION_DAYS, correctionEffect } from "./corrections.js";
 export { envelopeBalance, planGcashSpend, splitSweep, planMonthEndSweep, planSweep, sweepOrderAccounts, underBudgetedCategories, planEnvelopeSetup, planBufferFunding, bufferSummary } from "./buffer.js";
 export { parseSchedule, isDue, datesBetween, categoryForPayee, draftId, draftFromTemplate, draftsForRange, planReserveTransfer, updatePreset, addPreset, removePreset, reorderPresets, MAX_PRESETS } from "./templates.js";
 export { budgetStatus, budgetTrend, budgetGrade, GRADE_AT, monthElapsedPercent, suggestedBudgetStart, budgetFor, planBudgetChange } from "./budget.js";
