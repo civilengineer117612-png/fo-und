@@ -16,13 +16,14 @@ test("F2: every pressed rule darkens the surface, the one way", () => {
   const onePress = (r) => (r.sel === PRESS + ":active" && r.body === "transform: scale(.97); transition-duration: var(--t-touch);")
     || (r.sel === PRESS + ":active::before" && r.body === 'content: ""; position: absolute; inset: -8px;')
     || (r.sel.endsWith(PRESS + ":active") && r.body === "transform: none !important;")
-    || (/^\.catcard button\.catrow:active, \.setlist \.setrow:active, /.test(r.sel) && r.body === "border-radius: 10px;");
+    || (/^\.catcard button\.catrow:active, \.setlist \.setrow:active, /.test(r.sel) && r.body === "border-radius: 10px;")
+    || (r.sel === "#screen.swiping " + PRESS + ":active" && r.body === "transform: none; background: inherit; filter: none;");   // A2: a swipe is not a press
   for (const r of rules) assert.ok(onePress(r) || /^background: var\(--line\);$/.test(r.body) || /^(background: var\(--(ink|accent)\); )?filter: brightness\(\.92\);$/.test(r.body) || /^background: var\(--line\); box-shadow: /.test(r.body),
     "one pressed look: " + r.sel + " { " + r.body + " }");
 });
 test("ONE PRESS: the only thing that moves when pressed is the one shrink of 0.97, for every button and tile; nothing fades or slides", () => {
   const moving = rules.filter((r) => /transform|opacity|scale|translate/.test(r.body));
-  assert.deepEqual(moving.map((r) => r.body), ["transform: scale(.97); transition-duration: var(--t-touch);", "transform: none !important;"], "one shrink, and Reduce Motion taking it away");
+  assert.deepEqual(moving.map((r) => r.body).sort(), ["transform: none !important;", "transform: none; background: inherit; filter: none;", "transform: scale(.97); transition-duration: var(--t-touch);"], "one shrink; Reduce Motion takes it away, and so does a swipe (A2)");
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ :is\(button, \.tile, \.gcard, \.row\.tapcard, \.swcard\[data-action\], \[role="button"\]\):active \{ transform: none !important; \} \}/, "Reduce Motion: darken only");
   assert.match(css, /--t-touch: \.07s;/, "quick on touch: 70 ms");
   assert.ok(rules.some((r) => r.sel.endsWith(":active::before") && r.body === 'content: ""; position: absolute; inset: -8px;'), "while pressed, an invisible 8 px margin keeps the area that was touched (e2e/tap-safety.mjs taps at the very edge)");

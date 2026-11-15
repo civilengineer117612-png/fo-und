@@ -2669,8 +2669,13 @@ function savingsOffer(left) {
   return M.placeSurplus({ goals, progress, left, monthly: set.goal_monthly ?? {}, shares: set.goal_shares ?? {}, emergencyTarget: ef && ef.source === "formula" ? ef.target : null });
 }
 function viewBudget() {
-  const month = M.monthOf(today()), set = ledger.settings, v = M.budgetPlan(S(), set, month, today()), review = M.planMigrationReview(S(), set, month);
-  const has = v.paydays.length > 0, per = has ? ui.budgetView ?? "month" : "month", w = Math.min(ui.budgetPayday ?? 0, Math.max(0, v.paydays.length - 1));
+  // A2 (owner, Nov 15): the Month view steps through months with its own arrows (and a swipe); an earlier month is shown as it was and is not changed
+  // from here (budgets change from this month on). Per payday and Per week always show this month.
+  const thisMonth = M.monthOf(today()), set = ledger.settings, v0 = M.budgetPlan(S(), set, thisMonth, today());
+  const has = v0.paydays.length > 0, per = has ? ui.budgetView ?? "month" : "month";
+  const month = per === "month" && ui.budgetMonth && ui.budgetMonth < thisMonth ? ui.budgetMonth : thisMonth, past = month !== thisMonth;
+  const v = past ? M.budgetPlan(S(), set, month, today()) : v0, review = M.planMigrationReview(S(), set, thisMonth);
+  const w = Math.min(ui.budgetPayday ?? 0, Math.max(0, v.paydays.length - 1));
   const block = per === "payday" ? v.perPayday[w] : per === "week" ? v.perWeek : v.monthView, income = block.income, rows = block.rows, left = block.left;
   const seg = has ? `<div class="seg" role="group" aria-label="Show the budget">${[["month", "Month"], ["payday", "Per payday"], ["week", "Per week"]].map(([k, t]) => `<button data-action="bv-view" data-id="${k}" aria-pressed="${per === k}">${t}</button>`).join("")}</div>` : "";
   const daySeg = per === "payday" && v.paydays.length > 1 ? `<div class="seg" role="group" aria-label="Which payday">${v.paydays.map((p, i) => `<button data-action="bv-payday" data-id="${i}" aria-pressed="${w === i}">${esc(p.label)}</button>`).join("")}</div>` : "";
@@ -2693,9 +2698,9 @@ function viewBudget() {
   const act = (r) => (per === "payday" ? { action: "bv-line", id: r.key } : per === "month" ? (r.kind === "category" ? { action: "open-budget", id: r.id } : r.kind === "goal" ? { action: "open-goal-monthly", id: r.id } : r.kind === "buffer" ? { action: "open-buffer-monthly", id: "buffer" } : {}) : {});
   // THE BUFFER LINE (P0-6 PR 5): one figure, settings.buffer_monthly; with none set, Month offers it as an empty row to tap.
   const noBuffer = per === "month" && !rows.some((r) => r.kind === "buffer") ? `<h4 class="sugh">Buffer</h4>` + barCard([{ id: "buffer", action: "open-buffer-monthly", name: BUFFER_NAME, sub: BUFFER_SUB, fig: "Not set", pct: null }]) : "";
-  const card = (g) => { const list = rows.filter((r) => r.group === g); return !list.length ? (g === "Buffer" ? noBuffer : "") : `<h4 class="sugh">${g}</h4>` + barCard(list.map((r) => ({ name: `${r.kind === "buffer" ? BUFFER_NAME : esc(r.name)}${r.kind === "category" ? hiddenTag(r.id) : ""}`, sub: shareNote(r), fig: peso(r.amount), pct: Math.round((r.amount * 100) / max), label: r.name, ...act(r) }))); };
+  const card = (g) => { const list = rows.filter((r) => r.group === g); return !list.length ? (g === "Buffer" ? noBuffer : "") : `<h4 class="sugh">${g}</h4>` + barCard(list.map((r) => ({ name: `${r.kind === "buffer" ? BUFFER_NAME : esc(r.name)}${r.kind === "category" ? hiddenTag(r.id) : ""}`, sub: shareNote(r), fig: peso(r.amount), pct: Math.round((r.amount * 100) / max), label: r.name, ...(past ? {} : act(r)) }))); };
   const noBudget = per === "month" ? expenseCategories().filter((c) => !M.isHiddenCategory(set, c.id) && !(M.budgetFor(S().rules, c.id, month) > 0)) : [];
-  const noBudgetCard = noBudget.length ? `<h4 class="sugh">No budget yet</h4>` + barCard(noBudget.map((c) => ({ id: c.id, action: "open-budget", name: esc(c.name), sub: changeNote(c.id, null), fig: "No budget", pct: null }))) : "";
+  const noBudgetCard = noBudget.length ? `<h4 class="sugh">No budget yet</h4>` + barCard(noBudget.map((c) => ({ ...(past ? {} : { id: c.id, action: "open-budget" }), name: esc(c.name), sub: changeNote(c.id, null), fig: "No budget", pct: null }))) : "";
   const moveBtn = per === "payday" && !block.extra && bvNextReg(v, w) && left < 0 ? `<p><button data-action="bv-move-pick" style="width:100%">Move ${pesoW(-left)} to the next payday?</button></p>` : "";
   const moveCard = !review.done && review.plan && !review.nothing ? `<div class="card" style="margin:10px 0;padding:14px 16px"><div class="ct"><span class="ctn">Your Pay plan moves into Budget<small>Look it over, then move it. Your plan stays in your history.</small></span></div><p style="margin:10px 0 0"><button data-action="open-plan-move" style="width:100%">Look it over</button></p></div>` : "";
   const hiddenList = v.hidden.length ? `<p class="center"><button class="act" data-action="bv-hidden">Hidden (${v.hidden.length})</button></p>${ui.budgetHidden ? barCard(v.hidden.map((h) => ({ name: esc(h.name), sub: "hidden: not in any figure above", fig: peso(h.amount), pct: null }))) : ""}` : "";
@@ -2705,7 +2710,9 @@ function viewBudget() {
     <div class="pp-whole" role="img" aria-label="${esc(pesoW(block.placed))} of ${esc(pesoW(income))} placed" style="margin:12px 0 8px"><span style="width:${income > 0 ? Math.max(0, Math.min(100, Math.round((block.placed * 100) / income))) : 0}%"></span></div>
     <div class="ct" style="display:flex;justify-content:space-between;gap:10px"><span class="note small" style="margin:0">${esc(src)}</span><span class="amt" style="white-space:nowrap">${esc(leftLine)}</span></div>${v.income.other ? `<p class="note small">Your payslips say ${peso(v.income.other.amount)}; your own figure is used.</p>` : ""}${payLine ? `<p class="note small" id="pay-line">${payLine}</p>` : ""}${prog ? `<p class="note small">${esc(longDate(prog.start))} to ${esc(longDate(prog.end))}. Only verified spending counts.</p>` : ""}</div>` : `<p class="note">${esc(M.NO_INCOME_PROMPT)}</p>`;
   const body = BUDGET_GROUPS.map(card).join("");
-  return `<h1>Budget</h1>${moveCard}${seg}${daySeg}${top}${moveBtn}${hasOffer || per !== "week" ? `<div class="actrow2">${hasOffer ? `<button class="act" data-action="add-left-to-savings">Add ${pesoW(offer.total)} to savings</button>` : ""}${per === "week" ? "" : `<button class="act" data-action="open-income">Record pay received</button>`}</div>` : ""}${offerNote}${body}${noBudgetCard}${weekNote}
+  const monthStep = per === "month" ? `<div class="stepper"><button data-action="budget-month" data-step="-1" aria-label="Earlier">\u2039</button><b>${esc(M.monthLabel(month))}</b><button data-action="budget-month" data-step="1" aria-label="Later"${past ? "" : " disabled"}>\u203A</button></div>` : "";
+  if (past) return `<h1>Budget</h1>${seg}${monthStep}${top}${body}${noBudgetCard}<p class="note small">An earlier month, as it was. Budgets change from this month on.</p>`;
+  return `<h1>Budget</h1>${moveCard}${seg}${monthStep}${daySeg}${top}${moveBtn}${hasOffer || per !== "week" ? `<div class="actrow2">${hasOffer ? `<button class="act" data-action="add-left-to-savings">Add ${pesoW(offer.total)} to savings</button>` : ""}${per === "week" ? "" : `<button class="act" data-action="open-income">Record pay received</button>`}</div>` : ""}${offerNote}${body}${noBudgetCard}${weekNote}
     <p><button class="primary" data-action="open-suggest" style="width:100%">Suggest a budget</button></p>${noPay}${hiddenList}`;
 }
 
@@ -4436,6 +4443,7 @@ async function onClick(el) {
       break;
     }
     case "bv-view": ui.budgetView = id; renderScreen(); break;
+    case "budget-month": { const cur = M.monthOf(today()), next = M.addMonths(ui.budgetMonth ?? cur, Number(el.dataset.step)); ui.budgetMonth = next >= cur ? null : next; renderScreen(); break; }
     case "bv-payday": ui.budgetPayday = Number(id); renderScreen(); break;
     case "bv-hidden": ui.budgetHidden = !ui.budgetHidden; renderScreen(); break;
     case "bv-line": { const v = bvNow(); ui.sheet = { type: "bv-line", key: id }; ui.form = Object.fromEntries(bvAmounts(v, id).map((a, i) => ["a" + i, a])); renderSheet(); break; }
@@ -5958,6 +5966,64 @@ async function addAccount() {
   showToast((ok ? "Added " : "Not safely stored: ") + plan.account.name);
 }
 
+// ---- A2: swipe between periods (owner, Nov 15; data version unchanged) ----
+// A swipe exists EXACTLY where period arrows or period tabs exist: Cash flow, Income and Cards (the month or year arrows), Budget's Month view (its month
+// arrows) and Per payday (the payday tabs), and Log (the day). Never on Per week (a guide worked out from the month) and never on a part that scrolls
+// sideways (the Cards row of accounts), the Trends line, or anything being arranged. Swiping to the LEFT goes later, to the right goes earlier; at the
+// end (today, this month, the last payday) nothing moves. The screen follows the finger, then the next period slides in (--t-move; still under
+// Reduce Motion). A swipe NEVER taps: once the finger has gone sideways, the click that the release would make is swallowed.
+const SWIPE_NOT = ".sheet, #menu, input, textarea, select, .swipe, svg.spendline, .lbstage, .stage, .tiles.arranging, .sortlist.arranging, [data-noswipe]";
+// The step a swipe makes, as a function, or null when there is nothing there (dir -1 = earlier, +1 = later).
+function swipeStep(dir) {
+  if (ui.sheet || ui.menu || ui.locked || !device.allowEntry) return null;
+  const scr = $("screen");
+  if (ui.tab === "log") {
+    if (!activeAccounts().length || ui.arrange) return null;
+    const t = today(), next = M.addDays(ui.dayPick ?? t, dir);
+    return next > t ? null : () => { ui.dayPick = next === t ? null : next; renderScreen(); };
+  }
+  const arrow = scr.querySelector(`[data-action="period-step"][data-step="${dir}"], [data-action="budget-month"][data-step="${dir}"]`);
+  if (arrow) return arrow.disabled ? null : () => arrow.click();
+  const tabs = [...scr.querySelectorAll('[data-action="bv-payday"]')], at = tabs.findIndex((b) => b.getAttribute("aria-pressed") === "true"), to = tabs[at + dir];
+  return at >= 0 && to ? () => to.click() : null;
+}
+let sw = null;
+const swipeReduced = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+const swipeMove = (dx) => { const scr = $("screen"); if (!swipeReduced()) { scr.style.transition = "none"; scr.style.transform = dx ? `translateX(${dx}px)` : ""; } };
+document.addEventListener("pointerdown", (e) => {
+  sw = null;
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  if (!e.target.closest("#screen") || e.target.closest(SWIPE_NOT)) return;
+  sw = { x: e.clientX, y: e.clientY, t: performance.now(), side: false, gone: false };
+});
+document.addEventListener("pointermove", (e) => {
+  if (!sw || sw.gone) return;
+  const dx = e.clientX - sw.x, dy = e.clientY - sw.y;
+  if (!sw.side) {
+    if (Math.hypot(dx, dy) < 10) return;
+    if (Math.abs(dx) < Math.abs(dy) * 1.5) { sw.gone = true; return; }   // up and down: the page scrolls, no swipe
+    sw.side = true; sw.can = { [-1]: swipeStep(-1) !== null, [1]: swipeStep(1) !== null };
+    $("screen").classList.add("swiping");   // once the finger goes sideways nothing under it looks pressed: it is a swipe, not a tap
+  }
+  const dir = dx < 0 ? 1 : -1, free = sw.can[dir];
+  swipeMove(free ? dx * 0.6 : dx * 0.15);   // at the end it barely moves: nothing is there
+});
+const swipeEnd = (e) => {
+  const s0 = sw; sw = null;
+  if (!s0 || !s0.side) return;
+  $("screen").classList.remove("swiping");
+  suppressClick = true;   // a swipe never taps: the click this release would make (on an entry, a row, a button) is swallowed
+  setTimeout(() => { suppressClick = false; }, 400);
+  const dx = (e.clientX ?? s0.x) - s0.x, dir = dx < 0 ? 1 : -1, fast = Math.abs(dx) / Math.max(1, performance.now() - s0.t) > 0.5;
+  const step = e.type === "pointerup" && (Math.abs(dx) > 70 || (fast && Math.abs(dx) > 40)) ? swipeStep(dir) : null;
+  const scr = $("screen");
+  if (!step) { if (!swipeReduced()) { scr.style.transition = "transform var(--t-move) var(--ease-out)"; scr.style.transform = ""; } return; }
+  scr.style.transition = ""; scr.style.transform = "";
+  const wasSuppressed = suppressClick; suppressClick = false; step(); suppressClick = wasSuppressed;   // the step itself is a real click on the arrow or tab
+  if (!swipeReduced()) { scr.classList.remove("swipe-next", "swipe-prev"); void scr.offsetWidth; scr.classList.add(dir > 0 ? "swipe-next" : "swipe-prev"); }
+};
+document.addEventListener("pointerup", swipeEnd);
+document.addEventListener("pointercancel", swipeEnd);
 // ---- the quick tiles: hold to arrange, drag to move ----
 // Holding a tile (about half a second) switches the tiles to arrange mode. There: drag a tile onto another place and the others slide aside;
 // tap a tile to change it; "+" adds one; Done finishes. A hold or a drag must not also count as a tap.
