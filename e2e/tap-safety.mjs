@@ -124,6 +124,22 @@ try {
     assert.equal(await page.locator('#sheet details.tot[data-keep="d"]').evaluate((d) => d.open), !was, "the fold opened or closed");
     await ctx.close(); console.log("ok: Payslip: the Total deductions fold, tapped right after typing a figure, opens"); }
 
+  // (7) ONE PRESS (owner, Nov 15): a pressed button shrinks to 0.97. A finger at its very edge must still land the tap, nothing else may move,
+  // and under Reduce Motion it only darkens. Pressed 1 px inside the right edge of Add expense, held like a finger, released there.
+  for (const reduced of [false, true]) {
+    const { ctx, page } = await open(seeded({ accounts: [acct({ id: "c", name: "Cash", opening_balance: 100000 })] }));
+    if (reduced) await page.emulateMedia({ reducedMotion: "reduce" });
+    const btn = page.locator('.logbtns button[data-action="open-other"]'), r = await btn.boundingBox(), move0 = await page.locator('.logbtns button[data-action="open-move"]').boundingBox();
+    await page.mouse.move(r.x + r.width - 1, r.y + r.height / 2); await page.mouse.down(); await page.waitForTimeout(150);
+    const pressed = await btn.evaluate((el) => getComputedStyle(el).transform), move1 = await page.locator('.logbtns button[data-action="open-move"]').boundingBox();
+    await page.mouse.up();
+    await page.locator("#sheet #f-amount").waitFor({ timeout: 5000 });
+    assert.equal(JSON.stringify(move1), JSON.stringify(move0), "the button beside it did not move");
+    if (reduced) assert.equal(pressed, "none", "Reduce Motion: it only darkens");
+    else assert.match(pressed, /^matrix\(0\.97, 0, 0, 0\.97,/, "pressed, it is shrunk to 0.97");
+    await ctx.close(); console.log("ok: ONE PRESS" + (reduced ? " (Reduce Motion)" : "") + ": a tap 1 px inside the edge of a pressed button still opens it" + (reduced ? "; nothing shrinks" : "; it shrinks to 0.97 and nothing else moves"));
+  }
+
   assert.deepEqual(errors, []);
   assert.equal(tapSafety.size, 0, "no tap changed under the finger anywhere in this script");
 } finally { await browser.close(); }

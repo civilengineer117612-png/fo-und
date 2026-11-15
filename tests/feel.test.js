@@ -26,7 +26,10 @@ test("every transition and every one-shot animation uses a token, so no motion i
     if (t && !(seconds(t[1]) >= 0.15 && seconds(t[1]) <= 0.25)) bad.push("animation " + name + " " + t[1]);
   }
   assert.deepEqual(bad, []);
-  assert.match(css, /button \{ transition: transform var\(--t-press\) ease, background-color var\(--t-press\) ease;/, "a button's pressed look shows within 100 ms");
+  // ONE PRESS (owner, Nov 15): was "transform var(--t-press) ease, background-color var(--t-press) ease" on buttons; now the press shows in 70 ms
+  // (--t-touch, on the :active rule) and eases back in 200 ms (--t-move) when released, with no overshoot.
+  assert.match(css, /button \{ transition: transform var\(--t-move\) var\(--ease-out\), background-color var\(--t-move\) var\(--ease-out\), filter var\(--t-move\) var\(--ease-out\);/, "a button eases back on release");
+  assert.match(css, /:active \{ transform: scale\(\.97\); transition-duration: var\(--t-touch\); \}/, "and its pressed look shows within 100 ms");
 });
 
 test("no rubber band at the page's ends and no double-tap zoom anywhere", () => {
