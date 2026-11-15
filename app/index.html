@@ -795,6 +795,12 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .frpair2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .fracts { padding-top: 16px; } .fracts p { margin: 8px 0 0; }
   button.chip.frchip { min-width: 56px; min-height: 44px; flex: none; }
+  /* SWIPE BETWEEN PERIODS (owner, Nov 15, overhaul A2): the screen pans up and down itself and leaves sideways moves to the app; the next period slides in. */
+  #screen { touch-action: pan-y pinch-zoom; }
+  #screen.swiping :is(button, .tile, .gcard, .row.tapcard, .swcard[data-action], [role="button"]):active { transform: none; background: inherit; filter: none; }
+  #screen.swipe-next { animation: swipenext var(--t-move) var(--ease-out); } #screen.swipe-prev { animation: swipeprev var(--t-move) var(--ease-out); }
+  @keyframes swipenext { from { transform: translateX(32px); opacity: .4; } to { transform: none; opacity: 1; } }
+  @keyframes swipeprev { from { transform: translateX(-32px); opacity: .4; } to { transform: none; opacity: 1; } }
   /* ONE PRESS (owner, Nov 15, felt on his iPhone on a test page): every button and tile shrinks a little (0.97) and darkens, quickly on touch
      (--t-touch, 70 ms) and eased back on release (--t-move, no overshoot). Nothing else moves: a transform takes no room. While pressed, an
      invisible 8 px margin keeps the whole area that was touched, so a finger at the very edge still lands its tap. Reduce Motion: darken only.
@@ -807,7 +813,7 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   /* REDUCE MOTION (owner, Nov 12): nothing slides, fades or eases when the phone asks for less motion; every state is shown at once.
      Loops (how-to clips, intro drawings, the listening wave, arranging) have their own rules that show the finished frame. */
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0s !important; transition-delay: 0s !important; }
-    #screen.swap, .viewbody.fade, .sheet.enter, .sheet.center.enter, .sheet.full.enter, .frpage.fr-fwd, .frpage.fr-back, #scrim.enter, #menu .drawer.enter, #menu .scrim.enter, #menu.leaving .drawer, #menu.leaving .scrim, .chev.up.flip, #entries-list.drop { animation: none !important; } }
+    #screen.swap, .viewbody.fade, .sheet.enter, .sheet.center.enter, .sheet.full.enter, .frpage.fr-fwd, .frpage.fr-back, #screen.swipe-next, #screen.swipe-prev, #scrim.enter, #menu .drawer.enter, #menu .scrim.enter, #menu.leaving .drawer, #menu.leaving .scrim, .chev.up.flip, #entries-list.drop { animation: none !important; } }
   @media (prefers-reduced-motion: reduce) { :is(button, .tile, .gcard, .row.tapcard, .swcard[data-action], [role="button"]):active { transform: none !important; } }   /* ONE PRESS: darken only */
   .acklist .ackrow { padding: 10px 0; border-top: 1px solid var(--line); } .acklist .ackrow:first-child { border-top: 0; }   /* Check these amounts */
   .ack-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; } .ack-l { color: var(--muted); font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

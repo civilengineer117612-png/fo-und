@@ -57,6 +57,7 @@ jobs:
           node e2e/buffer-line.mjs
           node e2e/owed.mjs
           node e2e/firstrun.mjs
+          node e2e/swipe.mjs
           node e2e/sheet-scroll.mjs
           node e2e/run.mjs 2>&1 | tee e2e.log
       - name: Pass count

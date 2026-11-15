@@ -46,7 +46,9 @@ test("Budget lists its parts as the owner placed them: Wants before the Buffer (
 });
 
 test("Budget is ONE screen: the three views, no old switch, no Setup page for it (a saved setting is left alone, never deleted)", () => {
-  assert.match(app, /function viewBudget\(\) \{\n  const month = M\.monthOf\(today\(\)\), set = ledger\.settings, v = M\.budgetPlan\(S\(\), set, month, today\(\)\)/, "the Budget screen reads the one model");
+  // A2 (Nov 15): the Month view can show an earlier month, so the screen reads the one model for this month, and again for that month (was: this month only).
+  assert.match(app, /function viewBudget\(\) \{[\s\S]{0,400}const thisMonth = M\.monthOf\(today\(\)\), set = ledger\.settings, v0 = M\.budgetPlan\(S\(\), set, thisMonth, today\(\)\);/, "the Budget screen reads the one model");
+  assert.match(app, /const v = past \? M\.budgetPlan\(S\(\), set, month, today\(\)\) : v0/, "an earlier month is read by the same model");
   for (const w of ["Month", "Per payday", "Per week"]) assert.ok(app.includes(`"${w}"]`) || app.includes(`, "${w}"]`), w);
   assert.ok(!app.includes("function viewBudgetOld") && !app.includes("toggle-new-budget") && !app.includes("Try the new Budget") && !app.includes("Budget options"), "no old screen, no switch, no Setup page for it");
   assert.ok(!/try_new_budget/.test(app), "the app no longer reads the old setting; an old ledger that has it keeps it, unused");
