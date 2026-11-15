@@ -69,6 +69,7 @@ export { netWorthSeries } from "./networth.js";
 export { GOAL_SYMBOLS, goalSymbolSvg } from "./goalicons.js";
 export { REFUND_CATEGORY_ID, planRefund, pastRefunds, planRefundRepair, applyRefundRepair } from "./refunds.js";
 export { ledgerProblems, ledgerCheckLine } from "./ledgercheck.js";
+export { FIRSTRUN_STEPS, FIRSTRUN_WELCOME, firstRunStep, scheduleFromForm, paydaysWords, firstRunSummary, BACKUP_REMINDER_DAYS, backupReminderOn, backupReminderDue } from "./firstrun.js";
 export { repairableGaps, extraCancellations, repairStatus, repairReport, planGapRepair, applyGapRepair, matchHeldGaps, planGapMove } from "./gaprepair.js";
 export { proposeMoves, planProposedMove } from "./gapmatch.js";
 export { heldIds, unexplainedGaps, spentGaps, explainableGaps, findOpenGap, bigGap, GAP_DAYS } from "./held.js";

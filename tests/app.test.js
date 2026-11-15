@@ -139,7 +139,7 @@ test("tidy-up: the menu has no one-row groups, the notice has one answer, an emp
   const js = read("app/app.js"), { MENU_GROUPS } = await import("../src/model/names.js");
   const { menuRows } = await import("../src/model/names.js");
   assert.ok(MENU_GROUPS.length >= 2 && MENU_GROUPS.every(([, ids]) => menuRows(ids).length >= 2), "every menu group shows at least two rows");
-  assert.match(js, /const closer = sh\.type === "notice" \? "" :/, "the first-run notice has no Cancel");
+  assert.match(js, /const closer = sh\.type === "notice" \|\| sh\.type === "firstrun" \|\| sh\.type === "setup-restored" \? "" :/, "the first-run notice (from Help), the first-run setup and its restore window have no Cancel");
   assert.match(js, /device\.status !== "OK" && device\.status !== "EMPTY"/, "an empty phone is not a banner");
   assert.match(js, /device\.status === "EMPTY" \? `<div class="card" id="first-run"><p>\$\{esc\(device\.message\)\}<\/p><p><button data-action="open-restore"/, "it is said on Log, with Restore");
   assert.match(js, /"Spent that day" : "Spent today"/, "the big number says what it is");

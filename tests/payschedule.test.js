@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { scheduleFromForm } from "../src/model/firstrun.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import * as M from "../src/model/index.js";
@@ -71,6 +72,11 @@ test("the Paydays window is filled from the payslips: their own words, bi-weekly
 test("the screen offers the four kinds and saves each shape", () => {
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
   for (const t of ["Twice a month", "Every two weeks", "Once a month", "Every week"]) assert.ok(app.includes(`"${t}")`), t);
-  assert.match(app, /schedule = \{ kind: "biweekly", start: f\.start \}/); assert.match(app, /schedule = \{ kind: "weekly", weekday: f\.weekday \}/);
+  // A1 (Nov 15): the shapes are made by ONE rule, shared with step 3 of the first-run setup; checked here by what it returns, not by its source text.
+  assert.match(app, /case "bv-paydays-save": \{\s*const r = M\.scheduleFromForm\(ui\.form\);/);
+  assert.deepEqual(scheduleFromForm({ kind: "biweekly", start: "2026-11-06" }).schedule, { kind: "biweekly", start: "2026-11-06" });
+  assert.deepEqual(scheduleFromForm({ kind: "weekly", weekday: 5 }).schedule, { kind: "weekly", weekday: 5 });
+  assert.deepEqual(scheduleFromForm({ kind: "twice", d1: "15", d2: "last" }).schedule, { kind: "twice", days: [15, "last"] });
+  assert.deepEqual(scheduleFromForm({ kind: "once", d1: "last" }).schedule, { kind: "monthly", days: ["last"] });
   assert.match(app, /const moveBtn = per === "payday" && !block\.extra && bvNextReg\(v, w\) && left < 0/, "the move offer never goes from or to an extra payday, and never into the next month");
 });
