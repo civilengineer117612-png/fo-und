@@ -42,7 +42,17 @@ console.log("Engine: " + ENGINE);
 // Every request for a bank logo goes through this, so the network is faked: by default nothing answers.
 let iconServe = (r) => r.abort();
 const iconAsked = [];   // every address the app asked an icon service or bank site for
-const dismissNotice = async (page) => { try { await page.waitForSelector('#sheet button:has-text("I understand")', { timeout: 2500 }); await page.click('#sheet button:has-text("I understand")'); } catch { /* an old ledger shows no notice */ }
+// A1 (Nov 15): a brand-new phone shows the first-run setup instead of the notice and the welcome card. `finishSetup` walks it with one invented
+// account (step 2 needs one) and leaves the rest for later; the setup itself is tested in e2e/firstrun.mjs.
+const finishSetup = async (page, name = "Cash", amount = "100") => {
+  await page.click('#sheet button:has-text("Start fresh")'); await page.fill("#fr-aname", name); await page.fill("#fr-aopen", amount);
+  await page.click('#sheet button[data-action="fr-next"]'); await page.waitForSelector('#sheet .frn:has-text("Step 3 of 5")');
+  await page.click('#sheet button[data-action="fr-later"]'); await page.waitForSelector('#sheet .frn:has-text("Step 4 of 5")');
+  await page.click('#sheet button[data-action="fr-later"]'); await page.waitForSelector('#sheet .frn:has-text("Step 5 of 5")');
+  await page.click('#sheet button[data-action="fr-finish"]'); await page.click('#sheet button:has-text("Cancel")'); await page.waitForFunction(() => !document.querySelector("#sheet .sheet"));
+};
+const dismissNotice = async (page) => { if (await page.locator("#sheet .fr").count()) return;   // the setup is left on screen: the block decides
+  try { await page.waitForSelector('#sheet button:has-text("I understand")', { timeout: 2500 }); await page.click('#sheet button:has-text("I understand")'); } catch { /* an old ledger shows no notice */ }
   try { await page.waitForSelector('#sheet button:has-text("Skip for now")', { timeout: 700 }); await page.click('#sheet button:has-text("Skip for now")'); } catch { /* the welcome card only shows on a new install */ } };
 async function open({ storageMode = null, logOpen = true, setupFlat = true, ua = IPHONE, standalone = true, blockSw = !TOOLS.serviceWorkerNetwork, url = BASE, noSpeech = false, fakeSpeech = false, seed = undefined, routes = [], keepNotice = false, styled = true, whatsNew = false, keepCatCard = false, keepIntro = false, keepWarn = false } = {}) {
   if (seed === undefined) seed = styled ? OWNER_STYLE : null;
@@ -187,6 +197,7 @@ const blockFailed = async (e) => { failures++; console.log("  FAIL block \"" + b
 try { blockName = "1. first run, setup";
 console.log("First run and setup");
 var { ctx, page, errors } = await open({ styled: false });
+check(await page.locator('#sheet .fr .frn:has-text("Step 1 of 5")').count() === 1, "A1: a brand-new phone opens on step 1 of the first-run setup (behind it, Log explains the empty phone)");
 check((await text(page, "#screen")).includes("No data on this device") && await page.locator('#first-run button[data-action="open-restore"]').count() === 1 && !(await text(page, "#banner")).includes("No data on this device"), "first run explains the empty state on Log, with a Restore button, not as a banner");
 check((await text(page)).includes("Add the accounts you pay from first"), "log asks for accounts first");
 await shot(page, "01-first-run");
@@ -2218,17 +2229,14 @@ var V1 = { v: 1, rev: 3, saved_at: "2026-10-01T08:00:00.000+08:00", settings: {}
 try { blockName = "5o. friend fixes, round 1";
 console.log("Friend fixes 1");
 { // a brand-new install: the notice once, plain starter categories, no tiles, editable categories
+  // A1 (Nov 15): the notice and the welcome card were replaced on a new install by the first-run setup (e2e/firstrun.mjs). Before, this block
+  // checked the notice's words, its one answer and the welcome card after it; now it checks that the setup shows instead and is not shown again.
   ({ ctx, page, errors } = await open({ blockSw: true, styled: false, keepNotice: true }));
-  await page.waitForSelector('#sheet button:has-text("I understand")');
-  const n = await text(page, "#sheet");
-  check(n.includes("Before you start") && n.includes("Your data stays on this phone") && n.includes("cannot be recovered") && n.includes("Make a backup now") && n.includes("iPhone: add this app to the Home Screen first") && n.includes("Android: clearing the browser's site data erases the ledger"), "a brand-new install shows the first-run notice with all five points");
-  check(!(await text(page, "#sheet")).includes("Cancel"), "the notice has one answer, I understand");
-  await page.click('#sheet button:has-text("I understand")');
-  check(await page.locator('#sheet button:has-text("I understand")').count() === 0 && await seen(page, "#sheet", "Make it yours"), "I understand closes it, and the welcome card follows");
-  await page.click('#sheet button[data-action="welcome-skip"]');
-  await addAccount(page, "Cash", "asset", "100");
+  await page.waitForSelector("#sheet .fr");
+  check(await page.locator('#sheet button:has-text("I understand")').count() === 0 && (await text(page, "#sheet")).includes("Welcome to fo/und") && (await text(page, "#sheet")).includes("cannot be recovered"), "a new install shows the first-run setup, not the notice; its first step keeps the notice's key facts");
+  await finishSetup(page, "Cash", "100");
   await page.reload(); await page.waitForSelector("#nav button"); await page.waitForTimeout(1500);
-  check(await page.locator('#sheet button:has-text("I understand")').count() === 0, "after the first save it is not shown again");
+  check(await page.locator("#sheet .fr").count() === 0 && await page.locator('#sheet button:has-text("I understand")').count() === 0, "after the setup it is not shown again");
   await page.click('#sheet button[data-action="welcome-skip"]', { timeout: 2000 }).catch(() => {});
   await page.click('#nav button:has-text("Log")');
   check((await text(page, "#screen")).includes("Add a quick tile") && !/Breakfast|Lunch|Dinner/.test(await text(page, "#screen")), "a new install has no quick tiles: nobody's names or amounts");
@@ -2523,7 +2531,7 @@ console.log("Setup as pages");
   check(await page.locator(".setrow").count() === 7, "leaving Setup and coming back opens the list again");
   check(errors.length === 0, "no script errors with the Setup pages");
   await ctx.close();
-  ({ ctx, page, errors } = await open({ blockSw: true, setupFlat: false, styled: false }));
+  ({ ctx, page, errors } = await open({ blockSw: true, setupFlat: false }));   // A1: a brand-new phone now starts with the setup; a ledger with no account yet shows Log's Add accounts (was styled: false)
   await page.click('button:has-text("Add accounts")'); await page.waitForTimeout(300);
   check((await text(page, "#top")).includes("Accounts") && await page.locator("#a-bank").count() === 1, "on a new phone, Add accounts goes straight to the Accounts page with its form");
   await ctx.close(); }
@@ -3295,9 +3303,11 @@ try { blockName = "6w. the welcome card, editing categories, required marks";
 console.log("Welcome card, category editing, required marks");
 {
   const settingsOf = async () => JSON.parse((await stored(page)).local).settings;
-  ({ ctx, page, errors } = await open({ blockSw: true, styled: false, keepNotice: true }));
-  await page.click('#sheet button:has-text("I understand")');
-  check(await seen(page, "#sheet", "Make it yours"), "after the first-run notice a new install gets the welcome card");
+  // A1 (Nov 15): a NEW install gets the first-run setup instead; the card stays for a ledger already waiting for it (welcome_pending). Before, these
+  // two openings were brand-new phones that tapped I understand first; the checks on the card itself are unchanged.
+  const waiting = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, welcome_pending: true } };
+  ({ ctx, page, errors } = await open({ blockSw: true, keepNotice: true, seed: waiting }));
+  check(await seen(page, "#sheet", "Make it yours"), "a ledger still waiting for the welcome card gets it");
   const box = await page.locator("#sheet .sheet").boundingBox(), vh = page.viewportSize().height;
   check(box.y > 60 && box.y + box.height < vh - 60, "the card sits in the middle of the screen, not at the bottom");
   check(await page.locator('#sheet button[data-action="welcome-mine"]').count() === 1 && await page.locator('#sheet button[data-action="welcome-skip"]').count() === 1, "it offers Make it mine and Skip for now");
@@ -3313,8 +3323,8 @@ console.log("Welcome card, category editing, required marks");
   await page.reload(); await page.waitForSelector("#nav button"); await page.waitForTimeout(600);
   check(await page.locator("#sheet .sheet").count() === 0, "with Don't show this again ticked it never returns");
   await ctx.close();
-  ({ ctx, page, errors } = await open({ blockSw: true, styled: false, keepNotice: true }));
-  await page.click('#sheet button:has-text("I understand")'); await page.click('#sheet button[data-action="welcome-mine"]');
+  ({ ctx, page, errors } = await open({ blockSw: true, keepNotice: true, seed: waiting }));
+  await page.click('#sheet button[data-action="welcome-mine"]');
   check(await page.locator('button[data-action="cat-done"]').count() === 1 && (await text(page, "#screen")).toLowerCase().includes("add a category"), "Make it mine opens the categories already in edit mode");
   await page.waitForFunction(() => JSON.parse(localStorage.getItem("financialTracker.ledger") ?? "{}").settings?.welcome_pending === false, null, { timeout: 4000 });
   await page.reload(); await page.waitForSelector("#nav button"); await page.waitForTimeout(600);

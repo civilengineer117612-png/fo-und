@@ -2931,7 +2931,7 @@ function frBody() {
 }
 // Go to a step: kept in the settings at once, so closing the app half way comes back to it. Step 1 has nothing to keep (a new phone saves nothing until Start fresh).
 async function frGo(step, dir) {
-  ui.fr = { ...ui.fr, step, anim: dir, adding: false, err: null, restoring: false };
+  ui.fr = { ...ui.fr, step, anim: dir, adding: false, err: null };
   if (step === 3 && ui.form.kind === undefined) {   // the payday boxes start from what is set, else twice a month on the 15th and the last day
     const sc = M.scheduleOf(ledger.settings), use = sc ?? { kind: "twice", days: [15, "last"] };
     Object.assign(ui.form, { kind: use.kind === "monthly" ? "once" : use.kind, d1: String(use.days?.[0] ?? 15), d2: String(use.days?.[1] ?? "last"), start: use.start ?? "", weekday: use.weekday ?? 5, pay: ledger.settings.income_base_pin ? (ledger.settings.income_base_pin / 100).toFixed(2) : "" });
@@ -5189,6 +5189,7 @@ async function onClick(el) {
     case "fr-next": {
       const n = ui.fr.step, f = ui.form;
       if (n === 2 && ((f.aname ?? "").trim() || (f.aopen ?? "").trim()) && !(await frAddAccount())) break;   // what was typed but not yet added is added first
+      if (n === 2 && !activeAccounts().length) { ui.fr.err = "Add at least one account to go on, even Cash with 0."; renderSheet(); break; }   // owner, Nov 15: step 2 needs one account
       if (n === 3) {
         const r = M.scheduleFromForm(f), pay = (f.pay ?? "").trim() === "" ? null : M.parsePesos(f.pay);
         if (!r.ok) { ui.fr.err = r.message; renderSheet(); break; }
@@ -5202,7 +5203,7 @@ async function onClick(el) {
     case "fr-add-open": ui.fr.adding = true; ui.fr.err = null; if (!ui.form.akind) ui.form.akind = "asset"; renderSheet(); $("fr-aname")?.focus(); break;
     case "fr-akind": ui.form.akind = id; renderSheet(); break;
     case "fr-add-acct": await frAddAccount(); break;
-    case "fr-restore": ui.fr.restoring = true; ui.sheet = { type: "restore", all: true }; ui.form = {}; renderSheet(); break;   // today's Restore; closing it comes back to step 1 with nothing saved
+    case "fr-restore": ui.sheet = { type: "restore", all: true }; ui.form = {}; renderSheet(); break;   // today's Restore; closing it comes back to step 1 with nothing saved
     case "fr-cats": await frFinish(() => { ui.menu = false; ui.tab = "setup"; ui.setupPage = "categories"; ui.catEdit = true; renderAll(); window.scrollTo(0, 0); }); break;   // the "Make it yours" card's way in
     case "fr-finish": await frFinish(() => { renderAll(); if (activeAccounts().length) { ui.sheet = { type: "other" }; ui.form = { amount: "", category_id: null, account_id: accountsFor(null)[0]?.id }; renderSheet(); } }); break;
     case "open-other": ui.sheet = { type: "other" }; ui.form = { amount: "", category_id: null, account_id: accountsFor(null)[0]?.id }; renderSheet(); break;
@@ -5920,7 +5921,7 @@ async function restoreNow() {
 // Replacing the whole ledger (a backup, the copy from before an update, or putting a restore back) always goes through here: the data on the phone is saved
 // as a restore copy first, read back and checked, and if that fails NOTHING is replaced (model/restorecopy.js). The window "Your data was replaced" is shown once
 // after the reload; sessionStorage carries the word across it and nothing else is saved.
-const SETUP_RESTORED = "financialTracker.setupRestored";   // a restore from step 1 of the first-run setup: after the reload the rest is skipped
+const SETUP_RESTORED = "financialTracker.setupRestored";   // a restore just ran: after the reload the first-run setup is skipped (marked done) and, on a phone that had nothing, "Your ledger is back" says what its check found
 const RESTORED_FLAG = "financialTracker.justReplaced";
 const restoreIo = { readCopies: readRestoreCopies, writeCopies: writeRestoreCopies, writeLedger: writeLedgerHere };
 async function replaceLedger(next, { kind, pictures = 0 }) {
@@ -5930,7 +5931,8 @@ async function replaceLedger(next, { kind, pictures = 0 }) {
     ui.sheet = null; ui.error = "The new data could not be saved to " + [!r.written.local && "localStorage", !r.written.idb && "IndexedDB"].filter(Boolean).join(" and ") + ". Nothing else was changed, and the safety copy is kept.";
     renderAll(); return false;
   }
-  if (ui.fr?.restoring && kind === "restore") { try { sessionStorage.setItem(SETUP_RESTORED, "1"); } catch { /* the setup then simply starts again after the reload */ } }
+  // Every restore ends the first-run setup: a backup made half way through it (step 4 has "Make a backup now") still holds `firstrun_step`, and must not bring the steps back.
+  if (kind === "restore") { try { sessionStorage.setItem(SETUP_RESTORED, "1"); } catch { /* the setup may then show once more after the reload; nothing is lost */ } }
   if (r.copied) { try { sessionStorage.setItem(RESTORED_FLAG, JSON.stringify({ kind, pictures })); } catch { /* the window is a courtesy; the copy is saved either way */ } }
   location.reload(); return true;
 }
@@ -6318,8 +6320,11 @@ async function start() {
   try { setupRestored = sessionStorage.getItem(SETUP_RESTORED) === "1"; sessionStorage.removeItem(SETUP_RESTORED); } catch { setupRestored = false; }
   const frStep = device.allowEntry && !setupRestored ? M.firstRunStep(ledger.settings, { brandNew: boot.status === "NONE" }) : null;
   if (setupRestored && device.allowEntry && boot.status === "OK") {
-    if (!ledger.settings.firstrun_done) ledger.settings = { ...ledger.settings, firstrun_done: M.phTimestamp() };   // kept with the next save
     if (!ui.sheet) { ui.sheet = { type: "setup-restored" }; renderSheet(); }
+    if (!ledger.settings.firstrun_done || "firstrun_step" in ledger.settings) {   // saved at once: a restart must not bring the steps back
+      const { firstrun_step, ...rest } = ledger.settings;
+      await commit(S(), { ...rest, firstrun_done: ledger.settings.firstrun_done ?? M.phTimestamp() }, { quiet: true });
+    }
   } else if (frStep && !ui.sheet) {
     if (boot.status === "NONE") ledger.settings = { ...ledger.settings, notice_seen_at: M.phTimestamp(), cat_card_seen: M.phTimestamp() };   // saved with the first save (Start fresh)
     ui.fr = { step: frStep, anim: null, form: {} }; ui.form = ui.fr.form; ui.sheet = { type: "firstrun" };
