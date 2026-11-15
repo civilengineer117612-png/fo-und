@@ -5993,7 +5993,8 @@ const swipeMove = (dx) => { const scr = $("screen"); if (!swipeReduced()) { scr.
 document.addEventListener("pointerdown", (e) => {
   sw = null;
   if (e.pointerType === "mouse" && e.button !== 0) return;
-  if (!e.target.closest("#screen") || e.target.closest(SWIPE_NOT)) return;
+  const onPage = e.target === document.body || e.target === document.documentElement;   // the empty page under a short screen counts too; the header and the bottom bar never
+  if (!(onPage || e.target.closest("#screen")) || e.target.closest(SWIPE_NOT)) return;
   sw = { x: e.clientX, y: e.clientY, t: performance.now(), side: false, gone: false };
 });
 document.addEventListener("pointermove", (e) => {

@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-15-swipe", date: "2026-11-15", text: "Swipe left or right to change the day on Log, the month on Cash flow, Cards and Budget, and the payday on Per payday. Budget can now show earlier months." },
   { id: "2026-11-15-one-press", date: "2026-11-15", text: "Buttons and tiles now give a little when you press them, and the square box Safari drew inside rounded buttons is gone." },
   { id: "2026-11-15-first-run", date: "2026-11-15", text: "The backup reminder on Log can now be turned off in Setup, Backup and restore. A new phone starts with five short setup steps." },
   { id: "2026-11-15-correct-entry", date: "2026-11-15", text: "Put right a verified entry is now one window: what it was, what it should be, and what changes once you verify it." },
