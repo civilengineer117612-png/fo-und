@@ -32,7 +32,7 @@
     --critical: #D03B3B; --good: #7FB09E; --warn: #4F8C75; --serious: #1E5B47;   /* the budget grades: green steps, and red only for strictly over */
     --scrim: rgba(27, 29, 31, .45); --shade: rgba(27, 29, 31, .14); --lightbox: #000; --lightbox-ink: #E2DDD3;
     --mid: var(--muted); --soft: var(--muted); --wash: var(--track); --paper: var(--surface); --chart: var(--accent);   /* the older names, pointing at the tokens */
-    --t-press: .1s; --t-move: .2s; --ease-out: cubic-bezier(.2,.8,.2,1);   /* FEEL (owner, Nov 12): a press shows within 100 ms, anything that moves takes 200 ms */
+    --t-press: .1s; --t-move: .2s; --ease-out: cubic-bezier(.2,.8,.2,1); --t-touch: .07s;   /* FEEL (owner, Nov 12): a press shows within 100 ms, anything that moves takes 200 ms */
     --sans: "IBM Plex Sans", system-ui, sans-serif; --num: var(--sans);   /* figures are Plex Sans too, set with even-width digits */
   }
   * { box-sizing: border-box; }
@@ -45,7 +45,7 @@
   .sub { color: var(--mid); margin: 0 0 12px; }
   .note { color: var(--mid); }
   button { font: inherit; color: var(--ink); background: var(--wash); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-height: 48px; }
-  button { transition: transform var(--t-press) ease, background-color var(--t-press) ease; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  button { transition: transform var(--t-move) var(--ease-out), background-color var(--t-move) var(--ease-out), filter var(--t-move) var(--ease-out); -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .hub button:active, .glance:active, .entrieshead:active, .choice:active { background: var(--line); }   /* F2 (Nov 13): ONE pressed look: the surface darkens within 100 ms; nothing shrinks, fades or moves */
   .row.rowbtn:active { background: var(--line); }
   button:active { background: var(--line); }
@@ -795,10 +795,20 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .frpair2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .fracts { padding-top: 16px; } .fracts p { margin: 8px 0 0; }
   button.chip.frchip { min-width: 56px; min-height: 44px; flex: none; }
+  /* ONE PRESS (owner, Nov 15, felt on his iPhone on a test page): every button and tile shrinks a little (0.97) and darkens, quickly on touch
+     (--t-touch, 70 ms) and eased back on release (--t-move, no overshoot). Nothing else moves: a transform takes no room. While pressed, an
+     invisible 8 px margin keeps the whole area that was touched, so a finger at the very edge still lands its tap. Reduce Motion: darken only.
+     Safari's tap highlight (a square box that ignored rounded corners) is off for the whole page; a pressed row inside a rounded card is rounded. */
+  html { -webkit-tap-highlight-color: transparent; }
+  :where(button, .tile, .gcard, .row.tapcard, .swcard[data-action], [role="button"]) { position: relative; transition: transform var(--t-move) var(--ease-out), background-color var(--t-move) var(--ease-out), filter var(--t-move) var(--ease-out); }
+  :is(button, .tile, .gcard, .row.tapcard, .swcard[data-action], [role="button"]):active { transform: scale(.97); transition-duration: var(--t-touch); }
+  :is(button, .tile, .gcard, .row.tapcard, .swcard[data-action], [role="button"]):active::before { content: ""; position: absolute; inset: -8px; }
+  .catcard button.catrow:active, .setlist .setrow:active, button.acctopen:active, button.navrow:active, button.rowbtn:active, .row.rowbtn:active { border-radius: 10px; }
   /* REDUCE MOTION (owner, Nov 12): nothing slides, fades or eases when the phone asks for less motion; every state is shown at once.
      Loops (how-to clips, intro drawings, the listening wave, arranging) have their own rules that show the finished frame. */
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0s !important; transition-delay: 0s !important; }
     #screen.swap, .viewbody.fade, .sheet.enter, .sheet.center.enter, .sheet.full.enter, .frpage.fr-fwd, .frpage.fr-back, #scrim.enter, #menu .drawer.enter, #menu .scrim.enter, #menu.leaving .drawer, #menu.leaving .scrim, .chev.up.flip, #entries-list.drop { animation: none !important; } }
+  @media (prefers-reduced-motion: reduce) { :is(button, .tile, .gcard, .row.tapcard, .swcard[data-action], [role="button"]):active { transform: none !important; } }   /* ONE PRESS: darken only */
   .acklist .ackrow { padding: 10px 0; border-top: 1px solid var(--line); } .acklist .ackrow:first-child { border-top: 0; }   /* Check these amounts */
   .ack-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; } .ack-l { color: var(--muted); font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ack-f { font-weight: 600; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; } .ack-sub { color: var(--muted); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
