@@ -1,7 +1,7 @@
 // Entry points. A "save" is validated against the state as it WOULD be after the save;
 // nothing is written here. The caller persists only if result.ok is true.
 import { validateShape } from "./schema.js";
-import { checkEntriesBalance, checkReferences, checkReserve, checkDuplicate, checkEntryFinal, checkNewVerified, checkReversal, checkRestore, checkRulesAppendOnly } from "./invariants.js";
+import { checkEntriesBalance, checkReferences, checkReserve, checkDuplicate, checkEntryFinal, checkNewVerified, checkReversal, checkRestore, checkOwed, checkRulesAppendOnly } from "./invariants.js";
 import { countedEntries } from "./balances.js";
 
 export { SCHEMAS, validateShape } from "./schema.js";
@@ -45,6 +45,7 @@ export function checkTransactionSave(state, { transaction, entries }) {
     ...checkNewVerified(state, transaction),
     ...checkReversal(state, transaction, entries),
     ...checkRestore(state, transaction, entries),
+    ...checkOwed(state, transaction, entries),
   ]);
 }
 
@@ -128,3 +129,5 @@ export { PIN_LENGTH, AWAY_MS, FREE_TRIES, FIRST_WAIT, LONGEST_WAIT, validPin, lo
 export { KNOWN_WORDS, maskText, maskedLayout, layoutReport } from "./layoutreport.js";
 export { SECTIONS_UNCLEAR, matchHeading, unreadableHeading, allowedDifference, HEADING_VOCAB, TABLE_VOCAB } from "./headings.js";
 export { EVIDENCE, correctionOf, isEvidence, settle } from "./entryrule.js";
+export { OWED_ROLE, OWED_NAME, OWED_OPENING_DATE, isOwed, holdsMoney, owedAccount, personKey, personName, planShares, shareEntries, planSharedExpense, owedPieces, owedSummary, owedBy, personHistory, planPayBack, planNotPaid, owedKind } from "./owed.js";
+export { checkOwed } from "./invariants.js";

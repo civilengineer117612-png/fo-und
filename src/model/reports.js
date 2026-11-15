@@ -6,7 +6,7 @@
 //   - Unlogged counts: it is real money that left and was never logged.
 import { heldIds } from "./held.js";
 import { reportingCategory } from "./rules.js";
-import { naturalBalance, countedEntries } from "./balances.js";
+import { naturalBalance, countedEntries, isOwed, holdsMoney } from "./balances.js";
 
 export const monthOf = (date) => date.slice(0, 7);
 
@@ -73,11 +73,20 @@ export function spendingByAccount(state, { month, from, to }) {
   for (const e of state.entries) if (e.category_id != null && expense.has(e.category_id)) spendingTx.add(e.transaction_id);
   const txById = new Map(state.transactions.map((t) => [t.id, t]));
   const totals = new Map(), held = heldIds(state);
+  // Split with others (A4): the part the others owe is NOT spending, so it comes off the account that paid (3,000.00 paid, 2,000.00 owed to you: 1,000.00 spent
+  // from that account, the same figure as its category). `owedOf` is what each entry put on the Owed to me account, `payer` its biggest paying line.
+  const owedOf = new Map(), payer = new Map();
   for (const e of state.entries) {
     if (e.account_id == null || !spendingTx.has(e.transaction_id)) continue;
     const t = txById.get(e.transaction_id);
     if (!t || held.has(t.id) || t.status !== "verified" || t.date < lo || t.date > hi) continue;
+    if (isOwed(accounts.get(e.account_id))) { owedOf.set(t.id, (owedOf.get(t.id) ?? 0) + e.amount); continue; }
     totals.set(e.account_id, (totals.get(e.account_id) ?? 0) - e.amount);   // money out = a credit, stored negative
+    const p = payer.get(t.id); if (!p || Math.abs(e.amount) > Math.abs(p.amount)) payer.set(t.id, e);
+  }
+  for (const [id, owed] of owedOf) {
+    const p = payer.get(id), to = p ? p.account_id : state.entries.find((e) => e.transaction_id === id && isOwed(accounts.get(e.account_id))).account_id;
+    totals.set(to, (totals.get(to) ?? 0) - owed);   // no paying line: a person who will not pay. That spending shows under Owed to me, where it came from.
   }
   const rows = [...totals].filter(([, amount]) => amount !== 0)
     .map(([account_id, amount]) => ({ account_id, name: accounts.get(account_id)?.name ?? account_id, amount }))
@@ -133,7 +142,7 @@ export function cardsSummary(state, { from, to }) {
 export function accountsOverview(state, { from, to }) {
   const { cards, owe } = cardsSummary(state, { from, to });
   const spent = new Map(spendingByAccount(state, { from, to }).rows.map((r) => [r.account_id, r.amount]));
-  const money = state.accounts.filter((a) => a.class === "asset" && !a.archived)
+  const money = state.accounts.filter((a) => holdsMoney(a) && !a.archived)   // what people owe you is not in your accounts (A4): the Cards screen lists it apart
     .map((a) => ({ account_id: a.id, name: a.name, balance: naturalBalance(a, countedEntries(state)), spent: spent.get(a.id) ?? 0 }));
   return { cards, money, owe, held: money.reduce((n, m) => n + m.balance, 0) };
 }

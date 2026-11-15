@@ -10,9 +10,9 @@ import { phTimestamp } from "./util.js";
 
 // Version 2 is the first with named migrations. To change the data's shape: raise this number, add the step from the old number to MIGRATIONS,
 // add a backup fixture of the old version to tests/migrate.test.js, and add the new collection to COLLECTION_NAMES.
-export const LEDGER_VERSION = 11;
+export const LEDGER_VERSION = 12;
 export const COLLECTION_NAMES = ["accounts", "goals", "envelopes", "transactions", "entries", "categories", "categoryMaps", "rules",
-  "templates", "presets", "payeeRules", "subscriptions", "checkIns", "attachments", "tags", "foreignAmounts", "surveyResponses", "payslips", "payslipLines", "payslipRevisions", "payslipItems", "payslipItemChanges", "schedules", "scheduleChanges", "statementRecords", "statementLines", "statementAccepts"];
+  "templates", "presets", "payeeRules", "subscriptions", "checkIns", "attachments", "tags", "foreignAmounts", "surveyResponses", "payslips", "payslipLines", "payslipRevisions", "payslipItems", "payslipItemChanges", "schedules", "scheduleChanges", "statementRecords", "statementLines", "statementAccepts", "people"];
 
 // Each step takes a ledger of version N and returns one of N + 1 (the runner sets `v`). Steps only add.
 export const MIGRATIONS = {
@@ -68,6 +68,9 @@ export const MIGRATIONS = {
   // `payslipItemChanges` (the record of a line's category being changed), both empty; a payslip may also hold pay_rate, pay_basis and period_type as printed.
   // Old payslips keep their lines and figures exactly and simply have no items ("Original wording not kept"). Nothing existing is touched, so every total is the same.
   10: (ledger) => ({ ...ledger, state: { ...ledger.state, payslipItems: ledger.state.payslipItems ?? [], payslipItemChanges: ledger.state.payslipItemChanges ?? [] } }),
+  // 11 to 12: Split and "Owed to me" (src/model/owed.js). One new list, `people` (who owes the owner part of a payment), empty; a line of an entry may name its
+  // person (`person_id`). The "Owed to me" account is NOT made here: it is made at the first split. Nothing existing is touched, so every total is the same.
+  11: (ledger) => ({ ...ledger, state: { ...ledger.state, people: ledger.state.people ?? [] } }),
 };
 
 const clone = (x) => JSON.parse(JSON.stringify(x));

@@ -13,6 +13,9 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 - **Moving money between your own accounts** is never income and never spending. Only its fee is spending.
 - **A refund** reduces spending in the category it came back to. It is not income.
 - **Spending** is counted from verified entries only. Drafts are shown apart, never added in silently.
+- **Paying for others** (a split): the whole amount leaves the account you paid from; only your share is spending. The rest is owed to you and is not spending.
+- **Being paid back** is a transfer from what you are owed into the account that received it. It is never income and never a refund.
+- **A share that will not be paid** becomes your spending on the day you say so, in the category the purchase was in.
 
 ## The principles
 
@@ -27,7 +30,7 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 - **Rule.** The sum of all entries is zero to the centavo, every transaction is zero, no entry points at a missing transaction, and every transaction has at least two legs.
 - **In the app.** `selfCheck` (after an update) and the checks at every save. Setup, About this app shows one quiet line from `ledgerProblems`, computed from the ledger as it is now (so it covers a load and a restore): "Ledger check: OK" or "Ledger check: N problems (tell the project chat)". It counts an entry that does not add to zero, amounts that belong to no entry, an entry with fewer than two sides, a missing account or category, a correction naming a missing entry, and an entry cancelled twice. It is a report only: a ledger with a problem still opens and still backs up.
 - **Guarded by.** `tests/ledgercheck.test.js`, `e2e/ledger-check.mjs`, "TRIAL BALANCE REPORT" and "TRIAL BALANCE" after each kind of operation: log, transfer, card purchase, card payment, refund, payslip, Add the breakdown, count (plain,
-  held, as a move, card), correction, gap repair, restore.
+  held, as a move, card), correction, gap repair, a purchase split with others, a pay-back, a share that will not be paid, restore.
 
 ### 3. Account balance
 - **Rule.** A balance is its opening figure plus its own movements, nothing else. It is never stored, so it cannot drift.
@@ -112,6 +115,17 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 - **In the app.** Counts, matches and duplicates compare exact amounts. The only tolerance is a transfer fee of up to ₱100 between two statement lines, and
   it is shown as the fee, not dropped.
 - **Guarded by.** "MATERIALITY IS NOT USED".
+
+### 13. Money owed to you
+- **Rule.** What others owe you is something you are owed, not money you hold and not spending. It is kept per person, and what the people owe adds up
+  to the total, to the centavo. It leaves only by being paid back (a transfer) or by being given up (your spending).
+- **In the app.** "Split with others" on Add expense and on a scanned or spoken entry: your share goes to the category, the others' parts go to ONE account of
+  its own kind, "Owed to me", one line per person; your share plus the others' parts is exactly what left the account. The save check refuses a line on that
+  account that names no person, and a person named anywhere else (`checkOwed`), so nothing else can be put there. "Paid me back" is a transfer into your
+  account; "Will not pay" makes what that person still owes your spending, each piece in the category of the purchase it came from (pay-backs settle the
+  oldest debt first). In the equation of principle 1 the account counts as something you have; on the screens it is shown apart and is in no "in your
+  accounts" figure, no net worth, no picker and no count (the owner's decision: it is not money yet).
+- **Guarded by.** "OWED TO ME", `tests/owed.test.js`, `e2e/owed.mjs`; it is also a step of "TRIAL BALANCE", "EQUATION" and "CONSISTENCY".
 
 ## The six audit assertions
 | Assertion | In the app | Guarded by |

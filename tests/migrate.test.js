@@ -69,8 +69,8 @@ const text = (l) => JSON.stringify(l);
 // every field of `a` is still in `b` with the same value (b may have more)
 const holds = (a, b) => (typeof a !== "object" || a === null ? a === b : typeof b === "object" && b !== null && Object.keys(a).every((k) => holds(a[k], b[k])));
 
-test("the current data version is 11 and the first version's data is still accepted as older", () => {
-  assert.equal(LEDGER_VERSION, 11);
+test("the current data version is 12 and the first version's data is still accepted as older", () => {
+  assert.equal(LEDGER_VERSION, 12);
   for (const make of Object.values(FIXTURES)) { const p = parseLedger(text(make())); assert.equal(p.ok, true); assert.equal(p.older, true); }
   const cur = upgradeLedger(v1Early()).ledger;
   assert.equal(parseLedger(text(cur)).older, undefined);

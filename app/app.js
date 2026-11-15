@@ -52,7 +52,7 @@ let lockRec = null, lockActive = false, lockMode = null, lockHiddenAt = null, lo
 const S = () => ledger.state;
 // The reports read the ledger through the owner's payee names: an entry still in Unlogged shows under its payee's category; nothing stored changes.
 const SV = () => M.withPayeeBook(ledger.state, ledger.settings.payee_book);
-const activeAccounts = () => S().accounts.filter((a) => !a.archived);
+const activeAccounts = () => S().accounts.filter((a) => !a.archived && !M.isOwed(a));   // "Owed to me" (A4) holds no money: it is in no picker, no Setup list and no count
 const accountName = (id) => S().accounts.find((a) => a.id === id)?.name ?? "?";
 const categoryName = (id) => S().categories.find((c) => c.id === id)?.name ?? "?";
 // "Name \u00b7 Bucket" for a category: the bucket is read from the name (or chosen by hand), so there is nothing else to set.
@@ -191,6 +191,7 @@ function iconOf(a, size = 28) {
   return `<span class="ico mono" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.5)}px" aria-hidden="true">${esc(letter)}</span>`;
 }
 const withIcon = (a, size) => iconOf(a, size) + `<span>${esc(a.name)}</span>`;
+const letterTile = (name, size = 28) => `<span class="ico mono" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.5)}px" aria-hidden="true">${esc([...String(name)][0]?.toUpperCase() ?? "?")}</span>`;   // a person has no picture, only their first letter
 
 // Accounts for a payment, the one you used last first (for this preset, then in general).
 const isCash = (a) => a.bank === "cash" || /^cash\b/i.test(a.name);
@@ -224,6 +225,13 @@ function describe(t) {
   if (t.restores) return { kind: "other", editable: false, title: "Puts right a second cancellation: " + (t.payee || "an entry"), amount: es.filter((e) => e.amount > 0).reduce((n, e) => n + e.amount, 0), detail: "puts an extra cancellation right" };
   if (t.reverses) return { kind: "other", editable: false, title: "Cancels: " + (t.payee || "an entry"), amount: es.filter((e) => e.amount > 0).reduce((n, e) => n + e.amount, 0), detail: "cancels an earlier entry" };   // shown without a sign: it only takes back what was entered
   const cat = es.find((e) => e.category_id != null), acct = es.find((e) => e.account_id != null);
+  // Split and Owed to me (A4): a purchase split with others shows YOUR SHARE as its amount (that is the spending) and keeps the whole amount paid in `total`.
+  const ow = es.some((e) => e.person_id != null) ? M.owedKind(S(), t.id) : null;
+  if (ow?.kind === "shared") { const payer = es.find((e) => e.account_id != null && e.person_id == null);
+    return { kind: "expense", shared: true, editable: false, title: shortPayee(t.payee) || categoryName(cat.category_id), category_id: cat.category_id, account_id: payer.account_id, amount: ow.yours, total: ow.total, owed: ow.owed, detail: accountName(payer.account_id) + " \u00b7 your share of " + peso(ow.total) }; }
+  if (ow?.kind === "paid") return { kind: "payback", editable: false, title: ow.name + " paid you back", amount: ow.amount, to_id: ow.to_id, detail: "into " + accountName(ow.to_id) };
+  if (ow?.kind === "unpaid") { const parts = es.filter((e) => e.category_id != null).map((e) => ({ name: categoryName(e.category_id), amount: e.amount }));   // it is spending now: one category, or several like a split
+    return { kind: parts.length > 1 ? "split" : "expense", unpaid: true, editable: false, title: ow.name + " did not pay", ...(parts.length === 1 ? { category_id: cat.category_id } : {}), amount: ow.amount, parts, detail: "counted as your spending" }; }
   if (cat && acct && es.filter((e) => e.category_id == null).every((e) => e.account_id === acct.account_id) && es.filter((e) => e.category_id != null).length === 1) {
     if (S().categories.find((c) => c.id === cat.category_id)?.kind === "income") return { kind: "income", editable: false, title: shortPayee(t.payee) || categoryName(cat.category_id), category_id: cat.category_id, account_id: acct.account_id, amount: Math.abs(cat.amount), detail: accountName(acct.account_id) };
     return { kind: "expense", editable: es.length === 2, title: shortPayee(t.payee) || categoryName(cat.category_id), category_id: cat.category_id, account_id: acct.account_id, amount: Math.abs(cat.amount), detail: accountName(acct.account_id) };
@@ -605,7 +613,10 @@ function viewVerify() {
   if (!list.length) return head + `<p class="note">Nothing to verify.</p>`;
   const t = list[0], d = describe(t);
   const partner = S().transactions.find((x) => x.id === "rsv:" + t.id);
-  const fields = d.kind === "expense"
+  const fields = d.shared ? `<dt>Category</dt><dd>${esc(categoryName(d.category_id))}</dd><dt>Paid from</dt><dd class="who">${withIcon(S().accounts.find((a) => a.id === d.account_id), 22)}</dd><dt>Your share</dt><dd>${peso(d.amount)}</dd>${d.owed.map((o) => `<dt>${esc(o.name)} owes</dt><dd>${peso(o.amount)}</dd>`).join("")}`
+    : d.unpaid ? d.parts.map((p, i) => `<dt>${i ? "&nbsp;" : "Category"}</dt><dd>${esc(p.name)}${d.parts.length > 1 ? " " + peso(p.amount) : ""}</dd>`).join("")
+    : d.kind === "payback" ? `<dt>Paid into</dt><dd class="who">${withIcon(S().accounts.find((a) => a.id === d.to_id), 22)}</dd>`
+    : d.kind === "expense"
     ? `<dt>Category</dt><dd>${esc(categoryName(d.category_id))}</dd><dt>Paid from</dt><dd class="who">${withIcon(S().accounts.find((a) => a.id === d.account_id), 22)}</dd>`
     : d.kind === "split" ? `${d.parts.map((p, i) => `<dt>${i ? "&nbsp;" : "Split"}</dt><dd>${esc(p.name)} ${peso(p.amount)}</dd>`).join("")}<dt>Paid from</dt><dd class="who">${withIcon(S().accounts.find((a) => a.id === d.account_id), 22)}</dd>`
     : d.kind === "income" ? `<dt>Arrived in</dt><dd class="who">${withIcon(S().accounts.find((a) => a.id === d.account_id), 22)}</dd>`
@@ -622,7 +633,7 @@ function viewVerify() {
   const fromPhoto = twinNote + schedNote + finalNote + (t.source === "photo" ? `<p class="note">Read from the photo. Compare each line with the paper before you tap Correct.</p>`
     : t.source === "voice" ? `<p class="note">Made from what you said${t.memo ? ": \u201C" + esc(t.memo) + "\u201D" : ""}. Check each line before you tap Correct.</p>` : "");
   return `${head}
-    <div class="card">${shot ? `<button class="shotbtn" data-action="open-photo" data-id="${esc(shot.id)}" aria-label="Open the photo full size"><img class="shot" data-photo="${esc(shot.id)}" alt="The photo this entry was read from" hidden></button>` : ""}${fromPhoto}<div class="what">${esc(d.title)}</div><div class="big">${peso(d.amount)}</div>
+    <div class="card">${shot ? `<button class="shotbtn" data-action="open-photo" data-id="${esc(shot.id)}" aria-label="Open the photo full size"><img class="shot" data-photo="${esc(shot.id)}" alt="The photo this entry was read from" hidden></button>` : ""}${fromPhoto}<div class="what">${esc(d.title)}</div><div class="big">${peso(d.total ?? d.amount)}</div>
       <dl><dt>Date</dt><dd>${esc(listDate(t.date))}</dd>${t.schedule_id && t.memo ? `<dt>Note</dt><dd>${esc(t.memo)}</dd>` : ""}${fields}${reserve}</dl>
       <div class="actions">
         <button class="primary wide" data-action="verify-ok" data-id="${esc(t.id)}">Correct</button>
@@ -1187,7 +1198,7 @@ const cashAccount = () => accountsFor(null).find(isCash) ?? null;
 // What a paper says about a move of money, and what to do with it: "transfer" (both ends known), "choose" (cannot tell: the owner decides, nothing is
 // defaulted), or null (an ordinary payment, which stays an expense).
 function moveRead(text, r) {
-  const mv = M.readMove(text), cls = M.classifyMove(mv, { accounts: S().accounts, cashId: cashAccount()?.id ?? null, recipients: ledger.settings.own_recipients ?? {} });
+  const mv = M.readMove(text), cls = M.classifyMove(mv, { accounts: S().accounts.filter((a) => !M.isOwed(a)), cashId: cashAccount()?.id ?? null, recipients: ledger.settings.own_recipients ?? {} });
   let kind = null;
   if (r.kind !== "payslip") {
     if (mv.kind === "withdrawal" || mv.kind === "deposit") kind = mv.kind;
@@ -1486,7 +1497,7 @@ async function saveScan() {
       if (dup) { f.dupOf = dup; renderSheet(); return; }
     }
     const second = f.split ? M.parsePesos(f.split_amt).centavos : 0, lines = f.split ? [{ category_id: f.category_id, amount: amount - second }, { category_id: f.split_cat, amount: second }] : undefined;
-    ok = await logExpense({ transaction_id: id, date: f.date, payee: f.payee.trim(), category_id: f.category_id, amount, account_id: f.account_id, source, dup_checked: true, ...(voice ? { memo: f.text } : { photo_id: photoId, drop_scan: queueId }), ...(lines ? { lines } : {}), ...(f.ref ? { reference_no: f.ref } : {}), ...(f.time ? { shot_time: f.time } : {}), ...(f.askNo ? { own_recipients: M.rememberRecipient(ledger.settings.own_recipients, f.askNo, "") } : {}) }, (f.payee.trim() || categoryName(f.category_id)) + " " + peso(amount));
+    ok = await logExpense({ transaction_id: id, date: f.date, payee: f.payee.trim(), category_id: f.category_id, amount, account_id: f.account_id, source, dup_checked: true, ...(voice ? { memo: f.text } : { photo_id: photoId, drop_scan: queueId }), ...(lines ? { lines } : {}), ...(!lines && sharesOfForm(f) ? { shares: sharesOfForm(f) } : {}), ...(f.ref ? { reference_no: f.ref } : {}), ...(f.time ? { shot_time: f.time } : {}), ...(f.askNo ? { own_recipients: M.rememberRecipient(ledger.settings.own_recipients, f.askNo, "") } : {}) }, (f.payee.trim() || categoryName(f.category_id)) + " " + peso(amount));
   }
   if (!ok) { if (!queueId && !voice && kept) deletePhoto(photoId).catch(() => {}); return; }   // the window stays open so nothing typed is lost
   if (pendingPhoto) { URL.revokeObjectURL(pendingPhoto.url); pendingPhoto = null; }
@@ -1699,7 +1710,7 @@ function viewSetup() {
   const reserveExists = S().accounts.some((a) => a.reserve_for);
   const hosts = activeAccounts().filter((a) => a.class === "asset" && !a.reserve_for);
   const arrA = ui.sortArr === "acct";
-  const rows = orderedAccts(S().accounts.filter((a) => !a.archived)).map((a) => `<div class="row sortrow acctrow" data-sort="acct" data-id="${esc(a.id)}"><button class="acctopen" data-action="acct-more" data-id="${esc(a.id)}" aria-label="${esc(a.name)}, ${esc(pesoW(M.naturalBalance(a, M.countedEntries(S()))))}. Tap to change it"><span class="who">${iconOf(a, 44)}<span>${esc(a.name)}<small>${a.class === "asset" ? (M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet") : "Credit card"}${a.reserve_for ? " \u00b7 covers " + esc(accountName(a.reserve_for)) : ""}${a.bank && !a.name.toLowerCase().startsWith(M.bankById(a.bank).name.toLowerCase()) ? " \u00b7 linked to " + esc(M.bankById(a.bank).name) : ""}${a.last4 ? " \u00b7 \u00b7\u00b7" + esc(a.last4) : ""}</small></span></span>
+  const rows = orderedAccts(activeAccounts()).map((a) => `<div class="row sortrow acctrow" data-sort="acct" data-id="${esc(a.id)}"><button class="acctopen" data-action="acct-more" data-id="${esc(a.id)}" aria-label="${esc(a.name)}, ${esc(pesoW(M.naturalBalance(a, M.countedEntries(S()))))}. Tap to change it"><span class="who">${iconOf(a, 44)}<span>${esc(a.name)}<small>${a.class === "asset" ? (M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet") : "Credit card"}${a.reserve_for ? " \u00b7 covers " + esc(accountName(a.reserve_for)) : ""}${a.bank && !a.name.toLowerCase().startsWith(M.bankById(a.bank).name.toLowerCase()) ? " \u00b7 linked to " + esc(M.bankById(a.bank).name) : ""}${a.last4 ? " \u00b7 \u00b7\u00b7" + esc(a.last4) : ""}</small></span></span>
       <span class="amt">${peso(M.naturalBalance(a, M.countedEntries(S())))}${(() => { const cv = reserveCovers().find((x) => x.reserve_id === a.id); return cv ? `<span class="coverwrap">${coverBar(cv.share, coverLabel(cv))}</span>` : ""; })()}</span>${CHEV}</button></div>`).join("");
   const hiddenAccts = S().accounts.filter((a) => a.archived);
   const hiddenHtml = hiddenAccts.length ? `<h2>Hidden accounts</h2><p class="note">Their entries and history stay. They are left out of pickers and totals.</p>${hiddenAccts.map((a) => `<div class="row"><div class="who">${iconOf(a, 28)}<div>${esc(a.name)}</div></div><div class="amt"><button class="act" data-action="show-account" data-id="${esc(a.id)}">Show again</button></div></div>`).join("")}` : "";
@@ -1722,7 +1733,7 @@ function viewSetup() {
     <p><button class="primary" data-action="add-account" style="margin-top:14px">Add account</button></p>${S().accounts.length ? `<p class="center"><button class="act" data-action="toggle-add-account">Cancel</button></p>` : ""}`;
   const accountsHtml = `    ${formOpen ? addForm : ""}
     <div class="h2row${arrA ? " sorthead" : ""}"><h2>Your accounts</h2>${arrA ? `<button class="act done" data-action="sort-done">Done</button>` : ""}</div>
-    ${arrA ? `<p class="note small sortnote">Drag a row to move it. Done when it is right.</p>` : S().accounts.filter((a) => !a.archived).length > 1 ? `<p class="note small">A to Z. Hold an account to arrange your own order.</p>` : ""}
+    ${arrA ? `<p class="note small sortnote">Drag a row to move it. Done when it is right.</p>` : activeAccounts().length > 1 ? `<p class="note small">A to Z. Hold an account to arrange your own order.</p>` : ""}
     <div class="sortlist group${arrA ? " arranging" : ""}">${rows || `<p class="note">No accounts yet.</p>`}</div>${keepNote}${hiddenHtml}
     ${formOpen ? "" : `<p><button id="add-account-open" data-action="toggle-add-account" style="width:100%">Add an account</button></p>`}`;
   const fixedNow = M.fixedMap(S(), ledger.settings, today());
@@ -1787,7 +1798,7 @@ function viewSetup() {
     appearance: appearanceHtml,
     about: aboutHtml,
   };
-  const nAcc = S().accounts.filter((a) => !a.archived).length, nCat = expenseCategories().length;
+  const nAcc = activeAccounts().length, nCat = expenseCategories().length;
   const rowsHome = [
     ["accounts", "cards", "Accounts", nAcc ? `${nAcc} ${nAcc === 1 ? "account" : "accounts"}` : "Add the accounts you pay from"],
     ["categories", "tag", "Categories", `${nCat} ${nCat === 1 ? "category" : "categories"}`],
@@ -1885,6 +1896,46 @@ const reserveCovers = () => M.reserveCover(S().accounts, M.countedEntries(S()));
 // Under a "Paid from" row of chips: one thin bar for each reserve account, with its picture, so the owed and free parts are seen before choosing.
 const reserveStrip = () => reserveCovers().map((c) => { const a = S().accounts.find((x) => x.id === c.reserve_id); return a && !a.archived ? `<div class="coverrow">${iconOf(a, 20)}${coverBar(c.share, a.name + ": " + coverLabel(c))}</div>` : ""; }).join("");
 // `pockets`: also offer the savings pockets (a statement can be from one). An account already chosen is always listed, even a pocket, so editing never loses it.
+// ---------- Split with others (A4): only your share is spending; the rest is owed to you, per person ----------
+// form.share: on or off. form.shares: [{name, amt (text), typed}]. A person whose amount was not typed gets an EQUAL part of what is left (you take one part too,
+// and the odd centavos); typing an amount fixes it. A row with no name and no typed amount is not a person yet and is ignored.
+function shareState(f) {
+  const a = M.parsePesos(f.amount ?? ""), total = a.ok ? a.centavos : 0, rows = f.shares ?? [];
+  const used = rows.map((r) => (r.name ?? "").trim() !== "" || (r.typed && (r.amt ?? "").trim() !== ""));
+  const typed = rows.map((r, i) => (used[i] && r.typed && (r.amt ?? "").trim() !== "" ? M.parsePesos(r.amt) : null));
+  const fixed = typed.reduce((n, p) => n + (p?.ok ? p.centavos : 0), 0), free = rows.filter((r, i) => used[i] && !typed[i]).length;
+  const each = Math.max(0, Math.floor((total - fixed) / (free + 1)));
+  const amounts = rows.map((r, i) => (!used[i] ? null : typed[i] ? (typed[i].ok ? typed[i].centavos : -1) : each));
+  const list = rows.map((r, i) => ({ name: (r.name ?? "").trim(), amount: amounts[i] })).filter((x, i) => used[i]);
+  const keys = list.map((x) => M.personKey(x.name)), owed = list.reduce((n, x) => n + Math.max(0, x.amount), 0), yours = total - owed;
+  const why = !list.length ? "Type who owes you." : keys.some((k) => !k) ? "Type each person's name." : new Set(keys).size !== keys.length ? "Each person can be listed once."
+    : !(total > 0) ? "" : fixed >= total || yours <= 0 ? "Your own share must be more than zero." : list.some((x) => !(x.amount > 0)) ? "Each person's part must be more than zero." : "";
+  return { total, each, amounts, list, yours, why };
+}
+const shareAmt = (c) => (c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function shareBlock(f) {
+  const st = f.share ? shareState(f) : null, rows = f.shares ?? [], known = [...(S().people ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  return `<div class="row pocketrow sharetoggle"><div><b>Split with others</b><small>Only your share is spending</small></div><div><button class="chip" data-action="toggle-share" aria-pressed="${f.share === true}">${f.share ? "On" : "Off"}</button></div></div>
+    ${f.share ? `<label id="share-label">Who owes you</label>
+      ${rows.map((r, i) => `<div class="owerow"><input data-field="sh:${i}:name" value="${esc(r.name ?? "")}" aria-label="Name of person ${i + 1}" placeholder="Name" autocomplete="off" autocapitalize="words" list="share-people"><input data-field="sh:${i}:amt" inputmode="decimal" value="${esc(r.typed ? r.amt ?? "" : st.amounts[i] != null && st.total > 0 ? shareAmt(st.amounts[i]) : "")}" aria-label="What person ${i + 1} owes" placeholder="0.00" autocomplete="off"></div>`).join("")}
+      <datalist id="share-people">${known.map((p) => `<option value="${esc(p.name)}"></option>`).join("")}</datalist>
+      <p style="margin:0"><button class="act" data-action="share-add">Add a person</button></p>
+      <div class="sharerow"><span>Your share</span><b id="share-yours"></b></div><p class="note" id="share-why" role="status"></p>` : ""}`;
+}
+// The live part of the block, written in place (never a redraw: a box may be under a finger or have the keyboard): a person's equal part, your share, what is missing.
+function refreshShare(f) {
+  if (!f.share) return { ok: true };
+  const st = shareState(f), a = M.parsePesos(f.amount ?? "");
+  (f.shares ?? []).forEach((r, i) => { const el = document.querySelector(`#sheet [data-field="sh:${i}:amt"]`);
+    if (el && !r.typed && el !== document.activeElement) { const v = st.amounts[i] != null && st.total > 0 ? shareAmt(st.amounts[i]) : ""; if (el.value !== v) el.value = v; } });
+  const y = $("share-yours"), w = $("share-why");
+  if (y) setText(y, a.ok && st.total > 0 && !st.why ? peso(st.yours) : "\u2014");
+  if (w) setText(w, st.why);
+  return { ok: st.why === "", st };
+}
+// What the form's split comes to, for the save: [{name, amount}] or undefined when the split is off.
+const sharesOfForm = (f) => (f.share ? shareState(f).list : undefined);
+
 const paidChips = (selected, pockets = false, extra = []) => { const list = [...accountsFor(null, pockets), ...extra], cur = selected && !list.some((a) => a.id === selected) ? S().accounts.find((a) => a.id === selected) : null; return accountPicker(cur ? [...list, cur] : list, selected) + reserveStrip(); };
 // The Cards screen (menu): every account in one place. Credit cards show what you owe and what was spent on and paid toward each in the
 // period; debit cards, savings, wallets and cash show their balance and what was spent from them. A card is just one of the accounts.
@@ -1931,11 +1982,15 @@ function viewCards() {
   const setAside = (() => { const w = M.setAsideForSpending(M.sinkingFunds(S(), ledger.settings, { month: M.monthOf(today()), asOf: today() })); return w > 0 ? `<p class="note" id="cards-setaside">${shown ? peso(w) : veil(peso(w))} of this is set aside for planned spending, not savings.</p>` : ""; })();
   const listView = `<h2>Credit cards</h2>${cards}
     <h2>Debit, savings and cash</h2>${money}`;
+  // Owed to me (A4): one row per person who owes you, apart from the accounts. It is not money yet, so it is not in the figure at the top.
+  const people = M.owedSummary(S()).people;
+  const owedView = people.length ? `<h2>Owed to me</h2>${barCard(people.map((p) => ({ name: letterTile(p.name) + esc(p.name), fig: amt((p.amount < 0 ? "-" : "") + peso(Math.abs(p.amount))), action: "open-person", id: p.person_id })))}` : "";
   const cardView = `<div class="gridcards">${seq.slice(0, 6).map(gridCard).join("")}</div>`;
   return `<h1>Cards</h1>${periodStepper(p)}
     ${netCard}${setAside}
     <h2>Accounts</h2>
     ${ui.cardsList ? listView : cardView}
+    ${owedView}
     <p class="seeallrow">${ui.cardsList || seq.length > 6 ? `<button class="seeall" data-action="cards-list">${ui.cardsList ? "Show fewer accounts" : "See all accounts"} ${CHEV}</button>` : ""}<button class="seeall" data-action="cards-more">More</button></p>`;
 }
 
@@ -2812,6 +2867,7 @@ function renderSheet() {
       <label for="f-payee">Item</label><input id="f-payee" data-field="payee" value="${esc(ui.form.payee ?? "")}" autocomplete="off" autocapitalize="sentences">
       <label>Category${REQ}</label>${categoryPicker(pickCategoriesWith(ui.form.category_id), ui.form.category_id)}
       <label>Paid from${REQ}</label>${paidChips(ui.form.account_id)}
+      ${shareBlock(ui.form)}
       ${REQNOTE}
       <p><button class="primary" id="f-save" data-action="save-other" style="margin-top:14px" disabled>Save</button></p>`;
   } else if (sh.type === "schedule-new") {
@@ -3091,7 +3147,7 @@ function renderSheet() {
       <p><button data-action="gap-change" style="width:100%">Change the count</button></p>` : `<p class="note">That count is no longer waiting.</p><p><button class="primary" data-action="close-sheet">Got it</button></p>`;
   } else if (sh.type === "gap-move") {
     const a = S().accounts.find((x) => x.id === sh.id), r = pendingCounts()[sh.id], q = a && r ? pendingGap(a, r) : null, more = q && q.difference > 0;
-    const others = S().accounts.filter((x) => x.class === "asset" && !x.archived && x.id !== sh.id);
+    const others = S().accounts.filter((x) => M.holdsMoney(x) && !x.archived && x.id !== sh.id);
     body = q ? `<h3>${more ? "Moved in from which account?" : "Moved to which account?"}</h3>
       <p class="note">${a.name}: ${peso(Math.abs(q.difference))} ${more ? "more than logged" : "missing"}. The move is verified by this count.</p>
       <label>${more ? "From" : "To"}${REQ}</label>${accountPicker(others, ui.form.other_id, "pick-count-other", "countother", "Choose an account")}
@@ -3394,6 +3450,7 @@ function renderSheet() {
         <label for="f-split">Its amount (\u20B1)</label><input id="f-split" data-field="split_amt" inputmode="decimal" value="${esc(f.split_amt ?? "")}" autocomplete="off">
         <p class="note" id="split-note" role="status"></p>` : ""}`}
       ${move ? "" : `<label>${into ? "Arrived in" : "Paid from"}${REQ}</label>${paidChips(f.account_id)}`}
+      ${into || move || f.kind === "choose" ? "" : shareBlock(f)}
       ${f.dupOf ? dupBlock(f.dupOf, ui.sheet.voice === true) : ""}
       <details${sh.voice ? " hidden" : ""}><summary>What the reader saw</summary><pre class="rawtext">${esc(f.text || "(nothing)")}</pre></details>
       <p class="note" id="scan-why" role="status"></p>
@@ -3408,6 +3465,8 @@ function renderSheet() {
       const source = t.source === "photo" ? "Read from a photo" : t.source === "voice" ? "Made from what you said" : "Typed in";
       const rows = [["Date", fullDate(t.date)], ["Status", t.status === "draft" ? "Draft, waiting in Verify" : "Verified"], ["How it was entered", source],
         ...(d.kind === "split" ? d.parts.map((x) => [x.name, peso(x.amount)]) : d.category_id ? [["Category", categoryName(d.category_id)]] : []),
+        ...(d.shared ? [["Paid", peso(d.total)], ...d.owed.map((o) => [o.name + " owes", peso(o.amount)])] : []),
+        ...(d.kind === "payback" ? [["Paid into", accountName(d.to_id)]] : []),
         ...(d.kind === "transfer" ? [["Between", d.detail], ...(M.feeOf(S(), t.id).amount ? [["Fee", peso(M.feeOf(S(), t.id).amount)]] : []), ...(M.foreignOf(S(), t.id) ? [["Foreign amount", foreignText(M.foreignOf(S(), t.id))]] : [])] : []), ...(t.memo ? [["What was said or noted", "\u201C" + t.memo + "\u201D"]] : [])];
       body = `${sh.back ? `<p><button class="act" data-action="spending-back">Back to the spending list</button></p>` : ""}<h3>${esc(d.title)}</h3><p class="bigamt">${peso(d.amount)}</p>
         <dl class="txdl">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}${acct ? `<dt>${d.kind === "income" ? "Arrived in" : "Paid from"}</dt><dd class="who">${withIcon(acct, 22)}</dd>` : ""}</dl>
@@ -3441,6 +3500,17 @@ function renderSheet() {
         ${more ? `<p class="center"><button class="act" data-action="register-more">Show older entries</button></p>` : `<div class="row"><div>Opening balance<small>${esc(listDate(r.opening_date))}</small></div><div class="amt">${m(r.opening)}</div></div>`}</div>
         <p class="note small">${card ? "A purchase raises what you owe; a payment lowers it." : "Each line shows how the balance moved and what it was right after."}</p>`;
     }
+  } else if (sh.type === "person") {
+    // One person (A4): what they owe and for what, and ONE filled button, "Paid me back": a move into your account, never income. Amounts follow the Cards eye.
+    const p = M.owedSummary(S()).people.find((x) => x.person_id === sh.id), name = M.personName(S(), sh.id), shown = !!ui.cardsShown, DOTS = "\u20b1\u2022\u2022\u2022\u2022\u2022";
+    const owes = p?.amount ?? 0, pieces = p?.pieces ?? [], one = pieces.length === 1;
+    body = `<h3>${esc(name)}</h3><p class="note" style="margin:0">${owes < 0 ? "Paid you more than they owed" : "Owes you"}</p><div class="hero" style="margin:0 0 4px">${shown ? peso(Math.abs(owes)) : `<span aria-label="Amount hidden">${DOTS}</span>`}</div>
+      ${one ? `<p class="owefor">${esc(pieces[0].payee || "A payment")} \u00b7 ${esc(listDate(pieces[0].date))}</p>` : pieces.length ? `<div class="owelist">${pieces.map((x) => `<div class="rc-row"><span>${esc(x.payee || "A payment")} \u00b7 ${esc(listDate(x.date))}</span><b>${shown ? peso(x.amount) : DOTS}</b></div>`).join("")}</div>` : ""}
+      ${owes > 0 ? `<label>Paid into${REQ}</label>${accountPicker(accountsFor(null, true), ui.form.to_id, "pick-to", "to", "Choose an account")}
+      <label for="f-amount">Amount (\u20b1)${REQ}</label><input id="f-amount" data-field="amount" inputmode="decimal" autocomplete="off" value="${esc(ui.form.amount ?? "")}">
+      ${REQNOTE}<p class="note small" id="person-why" role="status" style="margin:0 0 6px"></p><p class="note small" style="margin:0 0 6px">A move into your account, not income. It waits in Verify.</p>
+      <p style="margin:6px 0 8px"><button class="primary" id="f-save" data-action="person-paid" style="width:100%" disabled>Paid me back</button></p>
+      <p style="margin:0 0 8px"><button data-action="person-unpaid" style="width:100%">${ui.form.confirmUnpaid ? "Tap again: " + (shown ? peso(owes) : "this") + " becomes your spending" : "Will not pay"}</button></p>` : `<p class="note">Nothing to pay back.</p>`}`;
   } else if (sh.type === "cardpay") {
     const card = S().accounts.find((x) => x.id === sh.id), shown = !!ui.cardsShown, DOTS = "₱•••••", st = M.cardStatement(S(), sh.id), due = M.nextDue(card?.due_day, today());
     const [pf, pt] = periodBounds(period()), owe = M.accountsOverview(S(), { from: pf, to: pt }).cards.find((c) => c.account_id === sh.id)?.owe ?? 0;
@@ -3761,8 +3831,8 @@ function refreshSave() {
   const type = ui.sheet?.type, f = ui.form;
   if (type === "edit" && f.kind === "move") { btn.disabled = !(f.to_id && (f.from_id ?? f.account_id) && (f.from_id ?? f.account_id) !== f.to_id); return; }
   if (type === "other") {
-    const a = M.parsePesos(f.amount);
-    btn.disabled = !(a.ok && a.centavos > 0 && f.category_id && f.account_id);
+    const a = M.parsePesos(f.amount), sh = refreshShare(f);
+    btn.disabled = !(a.ok && a.centavos > 0 && f.category_id && f.account_id && sh.ok);
   } else if (type === "tile") {
     const a = M.parsePesos(f.amount ?? "");
     btn.disabled = !(a.ok && a.centavos > 0 && (f.name ?? "").trim() && f.category_id);
@@ -3784,6 +3854,10 @@ function refreshSave() {
       setHtml(box, (less ? `<button data-action="count-paid" style="width:100%">I paid the card: log ${peso(less)}</button>` : "") + (gap !== 0 ? `<p class="note small">Count your other accounts too. Then the Weekly review shows every gap side by side and asks what happened.</p>` : ""));
     }
     setText(btn, "Save count");
+  } else if (type === "person") {
+    const a = M.parsePesos(f.amount ?? ""), owes = M.owedBy(S(), ui.sheet.id), over = a.ok && a.centavos > owes, w = $("person-why");
+    btn.disabled = !(a.ok && a.centavos > 0 && !over && f.to_id);
+    if (w) setText(w, over ? "That is more than they owe you." : "");
   } else if (type === "gap-move") {
     btn.disabled = !f.other_id;
   } else if (type === "survey") {
@@ -3885,9 +3959,10 @@ function refreshSave() {
     const splitOk = !f.split || (f.split_cat && f.split_cat !== f.category_id && second.ok && second.centavos > 0 && a.ok && second.centavos < a.centavos);
     const note = $("split-note");
     if (note) note.textContent = splitOk && f.split ? categoryName(f.category_id) + " gets " + peso(a.centavos - second.centavos) + ", " + categoryName(f.split_cat) + " gets " + peso(second.centavos) + "." : "Choose the second category and its amount, which must be less than the total.";
-    btn.disabled = !(a.ok && a.centavos > 0 && M.isPhDate(f.date) && f.category_id && f.account_id && splitOk);
+    const sh = refreshShare(f);
+    btn.disabled = !(a.ok && a.centavos > 0 && M.isPhDate(f.date) && f.category_id && f.account_id && splitOk && sh.ok);
     const why = $("scan-why");   // a greyed button must say what it is waiting for
-    if (why) why.textContent = !(a.ok && a.centavos > 0) ? "Enter the amount to save." : !M.isPhDate(f.date) ? "Choose the date to save." : !f.category_id ? "Choose a category to save." : !f.account_id ? "Choose the account it " + (M.kindById(f.kind).direction === "in" ? "arrived in" : "was paid from") + " to save." : !splitOk ? "Finish the split to save." : "";
+    if (why) why.textContent = !(a.ok && a.centavos > 0) ? "Enter the amount to save." : !M.isPhDate(f.date) ? "Choose the date to save." : !f.category_id ? "Choose a category to save." : !f.account_id ? "Choose the account it " + (M.kindById(f.kind).direction === "in" ? "arrived in" : "was paid from") + " to save." : !splitOk ? "Finish the split to save." : !sh.ok ? "Finish Split with others to save." : "";
   } else if (type === "cat") {
     btn.disabled = !(f.name ?? "").trim();
     const rl = $("c-read"), chips = $("c-bucket");   // the reading follows the name as it is typed (the typing box is not redrawn)
@@ -4011,25 +4086,37 @@ async function logExpense(input, label) {
   if (over && !(await askOverdraw(over))) return false;
   const tag_id = S().tags.some((t) => t.id === ledger.settings.active_tag_id) ? ledger.settings.active_tag_id : undefined;
   const g = gcashOf();
-  let drafts, note;
+  let drafts, note, base = S(), who = null;
+  if (input.shares) {   // Split with others (A4): only your share is spending; what the others owe goes on Owed to me, one line per person
+    who = M.planShares(S(), { total: input.amount, shares: input.shares, ids: { account: newId("acct"), people: input.shares.map(() => newId("person")) } });
+    if (!who.ok) { showToast("Could not save: " + who.violations[0].message); return false; }
+    base = who.state;
+  }
   const swapLines = (d) => (input.lines ? { transaction: d.transaction, entries: M.splitCategoryEntry(d.entries, d.transaction.id, input.lines) } : d);   // a split keeps every other rule of the purchase
   if (g && input.account_id === g.account_id) {
     // Spending from the buffer's account takes from the allowance first, then the buffer (spec 6.4).
-    const p = M.planGcashSpend(S(), { transaction_id: input.transaction_id, date: input.date ?? logDay(), payee: input.payee ?? "", category_id: input.category_id, amount: input.amount,
+    const p = M.planGcashSpend(base, { transaction_id: input.transaction_id, date: input.date ?? logDay(), payee: input.payee ?? "", category_id: input.category_id, amount: input.amount,
       gcash_account_id: g.account_id, allowance_envelope_id: g.allowance_id, buffer_envelope_id: g.buffer_id }, new Date());
     if (!p.ok) { showToast("Could not save: " + p.violations[0].message); return false; }
     drafts = [swapLines({ transaction: { ...p.transaction, source: input.source ?? "manual", ...(input.source === "photo" ? { edited_before_verify: false } : {}), ...(input.payee ? { payee: input.payee } : {}), ...(tag_id ? { trip_add: tag_id } : {}) }, entries: p.entries })];
     note = bufferNote(p.violations);
   } else {
     const args = { ...input, tag_id, date: input.date ?? logDay(), reserve_source_id: ledger.settings.reserve_source_id };
-    const plan = input.lines ? M.planSplitExpense(S(), args, new Date()) : M.planExpense(S(), args, new Date());
+    const { shares: _shares, ...plain } = args;
+    const plan = input.lines ? M.planSplitExpense(base, plain, new Date()) : M.planExpense(base, plain, new Date());
     if (!plan.ok) { showToast("Could not save: " + plan.violations[0].message); return false; }
     drafts = plan.drafts;
     note = reserveNote(plan.violations);
   }
+  if (who) {
+    const main = drafts[0], entries = M.shareEntries(main.entries, main.transaction.id, who.owed_account_id, who.shares);
+    const chk = entries ? M.checkTransactionSave(M.applyDrafts(base, drafts.slice(1)), { transaction: main.transaction, entries }) : { ok: false, violations: [{ message: "a receipt split in two kinds cannot also be split with others" }] };
+    if (!chk.ok) { showToast("Could not save: " + chk.violations[0].message); return false; }
+    drafts = [{ transaction: main.transaction, entries }, ...drafts.slice(1)];
+  }
   const settings = { ...ledger.settings, last_account_id: input.account_id, ...(input.drop_scan ? { scan_queue: scanQueue().filter((q) => q.id !== input.drop_scan) } : {}),
     last_account_by_preset: { ...(ledger.settings.last_account_by_preset ?? {}), ...(input.preset_id ? { [input.preset_id]: input.account_id } : {}) }, ...(input.own_recipients ? { own_recipients: input.own_recipients } : {}) };
-  let next = M.applyDrafts(S(), drafts);
+  let next = M.applyDrafts(base, drafts);
   if (input.photo_id) { const a = M.planAttachment(next, { id: input.photo_id, transaction_id: drafts[0].transaction.id }); if (a.ok) next = a.state; }
   const ok = await commit(next, settings);
   if (M.beforeAccountStart(S(), input.account_id, drafts[0].transaction.date)) note = (note ? note + " " : "") + M.BEFORE_START_NOTE;   // L8: said once, at save
@@ -4539,7 +4626,25 @@ async function onClick(el) {
       if (await commit(r.state, { ...ledger.settings, last_account_id: from })) showToast(peso(a.centavos) + " paid to " + card.name + ". Verify it to count it.");
       break;
     }
-    case "cards-eye": ui.cardsShown = !ui.cardsShown; renderScreen(); if (ui.sheet?.type === "register") renderSheet(); break;
+    case "open-person": ui.sheet = { type: "person", id }; ui.form = { amount: ui.cardsShown && M.owedBy(S(), id) > 0 ? shareAmt(M.owedBy(S(), id)) : "", to_id: null }; renderSheet(); break;
+    case "person-paid": {   // they paid you back: ONE draft move into the account that received it (never income)
+      const a = M.parsePesos(ui.form.amount ?? ""), who = M.personName(S(), ui.sheet.id), to = ui.form.to_id;
+      const r = M.planPayBack(S(), { transaction_id: newId("tx"), person_id: ui.sheet.id, amount: a.centavos, to_account_id: to, date: logDay() }, new Date());
+      if (!r.ok) { showToast("Could not save: " + r.violations[0].message); break; }
+      ui.sheet = null; renderSheet();
+      if (await commit(r.state, { ...ledger.settings, last_account_id: to })) showToast(peso(a.centavos) + " from " + who + ". Verify it to count it.");
+      break;
+    }
+    case "person-unpaid": {   // they will not pay: what they still owe becomes your spending, in the category it came from. A second tap, because it changes your spending.
+      if (!ui.form.confirmUnpaid) { ui.form.confirmUnpaid = true; renderSheet(); break; }
+      const who = M.personName(S(), ui.sheet.id), owes = M.owedBy(S(), ui.sheet.id);
+      const r = M.planNotPaid(S(), { transaction_id: newId("tx"), person_id: ui.sheet.id, date: logDay() }, new Date());
+      if (!r.ok) { showToast("Could not save: " + r.violations[0].message); break; }
+      ui.sheet = null; renderSheet();
+      if (await commit(r.state)) showToast(peso(owes) + " that " + who + " owed is now your spending. Verify it to count it.");
+      break;
+    }
+    case "cards-eye": ui.cardsShown = !ui.cardsShown; renderScreen(); if (ui.sheet?.type === "register" || ui.sheet?.type === "person") renderSheet(); break;
     case "open-register": ui.sheet = { type: "register", id, limit: 40 }; ui.form = {}; renderSheet(); break;
     case "register-more": ui.sheet.limit = (ui.sheet.limit ?? 40) + 60; renderSheet(); break;
     case "cat-edit": ui.catEdit = true; ui.confirmRemoveCat = null; renderScreen(); break;
@@ -4945,7 +5050,9 @@ async function onClick(el) {
     case "pick-toggle": if (ui.sheet) { ui.sheet.pick = ui.sheet.pick === el.dataset.key ? null : el.dataset.key; renderSheet(); } break;
     case "pick-rcat": if (ui.sheet) ui.sheet.pick = null; form.refund_cat = id; renderSheet(); break;
     case "pick-cat": if (ui.sheet) ui.sheet.pick = null; form.category_id = id; if (form.split_cat === id) form.split_cat = null; renderSheet(); break;
-    case "toggle-split": form.split = !form.split; renderSheet(); break;
+    case "toggle-split": form.split = !form.split; if (form.split) form.share = false; renderSheet(); break;   // one kind of split at a time: two categories, or with other people
+    case "toggle-share": form.share = !form.share; if (form.share) { form.split = false; if (!form.shares?.length) form.shares = [{ name: "", amt: "", typed: false }]; } renderSheet(); break;
+    case "share-add": form.shares = [...(form.shares ?? []), { name: "", amt: "", typed: false }]; renderSheet(); { const el = document.querySelector(`#sheet [data-field="sh:${form.shares.length - 1}:name"]`); if (el) el.focus(); } break;
     case "pick-split": if (ui.sheet) ui.sheet.pick = null; form.split_cat = id; renderSheet(); break;
     case "open-voice": ui.sheet = { type: "voice" }; ui.form = { spoken: "", lang: firstLanguage() }; renderSheet(); break;
     case "voice-toggle": voiceToggle(); break;
@@ -5154,7 +5261,8 @@ async function onClick(el) {
     case "save-other": {
       const amount = M.parsePesos(form.amount).centavos;
       ui.sheet = null; renderSheet();
-      await logExpense({ transaction_id: newId("tx"), payee: (form.payee ?? "").trim(), category_id: form.category_id, amount, account_id: form.account_id, source: "manual" }, categoryName(form.category_id) + " " + peso(amount));
+      const shares = sharesOfForm(form), mine = amount - (shares ?? []).reduce((n, x) => n + x.amount, 0);
+      await logExpense({ transaction_id: newId("tx"), payee: (form.payee ?? "").trim(), category_id: form.category_id, amount, account_id: form.account_id, source: "manual", ...(shares ? { shares } : {}) }, categoryName(form.category_id) + " " + peso(mine));
       break;
     }
     case "save-tile": {
@@ -5860,6 +5968,11 @@ document.addEventListener("input", (e) => {
   if (ui.sheet && field.startsWith("i:") && ui.form.items) {   // a field of one printed payslip line: i:<line>:<label|amt|hours>
     const [, k, prop] = field.split(":"), it = slipItem(ui.form, k);
     if (it) { it[prop] = e.target.value; if (prop === "label") { const fl = M.itemFlags(it.label); if (fl.back_pay) it.back_pay = true; else delete it.back_pay; if (fl.tax) it.tax = fl.tax; else delete it.tax; } refreshSave(); }
+    return;
+  }
+  if (ui.sheet && field.startsWith("sh:") && ui.form.shares) {   // a person's row of Split with others: sh:<row>:<name|amt>
+    const [, i, prop] = field.split(":"), row = ui.form.shares[Number(i)];
+    if (row) { row[prop] = e.target.value; if (prop === "amt") row.typed = e.target.value.trim() !== ""; refreshSave(); }
     return;
   }
   if (ui.sheet) { ui.form[field] = e.target.value; if (field.startsWith("y_") && ui.form.used) delete ui.form.used[field.slice(2)]; refreshSave(); }

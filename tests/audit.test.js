@@ -65,6 +65,11 @@ function everything() {
   { const target = s.transactions.find((t) => t.payee === "Shop" && t.status === "verified" && s.entries.some((e) => e.transaction_id === t.id && e.account_id === "chk"));
     const p = M.planCorrection(s, { id: target.id, redo_id: nid("redo"), today: "2026-10-20" }, NOW); assert.ok(p.ok, JSON.stringify(p.violations)); step("a correction", M.applyCorrection(s, p)); }
   { const plan = M.planGapRepair(s, { now: NOW }); assert.ok(plan.ok && plan.count > 0, "there is a plain count to repair"); step("a gap repair", M.applyGapRepair(s, plan)); }
+  // Split and Owed to me (A4): 3,000.00 paid for three, Ana pays her 1,000.00 back, Ben never pays his.
+  { const p = M.planSharedExpense(s, { transaction_id: "share1", date: "2026-10-17", payee: "Dinner", category_id: "food", amount: 300000, account_id: "chk", shares: [{ name: "Ana", amount: 100000 }, { name: "Ben", amount: 100000 }], ids: { account: "owed", people: ["ana", "ben"] } }, NOW);
+    assert.ok(p.ok, JSON.stringify(p.violations)); step("a purchase split with others", verifyAll(M.applyDrafts(p.state, p.drafts))); }
+  { const p = M.planPayBack(s, { transaction_id: "back1", person_id: "ana", amount: 100000, to_account_id: "wal", date: "2026-10-18" }, NOW); assert.ok(p.ok, JSON.stringify(p.violations)); step("a pay-back", verifyAll(p.state)); }
+  { const p = M.planNotPaid(s, { transaction_id: "unpaid1", person_id: "ben", date: "2026-10-19" }, NOW); assert.ok(p.ok, JSON.stringify(p.violations)); step("a person who will not pay", verifyAll(p.state)); }
   { const copy = JSON.parse(JSON.stringify({ v: M.LEDGER_VERSION, rev: 1, saved_at: "2026-10-20T11:00:00.000+08:00", state: s, settings: {} })); let written = null;
     s = { ...s }; steps.push("a restore"); assertTrial(copy.state, "a restore (the backup read back)"); everythingRestore = { copy, written }; }
   return { s, steps };
@@ -386,4 +391,36 @@ test("CONSISTENCY (P0-6, one Budget): every view adds up: each line's payday sha
   assert.equal(v.perPayday.reduce((a, p) => a + p.income, 0), v.income.amount, "the paydays' income adds to the one income");
   for (const p of v.perPayday) assert.equal(p.placed + p.left, p.income);
   assert.ok(![...v.lines].some((l) => l.key === "fees") && v.hidden.some((h) => h.id === "fees"), "a hidden category is in no view");
+});
+
+test("OWED TO ME (classification, control totals): your share is the spending, the rest is owed per person, a pay-back is a move, an unpaid share becomes your spending, and the account holds no money", () => {
+  // The control total of the split: what left the account = your share + what each person owes.
+  const legs = S.entries.filter((e) => e.transaction_id === "share1"), owed = M.owedAccount(S);
+  const paid = -legs.find((e) => e.account_id === "chk").amount, yours = legs.find((e) => e.category_id === "food").amount, others = legs.filter((e) => e.account_id === owed.id);
+  assert.deepEqual([paid, yours, others.map((e) => e.amount)], [300000, 100000, [100000, 100000]]);
+  assert.equal(yours + others.reduce((n, e) => n + e.amount, 0), paid, "to the centavo");
+  assert.ok(S.entries.filter((e) => e.account_id === owed.id).every((e) => e.person_id), "every line on the account names its person");
+  // The people add up to the account at every step: after the split, after the pay-back, after the unpaid share.
+  const upTo = (ids) => ({ ...S, transactions: S.transactions.filter((t) => !ids.includes(t.id)), entries: S.entries.filter((e) => !ids.includes(e.transaction_id)) });
+  for (const [st, total, who] of [[upTo(["back1", "unpaid1"]), 200000, [["Ana", 100000], ["Ben", 100000]]], [upTo(["unpaid1"]), 100000, [["Ben", 100000]]], [S, 0, []]]) {
+    const sum = M.owedSummary(st);
+    assert.deepEqual([sum.total, sum.unassigned, sum.people.map((p) => [p.name, p.amount])], [total, 0, who]);
+    assert.equal(sum.total, M.naturalBalance(owed, M.countedEntries(st)), "the account's own balance");
+    assert.equal(sum.people.reduce((n, p) => n + p.amount, 0), sum.total);
+  }
+  // Classification: the split is spending of your share only; the pay-back has no category (not income, not a refund); the unpaid share is spending in the same category.
+  const food = (st) => M.spendingByCategory(st, { month: MONTH }).rows.find((r) => r.category_id === "food")?.amount ?? 0;
+  const without = (id) => upTo([id]);
+  assert.equal(food(S) - food(without("share1")), 100000, "the split adds your share, not the 3,000.00 paid");
+  assert.equal(food(S) - food(without("back1")), 0, "the pay-back changes no spending");
+  assert.equal(S.entries.filter((e) => e.transaction_id === "back1" && e.category_id != null).length, 0, "and has no income line");
+  assert.equal(food(S) - food(without("unpaid1")), 100000, "the share nobody paid is yours: two of the three shares in all");
+  assert.equal(M.spendingByAccount(S, { month: MONTH }).total, M.spendingByCategory(S, { month: MONTH }).total, "Accounts and Category still agree");
+  // The account holds no money: it is in no "in your accounts" figure and no net worth, and nothing else can be put on it.
+  const o = M.accountsOverview(S, { from: FROM, to: TO });
+  assert.ok(!o.money.some((m) => m.account_id === owed.id));
+  assert.equal(M.netWorthSeries(S, { today: "2026-10-20" }).points.at(-1).net, M.netPosition(o.held, o.owe).free, "net worth is still the Cards figure");
+  assert.equal(M.planExpense(S, { transaction_id: "bad1", date: "2026-10-20", category_id: "food", amount: 100, account_id: owed.id }, NOW).violations[0].code, "OWED_NEEDS_PERSON");
+  assert.equal(M.planTransfer(S, { transaction_id: "bad2", date: "2026-10-20", from_account_id: "chk", to_account_id: owed.id, amount: 100, source: "manual" }, NOW).violations[0].code, "OWED_NEEDS_PERSON");
+  assert.equal(M.planCheckIn(S, { id: "bad3", transaction_id: "bad4", date: "2026-10-20", account_id: owed.id, counted_balance: 5, unlogged_category_id: UL }, NOW).violations[0].code, "NOT_COUNTED");
 });

@@ -38,6 +38,19 @@ export function checkReferences(state, transaction, entries) {
   return out;
 }
 
+// Owed to me (A4, data version 12): a line on the "Owed to me" account ALWAYS names the person who owes it, and only such a line may name a person. So what
+// the people owe always adds up to the account, and nothing else (an expense, a move, income, a count) can ever be put on that account by mistake.
+export function checkOwed(state, transaction, entries) {
+  const accounts = new Map(state.accounts.map((a) => [a.id, a])), people = new Set((state.people ?? []).map((p) => p.id)), out = [];
+  for (const e of entries) {
+    const owed = e.account_id != null && accounts.get(e.account_id)?.role === "owed";
+    if (owed && e.person_id == null) out.push(err("OWED_NEEDS_PERSON", "money owed to you must name the person who owes it"));
+    if (e.person_id != null && !owed) out.push(err("PERSON_NOT_OWED", "only money owed to you can name a person"));
+    if (e.person_id != null && !people.has(e.person_id)) out.push(err("UNKNOWN_PERSON", "no person " + e.person_id));
+  }
+  return out;
+}
+
 // 2. Reserve balance >= card outstanding (pending + posted).
 // WARN ONLY, never block: the card purchase already happened in real life, so refusing
 // to record it would make the ledger lie. `worsened` tells the UI whether this save

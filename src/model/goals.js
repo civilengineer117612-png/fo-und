@@ -1,6 +1,6 @@
 // Spec 6: goals, the Emergency Fund target, the overtime rule, hidden-by-default goals.
 // No peso figures here; targets and shares are inputs.
-import { naturalBalance, countedEntries } from "./balances.js";
+import { naturalBalance, countedEntries, holdsMoney } from "./balances.js";
 import { checkTransactionSave } from "./index.js";
 import { phTimestamp } from "./util.js";
 import { validateShape } from "./schema.js";
@@ -108,7 +108,7 @@ export function planGoal(state, input) {
   const account = input.account_id ? state.accounts.find((a) => a.id === input.account_id) : null;
   if (!name) return fail("BAD_NAME", "give the goal a name");
   if (input.target != null && (!Number.isSafeInteger(input.target) || input.target < 0)) return fail("BAD_TARGET", "the target cannot be negative");
-  if (input.account_id && (!account || account.class !== "asset")) return fail("UNKNOWN_ACCOUNT", "choose an account you hold money in, or leave it for later");
+  if (input.account_id && !holdsMoney(account)) return fail("UNKNOWN_ACCOUNT", "choose an account you hold money in, or leave it for later");
   if ((state.goals ?? []).some((g) => g.id === input.id)) return fail("DUPLICATE_ID", "that goal already exists");
   if ((state.goals ?? []).some((g) => g.name.toLowerCase() === name.toLowerCase())) return fail("DUPLICATE_NAME", "you already have a goal with that name");
   const goal = { id: input.id, ...(account ? { account_id: account.id } : {}), name, hidden_by_default: input.hidden_by_default ?? true,
@@ -170,7 +170,7 @@ export function setGoalAccount(state, goalId, accountId) {
   const goal = (state.goals ?? []).find((g) => g.id === goalId);
   if (!goal) return fail("UNKNOWN_GOAL", "no goal " + goalId);
   const account = state.accounts.find((a) => a.id === accountId);
-  if (!account || account.class !== "asset") return fail("UNKNOWN_ACCOUNT", "choose an account you hold money in");
+  if (!holdsMoney(account)) return fail("UNKNOWN_ACCOUNT", "choose an account you hold money in");
   return { ok: true, violations: [], state: { ...state, goals: state.goals.map((g) => (g.id === goalId ? { ...g, account_id: accountId } : g)) } };
 }
 

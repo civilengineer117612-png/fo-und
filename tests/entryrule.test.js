@@ -145,19 +145,19 @@ test("AUDIT: no code outside the shared rule writes a verified status (a creator
 
 test("AUDIT: every file that creates a transaction is on the list reviewed in Step 0, so a new creation path cannot be added without this test being updated", () => {
   const creators = fs.readdirSync(new URL("../src/model/", import.meta.url)).filter((f) => f.endsWith(".js") && /status: "draft"|settle\(/.test(read("../src/model/" + f))).sort();   // a file that builds a transaction literal
-  const reviewed = ["buffer.js", "checkin.js", "corrections.js", "drafts.js", "gaprepair.js", "goals.js", "income.js", "plan.js", "reconcile.js", "refunds.js", "schedules.js", "templates.js", "transfers.js"];
+  const reviewed = ["buffer.js", "checkin.js", "corrections.js", "drafts.js", "gaprepair.js", "goals.js", "income.js", "owed.js", "plan.js", "reconcile.js", "refunds.js", "schedules.js", "templates.js", "transfers.js"];
   assert.deepEqual(creators.filter((f) => !["entryrule.js", "inbox.js"].includes(f)), reviewed, "a file that makes transactions must be reviewed for P0-7 and added here");
 });
 
-// ---------- the data version stays 11: old data is untouched ----------
+// ---------- P0-7 raised no data version: old data is untouched (the version is 12 since A4, Owed to me, which added only the empty list `people`) ----------
 const v11 = () => { const l = M.emptyLedger(); const s = ledger();
   const t = (id, status, extra = {}) => ({ id, date: "2026-10-05", payee: "Old", memo: "", status, source: "manual", created_at: TS, ...(status === "verified" ? { verified_at: TS } : {}), ...extra });
   s.transactions = [t("o1", "verified"), t("o2", "draft"), t("o3", "verified", { verified_by: "verified by count", source: "reconciliation" })];
   s.entries = [{ transaction_id: "o1", account_id: "chk", amount: 5000 }, { transaction_id: "o1", category_id: "cat-salary", amount: -5000 }, { transaction_id: "o2", category_id: "food", amount: 100 }, { transaction_id: "o2", account_id: "chk", amount: -100 },
     { transaction_id: "o3", account_id: "chk", amount: 700 }, { transaction_id: "o3", category_id: UL, amount: -700 }];
   return { ...l, rev: 4, saved_at: TS, state: s, settings: { foo: "bar" } }; };
-test("COMPATIBILITY: a version 11 ledger without verified_by loads, saves and backs up exactly as it is; the same with the field", async () => {
-  assert.equal(M.LEDGER_VERSION, 11, "no data version change");
+test("COMPATIBILITY: a ledger without verified_by loads, saves and backs up exactly as it is; the same with the field", async () => {
+  assert.equal(M.LEDGER_VERSION, 12, "P0-7 changed no data version (it was 11 then; 12 is A4's own step)");
   const ledgerIn = v11(), text = JSON.stringify(ledgerIn), p = M.parseLedger(text);
   assert.ok(p.ok, p.error); assert.equal(p.older, undefined);
   assert.deepEqual(p.ledger, ledgerIn, "loads unchanged");
@@ -170,12 +170,12 @@ test("COMPATIBILITY: a version 11 ledger without verified_by loads, saves and ba
   assert.deepEqual(M.selfCheck(back), []);
 });
 test("COMPATIBILITY: an older backup restores and upgrades with its entries untouched", async () => {
-  const cur = v11(), old = { ...cur, v: 10, state: { ...cur.state } }; delete old.state.payslipItems; delete old.state.payslipItemChanges;
+  const cur = v11(), old = { ...cur, v: 10, state: { ...cur.state } }; delete old.state.payslipItems; delete old.state.payslipItemChanges; delete old.state.people;
   const file = await M.encryptLedgerBackup(old, "a long passphrase for tests"), opened = await M.decryptLedgerBackup(file, "a long passphrase for tests");
   assert.equal(opened.v, 10);
   const restored = M.restoreLedger(M.emptyLedger(), opened, NOW);
   const up = M.upgradeLedger(restored, { now: NOW }); assert.ok(up.ok, up.error);
-  assert.equal(up.ledger.v, 11);
+  assert.equal(up.ledger.v, 12);
   assert.deepEqual(up.ledger.state.transactions, cur.state.transactions, "every entry as it was");
   assert.deepEqual(up.ledger.state.entries, cur.state.entries);
 });
