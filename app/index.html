@@ -339,6 +339,9 @@
   .row.sharetoggle { margin-top: 14px; }
   .owerow { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 8px; margin-bottom: 8px; } .owerow input { margin: 0; } .owerow input + input { text-align: right; font-variant-numeric: tabular-nums; }
   .sharerow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 0 2px; border-top: 1px solid var(--line); margin-top: 12px; font-size: 16px; } .sharerow span { color: var(--muted); } .sharerow b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* Correct this entry (A3): what it was, and what changes once the corrected entry is verified */
+  .wascard { padding: 12px 16px; margin: 4px 0 6px; } .wascard .rc-row, .fxcard .rc-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 15px; } .wascard .rc-row span, .fxcard .rc-row span { color: var(--muted); } .wascard .rc-row b, .fxcard .rc-row b { font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; } .wascard small { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; }
+  .fxcard { padding: 6px 16px; margin: 4px 0 10px; } .fxcard .rc-row { padding: 8px 0; } .fxcard .rc-row + .rc-row { border-top: 1px solid var(--line); }
   .owefor { margin: 0 0 12px; color: var(--muted); font-size: 15px; }
   .owelist { margin: 0 0 8px; } .owelist .rc-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; font-size: 15px; } .owelist .rc-row span { color: var(--muted); } .owelist .rc-row b { font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .row .amt { white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }   /* the small line under an amount ("you owe", "Remove") lines up with the amount's right edge */

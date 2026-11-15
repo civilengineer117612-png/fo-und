@@ -1896,6 +1896,62 @@ const reserveCovers = () => M.reserveCover(S().accounts, M.countedEntries(S()));
 // Under a "Paid from" row of chips: one thin bar for each reserve account, with its picture, so the owed and free parts are seen before choosing.
 const reserveStrip = () => reserveCovers().map((c) => { const a = S().accounts.find((x) => x.id === c.reserve_id); return a && !a.archived ? `<div class="coverrow">${iconOf(a, 20)}${coverBar(c.share, a.name + ": " + coverLabel(c))}</div>` : ""; }).join("");
 // `pockets`: also offer the savings pockets (a statement can be from one). An account already chosen is always listed, even a pocket, so editing never loses it.
+// ---------- Correct this entry (A3, owner Nov 15): ONE window shows the entry, the fix and what it does ----------
+// A plain expense or a move comes back as a fresh DRAFT with the corrected fields (it waits in Verify, owner Nov 15); income, a split and a count are cancelled
+// only. "Once you verify it" lists what changes per category and month and per account (`correctionEffect`), written in place while typing (never a redraw).
+const isMoveDesc = (d) => d.kind === "transfer";
+function correctChanges(t, f) {
+  const d = describe(t), a = M.parsePesos(f.amount ?? ""), out = {};
+  if (!a.ok || !(a.centavos > 0)) return { error: "Type the right amount." };
+  out.amount = a.centavos;
+  if (f.date !== undefined) { if (!M.isPhDate(f.date)) return { error: "Choose the date." }; out.date = f.date; }
+  if (f.payee !== undefined) out.payee = f.payee.trim();
+  if (isMoveDesc(d)) {
+    if (f.from_id) out.from_account_id = f.from_id;
+    if (f.to_id) out.to_account_id = f.to_id;
+    if ((out.from_account_id ?? d.from_id) === (out.to_account_id ?? d.to_id)) return { error: "Choose two different accounts." };
+    if (f.fee !== undefined) { const fee = f.fee.trim() ? M.parsePesos(f.fee) : { ok: true, centavos: 0 }; if (!fee.ok || fee.centavos < 0) return { error: "Type the fee like 15 or 15.50, or leave it empty." }; out.fee = fee.centavos; }
+  } else {
+    if (f.category_id) out.category_id = f.category_id;
+    if (f.account_id) out.account_id = f.account_id;
+  }
+  return { changes: out };
+}
+function correctPlan(t, f) {
+  const base = { id: t.id, redo_id: "probe", today: today(), reserve_source_id: ledger.settings.reserve_source_id };
+  const probe = M.planCorrection(S(), base);
+  if (!probe.ok || !probe.redo) return { plan: probe };   // cancelled only: nothing to type
+  const c = correctChanges(t, f);
+  if (c.error) return { plan: null, why: c.error };
+  const plan = M.planCorrection(S(), { ...base, changes: c.changes });
+  return plan.ok ? { plan, changes: c.changes } : { plan: null, why: "This cannot be saved: " + plan.violations[0].message };
+}
+function correctRows(plan) {
+  if (!plan) return `<p class="note" style="margin:8px 0">\u2014</p>`;
+  const rows = M.correctionEffect(S(), plan), acct = (id) => S().accounts.find((a) => a.id === id);
+  if (!rows.length) return `<div class="rc-row"><span>Nothing changes</span><b></b></div>`;
+  return rows.map((r) => { const name = r.kind === "category" ? r.name + ", " + monthLabel(r.month).split(" ")[0] : r.name, card = r.kind === "account" && acct(r.id)?.class === "liability";
+    return `<div class="rc-row"><span>${esc(name)}</span><b>${card ? "owes " : ""}${peso(Math.abs(r.change))} ${r.change < 0 ? "less" : "more"}</b></div>`; }).join("");
+}
+function correctWindow(t, pc) {
+  const d = describe(t), f = ui.form, redo = !!pc.redo, acct = S().accounts.find((a) => a.id === (d.account_id ?? d.from_id));
+  const was = [d.category_id ? categoryName(d.category_id) : isMoveDesc(d) ? d.detail : "", !isMoveDesc(d) && acct ? acct.name : "", listDate(t.date)].filter(Boolean).join(" \u00b7 ");
+  const { plan, why } = redo ? correctPlan(t, f) : { plan: pc };
+  const more = !redo ? "" : !f.more ? `<p style="margin:10px 0 4px"><button class="act" data-action="correct-more" style="width:100%">Change something else</button></p>`
+    : `<label for="f-date">Date</label><input id="f-date" data-field="date" type="date" value="${esc(f.date ?? t.date)}">
+       <label for="f-payee">${isMoveDesc(d) ? "Name (optional)" : "Item"}</label><input id="f-payee" data-field="payee" value="${esc(f.payee ?? t.payee ?? "")}" autocomplete="off">
+       ${isMoveDesc(d) ? `<label>From${REQ}</label>${accountPicker(accountsFor(null, true), f.from_id ?? d.from_id, "pick-from", "from", "Choose an account")}<label>To${REQ}</label>${accountPicker(accountsFor(null, true), f.to_id ?? d.to_id, "pick-to", "to", "Choose an account")}<label for="f-fee">Fee (\u20B1, optional)</label><input id="f-fee" data-field="fee" inputmode="decimal" value="${esc(f.fee ?? "")}" autocomplete="off">`
+         : `<label>Category${REQ}</label>${categoryPicker(pickCategoriesWith(f.category_id ?? d.category_id), f.category_id ?? d.category_id)}<label>Paid from${REQ}</label>${paidChips(f.account_id ?? d.account_id)}`}`;
+  return `<h3>Correct this entry</h3>
+    <label>Was</label><div class="card wascard"><div class="rc-row"><span>${esc(d.title)}</span><b>${peso(d.total ?? d.amount)}</b></div><small>${esc(was)}</small></div>
+    ${redo ? `<label for="f-amount">Should be (\u20B1)${REQ}</label><input id="f-amount" data-field="amount" inputmode="decimal" value="${esc(f.amount ?? "")}" autocomplete="off">${more}`
+      : `<p class="note">${t.source === "reconciliation" ? "A count is cancelled only. Log what explains it, like a card payment, then count again." : "This kind of entry is cancelled only. Log the right one again by hand."}</p>`}
+    <label>${redo ? "Once you verify it" : "What changes"}</label><div class="card fxcard" id="fx-rows">${correctRows(plan)}</div>
+    <p class="note small" id="correct-why" role="status" style="margin:0 0 6px">${esc(why ?? "")}</p>
+    <p class="note small" style="margin:0 0 6px">The old entry stays, marked corrected.${redo ? " The corrected one waits in Verify." : ""}</p>
+    <p><button class="primary" id="f-save" data-action="do-correct" data-id="${esc(t.id)}" style="margin-top:6px"${redo && !plan ? " disabled" : ""}>${redo ? "Correct it" : "Cancel it"}</button></p>`;
+}
+
 // ---------- Split with others (A4): only your share is spending; the rest is owed to you, per person ----------
 // form.share: on or off. form.shares: [{name, amt (text), typed}]. A person whose amount was not typed gets an EQUAL part of what is left (you take one part too,
 // and the odd centavos); typing an amount fixes it. A row with no name and no typed amount is not a person yet and is ignored.
@@ -3161,14 +3217,7 @@ function renderSheet() {
       <p><button class="primary" id="f-save" data-action="save-checkin" disabled>Save count</button></p>`;
   } else if (sh.type === "correct") {
     const list = M.correctable(S(), today()), pick = list.find((t) => t.id === sh.id), pc = pick ? M.planCorrection(S(), { id: pick.id, redo_id: "probe", today: today() }) : null;
-    const line = (t) => { const d = describe(t); return `${esc(d.title)} \u00b7 ${esc(yearDate(t.date))} \u00b7 ${signed(d)}`; };   // always with the year: an old statement can be verified this week
-    body = pick
-      ? `<h3>Put right this entry</h3><p>${line(pick)}</p>
-        <p class="note">It stays in your list, marked corrected, and a second entry cancels it. Nothing is erased or edited.</p>
-        <p class="note">${pc.redo ? "A new draft with the same details waits in Verify. Fix the amount there and verify it." : pick.source === "reconciliation" ? "A count is cancelled only. Log what explains it, like a card payment, then count again." : "This kind of entry is cancelled only. Log the right one again by hand."}</p>
-        <p><button class="primary" data-action="do-correct" data-id="${esc(pick.id)}" style="margin-top:14px">Cancel it${pc.redo ? " and enter it again" : ""}</button></p>
-        <p class="center"><button class="act" data-action="back-correct">Back to the list</button></p>`
-      : `<h3>Which entry was wrong?</h3><p class="note">Verified in the last two weeks.</p>
+    body = pick ? correctWindow(pick, pc) : `<h3>Which entry was wrong?</h3><p class="note">Verified in the last two weeks.</p>
         ${list.length ? M.groupByDay(list).map((g) => `<h4 class="dayhead">${esc(yearDate(g[0].date))}</h4>${g.map((t) => { const d = describe(t); return `<button class="choice dayrow" data-action="pick-correct" data-id="${esc(t.id)}"><span>${esc(d.title)}</span><span class="bval">${signed(d)}</span></button>`; }).join("")}`).join("") : `<p class="note">Nothing verified in the last two weeks.</p>`}`;   // one heading per day, its entries indented under it
   } else if (sh.type === "survey") {
     const w = thisWeek(), auto = M.autoFillSurvey(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID, week_start: w.week_start, week_end: w.week_end });
@@ -3854,6 +3903,9 @@ function refreshSave() {
       setHtml(box, (less ? `<button data-action="count-paid" style="width:100%">I paid the card: log ${peso(less)}</button>` : "") + (gap !== 0 ? `<p class="note small">Count your other accounts too. Then the Weekly review shows every gap side by side and asks what happened.</p>` : ""));
     }
     setText(btn, "Save count");
+  } else if (type === "correct" && ui.sheet.id) {
+    const t = S().transactions.find((x) => x.id === ui.sheet.id), pc = t ? M.planCorrection(S(), { id: t.id, redo_id: "probe", today: today() }) : null;
+    if (t && pc?.ok && pc.redo) { const { plan, why } = correctPlan(t, f); btn.disabled = !plan; const fx = $("fx-rows"), w = $("correct-why"); if (fx) setHtml(fx, correctRows(plan)); if (w) setText(w, why ?? ""); }
   } else if (type === "person") {
     const a = M.parsePesos(f.amount ?? ""), owes = M.owedBy(S(), ui.sheet.id), over = a.ok && a.centavos > owes, w = $("person-why");
     btn.disabled = !(a.ok && a.centavos > 0 && !over && f.to_id);
@@ -4461,16 +4513,19 @@ async function onClick(el) {
     }
     case "count-tick": { const t = new Set(ui.form.ticked ?? []); t.has(id) ? t.delete(id) : t.add(id); ui.form.ticked = [...t]; renderSheet(); break; }
     case "open-correct": ui.correctAt = 0; ui.sheet = { type: "correct" }; ui.form = {}; renderSheet(); break;
-    case "pick-correct": ui.correctAt = document.querySelector("#sheet .sheet")?.scrollTop ?? 0; ui.sheet = { type: "correct", id }; renderSheet(); break;   // remember the place in the list
+    case "pick-correct": { ui.correctAt = document.querySelector("#sheet .sheet")?.scrollTop ?? 0; ui.sheet = { type: "correct", id };   // remember the place in the list
+      const t = S().transactions.find((x) => x.id === id), d = t ? describe(t) : null; ui.form = d ? { amount: ((d.total ?? d.amount) / 100).toFixed(2) } : {}; renderSheet(); break; }
+    case "correct-more": form.more = true; renderSheet(); { const el = document.getElementById("f-date"); if (el) el.scrollIntoView({ block: "nearest" }); } break;   // remember the place in the list
     case "back-correct": ui.sheet = { type: "correct" }; ui.form = {}; renderSheet(); { const box = document.querySelector("#sheet .sheet"); if (box) box.scrollTop = ui.correctAt ?? 0; } break;
     case "do-correct": {
-      const plan = M.planCorrection(S(), { id, redo_id: newId("fix"), reserve_source_id: ledger.settings.reserve_source_id, today: today() }, new Date());
+      const t0 = S().transactions.find((x) => x.id === id), fixes = t0 ? correctPlan(t0, form) : {};   // the corrected fields typed in the window (none for a cancel-only entry)
+      const plan = M.planCorrection(S(), { id, redo_id: newId("fix"), reserve_source_id: ledger.settings.reserve_source_id, today: today(), ...(fixes.changes ? { changes: fixes.changes } : {}) }, new Date());
       if (!plan.ok) { showToast("Could not correct: " + plan.violations[0].message); break; }
       if (M.alreadyCancelled(S(), plan)) { showToast("That entry is already cancelled."); break; }
       ui.sheet = null; renderSheet();
       await commit(M.applyCorrection(S(), plan));
       if (M.correctable(S(), today()).length) { ui.sheet = { type: "correct" }; ui.form = {}; renderSheet(); const box = document.querySelector("#sheet .sheet"); if (box) box.scrollTop = ui.correctAt ?? 0; }   // more to put right: stay in the list, at the same place
-      showToast(plan.redo ? "Cancelled. Fix the new draft in Verify." : "Cancelled. Log the right entry again.");
+      showToast(plan.redo ? "Corrected. The new entry waits in Verify." : "Cancelled. Log the right entry again.");
       break;
     }
     case "open-survey": {

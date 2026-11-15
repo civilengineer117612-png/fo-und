@@ -35,7 +35,10 @@ export const groupByDay = (list) => list.reduce((out, t) => { const g = out[out.
 // "Corrected" for an entry that has been cancelled, "Correction" for the cancelling entry itself, else null.
 export const correctionTag = (state, t) => (t.reverses ? "Correction" : isReversed(state, t.id) ? "Corrected" : null);
 
-// input: {id, redo_id, reserve_source_id?, today, now?}.
+// input: {id, redo_id, reserve_source_id?, today, changes?}. `changes` (A3, owner Nov 15: ONE window shows the entry, the fix and what it does) are the
+// corrected fields of the fresh draft: for a plain expense {amount?, date?, payee?, category_id?, account_id?}; for a move {amount?, date?, payee?,
+// from_account_id?, to_account_id?, fee?}. A field left out keeps the old value, so no changes is the old behaviour (the same values, fixed in Verify).
+// The fresh draft is a DRAFT (owner, Nov 15: "wait in Verify"); only the cancelling entries are verified, as a correction always was.
 // Returns {ok, violations, transactions, entries, redo}: the cancelling entries to add (the entry and its generated reserve transfer or fee), and the draft to wait in Verify
 // ({transaction, entries}[] or null when the entry is not a plain expense; then the right entry is logged again by hand).
 export function planCorrection(state, input, now = new Date()) {
@@ -63,10 +66,11 @@ export function planCorrection(state, input, now = new Date()) {
     && (probe.categories.find((c) => c.id === cat.category_id)?.kind === "expense");
   let redo = null;
   const moved = mine.length === 2 && mine.every((e) => e.account_id != null);   // a move between two of the owner's accounts, with its fee when it had one
+  const ch = input.changes ?? {};
   if (plain) {
     const p = planExpense(probe, {
-      transaction_id: input.redo_id, date: original.date, payee: original.payee, memo: original.memo, category_id: cat.category_id, amount: cat.amount,
-      account_id: acct.account_id, source: ["manual", "preset", "photo", "voice", "import"].includes(original.source) ? original.source : "manual",
+      transaction_id: input.redo_id, date: ch.date ?? original.date, payee: ch.payee ?? original.payee, memo: original.memo, category_id: ch.category_id ?? cat.category_id, amount: ch.amount ?? cat.amount,
+      account_id: ch.account_id ?? acct.account_id, source: ["manual", "preset", "photo", "voice", "import"].includes(original.source) ? original.source : "manual",
       reserve_source_id: input.reserve_source_id, ...(original.trip_add ? { tag_id: original.trip_add } : {}),
     }, now);
     if (!p.ok) return { ok: false, violations: p.violations, transactions: [], entries: [], redo: null };
@@ -74,8 +78,8 @@ export function planCorrection(state, input, now = new Date()) {
   } else if (moved) {
     const to = mine.find((e) => e.amount > 0), from = mine.find((e) => e.amount < 0);
     const p = planTransfer(probe, {
-      transaction_id: input.redo_id, date: original.date, from_account_id: from.account_id, to_account_id: to.account_id, amount: to.amount,
-      fee: feeOf(state, original.id).amount, payee: original.payee, trip_id: original.trip_add ?? null, source: original.source === "photo" ? "photo" : "manual",
+      transaction_id: input.redo_id, date: ch.date ?? original.date, from_account_id: ch.from_account_id ?? from.account_id, to_account_id: ch.to_account_id ?? to.account_id, amount: ch.amount ?? to.amount,
+      fee: ch.fee ?? feeOf(state, original.id).amount, payee: ch.payee ?? original.payee, trip_id: original.trip_add ?? null, source: original.source === "photo" ? "photo" : "manual",
     }, now);
     if (!p.ok) return { ok: false, violations: p.violations, transactions: [], entries: [], redo: null };
     const keep = new Set([input.redo_id, "fee:" + input.redo_id]);
@@ -97,4 +101,26 @@ export function applyCorrection(state, plan) {
   if (alreadyCancelled(state, plan)) return state;
   const next = { ...state, transactions: [...state.transactions, ...plan.transactions], entries: [...state.entries, ...plan.entries] };
   return plan.redo ? applyDrafts(next, plan.redo) : next;
+}
+
+// What a correction does, ONCE ITS FRESH DRAFT IS VERIFIED (A3, owner Nov 15): the cancelling entries plus the fresh draft, added up per spending or income
+// category and month, and per account. Pure: nothing is saved. Rows with no change are left out. Each row: {kind: "category" | "account", id, name,
+// month? ("YYYY-MM", categories only), change}, where change is in the row's own sense: more spending, more income, more money in the account, more owed on a card
+// (a minus is less). A "cancelled only" entry (income, a split, a count) has no fresh draft, so its rows are what cancelling it alone does.
+export function correctionEffect(state, plan) {
+  const legs = [...plan.entries, ...(plan.redo ?? []).flatMap((d) => d.entries)];
+  const dateOf = new Map([...plan.transactions, ...(plan.redo ?? []).map((d) => d.transaction)].map((t) => [t.id, t.date]));
+  const cats = new Map(state.categories.map((c) => [c.id, c])), accts = new Map(state.accounts.map((a) => [a.id, a])), sums = new Map();
+  for (const e of legs) {
+    const key = e.category_id != null ? "c|" + e.category_id + "|" + dateOf.get(e.transaction_id).slice(0, 7) : "a|" + e.account_id;
+    sums.set(key, (sums.get(key) ?? 0) + e.amount);
+  }
+  const rows = [];
+  for (const [key, sum] of sums) {
+    if (sum === 0) continue;
+    const [k, id, month] = key.split("|");
+    if (k === "c") { const c = cats.get(id); rows.push({ kind: "category", id, name: c?.name ?? id, month, change: c?.kind === "income" ? -sum : sum }); }
+    else { const a = accts.get(id); rows.push({ kind: "account", id, name: a?.name ?? id, change: a?.class === "liability" ? -sum : sum }); }
+  }
+  return rows.sort((x, y) => (x.kind === y.kind ? 0 : x.kind === "category" ? -1 : 1) || (x.month ?? "").localeCompare(y.month ?? "") || Math.abs(y.change) - Math.abs(x.change) || x.name.localeCompare(y.name));
 }
