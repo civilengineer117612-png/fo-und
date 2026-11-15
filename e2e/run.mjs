@@ -534,8 +534,9 @@ check(await page.evaluate(async () => localStorage.length === 0 && !(await index
 await page.goto(BASE);
 await page.waitForSelector("#nav button"); await dismissNotice(page);
 check((await text(page, "#screen")).includes("No data on this device"), "the empty phone says so, on Log");
-await menuGo(page, "Setup");
-await page.click('button:has-text("Restore from a backup")');
+// A1 (Nov 15): an empty phone now opens on the first-run setup, so the restore starts from its "I have a backup" (today's Restore). Before, this
+// went to Setup, Restore from a backup; the restore window and every check below are the same.
+await page.click('#sheet button:has-text("I have a backup")');
 check(await page.locator("#f-save").isDisabled(), "opening is off until a file and passphrase are given");
 await page.setInputFiles("#r-file", file);
 await page.fill("#r-pass", "a different passphrase");
@@ -551,6 +552,8 @@ await page.click("#f-save");
 check((await text(page, "#sheet")).includes("Tap again to replace"), "replacing asks for a second tap");
 await Promise.all([page.waitForNavigation(), page.click("#f-save")]);
 await page.waitForSelector("#nav button");
+check(await seen(page, "#sheet", "Your ledger is back") && (await text(page, "#sheet")).includes("Ledger check: OK") && await page.locator("#sheet .fr").count() === 0, "A1: restored from the setup, the rest of the setup is skipped and the ledger check is shown");
+await page.click('#sheet button:has-text("Got it")');
 await menuGo(page, "Setup");
 check(await seen(page, "#screen", "Test Cash") && (await text(page, "#screen")).includes("Test Card"), "the accounts are back");
 await page.click('#nav button:has-text("Log")');
