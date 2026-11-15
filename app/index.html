@@ -774,10 +774,31 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .floatnote .fn-x { flex: none; width: 44px; padding: 0; color: var(--muted); display: flex; align-items: center; justify-content: center; }
   button.qmark { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; min-height: 44px; padding: 0; margin: -6px 0 -6px auto; color: var(--muted); }
   .modebar button { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-width: 44px; min-height: 44px; padding: 0; text-decoration: none; color: var(--ink); }
+  /* FIRST-RUN SETUP (owner, Nov 15, overhaul A1): one step fills the screen; the thin bar grows, the step slides in once. Reduce Motion: still. */
+  .sheet.full { top: 0; max-height: none; height: 100%; border-top: 0; border-radius: 0; background: var(--ground); display: flex; flex-direction: column; padding-top: calc(env(safe-area-inset-top) + 12px); padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
+  .sheet.full.enter { animation: fadein var(--t-move) var(--ease-out); }
+  .fr { display: flex; flex-direction: column; flex: 1; width: 100%; max-width: 480px; margin: 0 auto; }
+  .frbar { height: 3px; background: var(--track); border-radius: 3px; overflow: hidden; } .frbar span { display: block; height: 100%; background: var(--accent); transition: width var(--t-move) var(--ease-out); }
+  .frn { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+  .frtitle { font-size: 22px; font-weight: 700; margin: 16px 0 4px; }
+  .frpage { flex: 1; } .frpage.fr-fwd { animation: frfwd var(--t-move) var(--ease-out); } .frpage.fr-back { animation: frback var(--t-move) var(--ease-out); }
+  @keyframes frfwd { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes frback { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .frlist { padding: 4px 16px; margin: 12px 0; } .frlist > p { margin: 4px 0 12px; }
+  .frrow { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 0; border-top: 1px solid var(--line); } .frrow:first-child { border-top: 0; }
+  .frrow .st { flex: 1; min-width: 0; } .frrow .st b { display: block; font-weight: 600; font-size: 15px; } .frrow .st small { display: block; color: var(--muted); font-size: 13px; line-height: 18px; }
+  .frrow .amt { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; font-size: 15px; }
+  .sheet.full .card { background: var(--surface); }
+  .fric { width: 36px; height: 36px; flex: none; display: flex; align-items: center; justify-content: center; color: var(--accent); }
+  .frform { padding: 4px 16px 4px; margin: 12px 0; } .frform .seg { margin-top: 12px; }
+  .frpair { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; } .frpair button { width: 100%; margin: 0; min-height: 52px; }
+  .frpair2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .fracts { padding-top: 16px; } .fracts p { margin: 8px 0 0; }
+  button.chip.frchip { min-width: 56px; min-height: 44px; flex: none; }
   /* REDUCE MOTION (owner, Nov 12): nothing slides, fades or eases when the phone asks for less motion; every state is shown at once.
      Loops (how-to clips, intro drawings, the listening wave, arranging) have their own rules that show the finished frame. */
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0s !important; transition-delay: 0s !important; }
-    #screen.swap, .viewbody.fade, .sheet.enter, .sheet.center.enter, #scrim.enter, #menu .drawer.enter, #menu .scrim.enter, #menu.leaving .drawer, #menu.leaving .scrim, .chev.up.flip, #entries-list.drop { animation: none !important; } }
+    #screen.swap, .viewbody.fade, .sheet.enter, .sheet.center.enter, .sheet.full.enter, .frpage.fr-fwd, .frpage.fr-back, #scrim.enter, #menu .drawer.enter, #menu .scrim.enter, #menu.leaving .drawer, #menu.leaving .scrim, .chev.up.flip, #entries-list.drop { animation: none !important; } }
   .acklist .ackrow { padding: 10px 0; border-top: 1px solid var(--line); } .acklist .ackrow:first-child { border-top: 0; }   /* Check these amounts */
   .ack-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; } .ack-l { color: var(--muted); font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ack-f { font-weight: 600; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; } .ack-sub { color: var(--muted); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }

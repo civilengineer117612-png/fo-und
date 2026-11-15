@@ -34,7 +34,6 @@ const failingMonthHtml = (lines, open) => {
 };
 const newId = (prefix) => prefix + "-" + crypto.randomUUID();
 const peso = M.formatPesos;
-const BACKUP_NOTE_DAYS = 7;   // the Log page mentions a missing or old backup once it is a week old
 
 let ledger = M.emptyLedger();   // {rev, state, settings}
 let device = { status: "OK", message: "", allowEntry: true };
@@ -549,7 +548,7 @@ function viewLog() {
   const age = M.daysSinceBackup(ledger.settings, today());
   // Two quiet reminders, shown as ONE floating notification at a time (owner, Nov 11): it is not a button row, it can be sent away (this session only), and the other one follows.
   const notes = [due ? { id: "verify", text: `${due} earlier ${due === 1 ? "entry" : "entries"} to verify`, go: 'data-action="tab" data-tab="verify"' } : null,
-    age === null || age >= BACKUP_NOTE_DAYS ? { id: "backup", text: age === null ? "No backup yet" : "Last backup " + age + " days ago", go: 'data-action="tab" data-tab="setup" data-page="backup"' } : null].filter((n) => n && !ui.noteOff?.[n.id]);
+    M.backupReminderDue(ledger.settings, age) ? { id: "backup", text: age === null ? "No backup yet" : "Last backup " + age + " days ago", go: 'data-action="tab" data-tab="setup" data-page="backup"' } : null].filter((n) => n && !ui.noteOff?.[n.id]);
   const floatNote = notes.length ? `<div class="floatnote" role="status"><button class="fn-go" ${notes[0].go}><span class="fn-dot" aria-hidden="true"></span>${esc(notes[0].text)}</button><button class="fn-x" data-action="dismiss-note" data-id="${notes[0].id}" aria-label="Dismiss this reminder"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>` : "";
   const trip = S().tags.find((t) => t.id === ledger.settings.active_tag_id);
   const tripNote = trip ? `<p class="note">Tagging new entries: ${esc(trip.name)}. <button class="act" data-action="stop-trip">Stop</button></p>` : "";
@@ -1770,6 +1769,7 @@ function viewSetup() {
     ${ui.moreBackup ? singles : ""}` : ""}
     ${ui.restoreCopies?.[0] ? `<p><button class="act" data-action="undo-restore">${ui.confirmUndo ? "Tap again to put back. What is here now is kept." : ui.restoreCopies[0].kind === "put-back" ? "Undo put back" : "Undo last restore"}</button></p><p class="note small">Saved ${esc(fullDate(ui.restoreCopies[0].at.slice(0, 10)))}, before the data was replaced.</p>` : ""}
     ${ledger.settings.last_pictures_backup_at && pics ? `<p class="note">Pictures last backed up ${esc(longDate(ledger.settings.last_pictures_backup_at.slice(0, 10)))}.</p>` : ""}
+    <div class="row pocketrow" id="backup-reminder"><div><b>Backup reminder</b><small>A line on Log when the last backup is a week old.</small></div><div><button class="chip" data-action="toggle-backup-reminder" aria-pressed="${M.backupReminderOn(ledger.settings)}">${M.backupReminderOn(ledger.settings) ? "On" : "Off"}</button></div></div>
     <h2>Spreadsheet</h2>
     <p class="note">A plain list of your entries, to open in Numbers or Excel.</p>
     <p><button data-action="open-csv" style="width:100%">Export entries</button></p>
@@ -2870,6 +2870,92 @@ function lockPage(on) {
   if (on && lockY === null) { lockY = window.scrollY; document.body.style.top = -lockY + "px"; document.body.classList.add("locked"); }
   else if (!on && lockY !== null) { const y = lockY; lockY = null; document.body.classList.remove("locked"); document.body.style.top = ""; window.scrollTo(0, y); }
 }
+// ---------- first-run setup (owner, Nov 15, overhaul A1; src/model/firstrun.js) ----------
+// A brand-new install shows five steps in place of the first-run notice and the "Make it yours" card. One step at a time fills the screen; the
+// step slides in (--t-move, still under Reduce Motion), the thin bar at the top grows. No money is counted up: figures are written as they are.
+// `ui.fr` = {step, anim, adding}; the step's typed boxes live in `ui.fr.form`, which IS `ui.form` while the setup is on screen, so a window opened
+// from a step (the backup, the app lock, Restore) gets its own form and the step's boxes are still there when that window closes and the step comes back.
+const FR_ICON = { phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>', check: '<path d="m5 12 4 4 10-10"/>', lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>' };
+const frIcon = (k) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${FR_ICON[k]}</svg>`;
+const frSwitch = (action, on, label) => `<button class="chip frchip" data-action="${action}" aria-pressed="${on}" aria-label="${esc(label)}: ${on ? "On" : "Off"}">${on ? "On" : "Off"}</button>`;
+function frBody() {
+  const fr = ui.fr, f = ui.form, n = fr.step, anim = fr.anim ? ` fr-${fr.anim}` : "";
+  fr.anim = null;   // slides once, when the step changes; a redraw inside a step stays still
+  const head = `<div class="frbar" aria-hidden="true"><span style="width:${(n / M.FIRSTRUN_STEPS) * 100}%"></span></div><p class="frn">Step ${n} of ${M.FIRSTRUN_STEPS}</p>`;
+  const backNext = (next = "Next") => `<div class="frpair"><button data-action="fr-back">Back</button><button class="primary" data-action="fr-next">${next}</button></div>`;
+  let page = "", acts = "";
+  if (n === 1) {
+    page = `<h3 class="frtitle">Welcome to fo/und</h3><p class="note">Log what you spend, then check it against what you really have.</p>
+      <div class="card frlist">${M.FIRSTRUN_WELCOME.map((r) => `<div class="frrow"><span class="fric">${frIcon(r.icon)}</span><span class="st"><b>${esc(r.title)}</b><small>${esc(r.sub)}</small></span></div>`).join("")}</div>
+      <p class="note small">iPhone: add fo/und to the Home Screen and open it from the icon.</p>`;
+    acts = `<p><button class="primary" data-action="fr-next">Start fresh</button></p><p><button data-action="fr-restore" style="width:100%">I have a backup</button></p>`;
+  } else if (n === 2) {
+    const accts = orderedAccts(activeAccounts()), open = fr.adding || accts.length === 0, card = f.akind === "liability";
+    const rows = accts.map((a) => `<div class="frrow">${iconOf(a, 36)}<span class="st"><b>${esc(a.name)}</b><small>${a.class === "liability" ? "Credit card, you owe" : isCash(a) ? "Cash" : "Bank or wallet"}</small></span><span class="amt">${peso(M.naturalBalance(a, M.countedEntries(S())))}</span></div>`).join("");
+    const form = `<div class="card frform"><label for="fr-aname">Name${REQ}</label><input id="fr-aname" data-field="aname" value="${esc(f.aname ?? "")}" autocomplete="off" enterkeyhint="next">
+      <div class="seg" role="group" aria-label="Kind of account"><button data-action="fr-akind" data-id="asset" aria-pressed="${!card}">Bank, wallet or cash</button><button data-action="fr-akind" data-id="liability" aria-pressed="${card}">Credit card</button></div>
+      <label for="fr-aopen">${card ? "What you owe on it today" : "What is in it today"} (₱)</label><input id="fr-aopen" data-field="aopen" inputmode="decimal" value="${esc(f.aopen ?? "")}" placeholder="0.00" autocomplete="off">
+      ${fr.err ? `<p id="fr-err" role="alert" class="note"><b>${esc(fr.err)}</b></p>` : ""}
+      <p><button data-action="fr-add-acct" style="width:100%">Add this account</button></p></div>`;
+    page = `<h3 class="frtitle">What do you pay from?</h3><p class="note">Add each account with what is in it today. For a credit card, what you owe today.</p>
+      ${rows ? `<div class="card frlist">${rows}</div>` : ""}${open ? form : `<p><button data-action="fr-add-open" style="width:100%">+ Add another account</button></p>`}
+      <p class="note small">Change or remove them later in Setup, Accounts. Spending dated before today does not change these amounts.</p>`;
+    acts = backNext();
+  } else if (n === 3) {
+    const k = f.kind ?? "twice", chip = (id, t) => `<button class="chip" data-action="bv-kind" data-id="${id}" aria-pressed="${k === id}">${t}</button>`, WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const fields = k === "twice" ? `<div class="frpair2"><div><label for="fr-d1">First payday</label><input id="fr-d1" data-field="d1" inputmode="numeric" value="${esc(f.d1 ?? "")}" autocomplete="off"></div><div><label for="fr-d2">Second payday</label><input id="fr-d2" data-field="d2" inputmode="text" value="${esc(f.d2 ?? "")}" autocomplete="off"></div></div><p class="note small">A day of the month from 1 to 28; the second can be last.</p>`
+      : k === "once" ? `<label for="fr-d1">Payday: day of the month (1 to 28), or last</label><input id="fr-d1" data-field="d1" inputmode="text" value="${esc(f.d1 ?? "")}" autocomplete="off">`
+      : k === "biweekly" ? `<label for="fr-start">One of your paydays</label><input id="fr-start" type="date" data-field="start" value="${esc(f.start ?? "")}"><p class="note small">The others follow every two weeks.</p>`
+      : `<label>Payday each week</label><div class="seg" role="group" aria-label="Weekday">${WD.map((d, i) => `<button data-action="bv-wd" data-id="${i}" aria-pressed="${Number(f.weekday) === i}">${d}</button>`).join("")}</div>`;
+    page = `<h3 class="frtitle">When are you paid?</h3><p class="note">Optional. Budget can then show each payday.</p>
+      <div class="chips">${chip("twice", "Twice a month")}${chip("biweekly", "Every 2 weeks")}${chip("once", "Once a month")}${chip("weekly", "Every week")}</div>
+      ${fields}<label for="fr-pay">Pay each month (₱), if you know it</label><input id="fr-pay" data-field="pay" inputmode="decimal" value="${esc(f.pay ?? "")}" placeholder="0.00" autocomplete="off">
+      <p class="note small">What reaches your account. Payslips can take over later.</p>${fr.err ? `<p id="fr-err" role="alert" class="note"><b>${esc(fr.err)}</b></p>` : ""}`;
+    acts = `${backNext()}<p><button data-action="fr-later" style="width:100%">Later</button></p>`;
+  } else if (n === 4) {
+    const lockRow = device.status === "TRIAL" ? "" : `<div class="frrow"><span class="st"><b>App lock</b><small>Face ID, with a 6-digit PIN as the spare.</small></span>${frSwitch("lock-toggle", lockActive, "App lock")}</div>`;
+    page = `<h3 class="frtitle">Keep it safe</h3><p class="note">Optional. Both can be changed in Setup.</p>
+      <div class="card frlist">${lockRow}<div class="frrow"><span class="st"><b>Backup reminder</b><small>A line on Log when the last backup is a week old.</small></span>${frSwitch("toggle-backup-reminder", M.backupReminderOn(ledger.settings), "Backup reminder")}</div></div>
+      <p><button data-action="open-backup" data-all="1" style="width:100%">Make a backup now</button></p><p class="note small">${esc(backupAgeText())}</p>`;
+    acts = `${backNext()}<p><button data-action="fr-later" style="width:100%">Later</button></p>`;
+  } else {
+    const r = M.firstRunSummary(S(), ledger.settings, { lockOn: lockActive }), row = (l, v, sub) => `<div class="frrow"><span class="st"><b>${l}</b>${sub ? `<small>${sub}</small>` : ""}</span><span class="amt">${v}</span></div>`;
+    page = `<h3 class="frtitle">You are set</h3><p class="note">Everything here can be changed in Setup.</p>
+      <div class="card frlist">${row("In your accounts", r.accounts ? peso(r.have) : "None yet", r.accounts ? r.accounts + (r.accounts === 1 ? " account" : " accounts") : "Add them in Setup, Accounts")}${r.cards ? row("Owed on cards", peso(r.owed), r.cards + (r.cards === 1 ? " card" : " cards")) : ""}
+        ${row("Pay each month", r.pay ? peso(r.pay) : r.paydays ? "Not typed" : "Not set", r.paydays ? esc(r.paydays) : "")}${device.status === "TRIAL" ? "" : row("App lock", r.lock ? "On" : "Off")}${row("Backup reminder", r.reminder ? "On" : "Off")}</div>
+      <div class="card frlist"><div class="frrow"><span class="st"><b>Categories: ${r.categories} to start</b><small>Your categories, your names. Rename them, set each to Needs, Wants or Savings, add your own and remove what you do not use.</small></span></div>
+        <p><button data-action="fr-cats" style="width:100%">Edit categories</button></p></div>`;
+    acts = `<p><button class="primary" data-action="fr-finish">${r.accounts ? "Log your first expense" : "Start using fo/und"}</button></p><p><button data-action="fr-back" style="width:100%">Back</button></p>`;
+  }
+  return `<div class="fr">${head}<div class="frpage${anim}">${page}</div><div class="fracts">${acts}</div></div>`;
+}
+// Go to a step: kept in the settings at once, so closing the app half way comes back to it. Step 1 has nothing to keep (a new phone saves nothing until Start fresh).
+async function frGo(step, dir) {
+  ui.fr = { ...ui.fr, step, anim: dir, adding: false, err: null };
+  if (step === 3 && ui.form.kind === undefined) {   // the payday boxes start from what is set, else twice a month on the 15th and the last day
+    const sc = M.scheduleOf(ledger.settings), use = sc ?? { kind: "twice", days: [15, "last"] };
+    Object.assign(ui.form, { kind: use.kind === "monthly" ? "once" : use.kind, d1: String(use.days?.[0] ?? 15), d2: String(use.days?.[1] ?? "last"), start: use.start ?? "", weekday: use.weekday ?? 5, pay: ledger.settings.income_base_pin ? (ledger.settings.income_base_pin / 100).toFixed(2) : "" });
+  }
+  renderSheet(); document.querySelector("#sheet .sheet")?.scrollTo(0, 0);
+  if (step >= 2) await commit(S(), { ...ledger.settings, firstrun_step: step }, { quiet: true });
+}
+// Adds the account typed in step 2, by the same rule as Setup. Returns false (and says why) when it cannot be added.
+async function frAddAccount() {
+  const f = ui.form, opening = (f.aopen ?? "").trim() === "" ? { ok: true, centavos: 0 } : M.parsePesos(f.aopen);
+  if (!opening.ok) { ui.fr.err = "Type the amount like 1250 or 1250.50."; renderSheet(); return false; }
+  const plan = M.planAccount(S(), { id: newId("acct"), name: f.aname ?? "", kind: f.akind === "liability" ? "liability" : "asset", opening: opening.centavos, date: today() });
+  if (!plan.ok) { ui.fr.err = plan.violations[0].message; renderSheet(); return false; }
+  Object.assign(ui.form, { aname: "", aopen: "", akind: "asset" }); ui.fr.err = null; ui.fr.adding = false;
+  document.activeElement?.blur();
+  await commit(plan.state, { ...ledger.settings, firstrun_step: 2 }, { quiet: true });
+  renderSheet(); return true;
+}
+async function frFinish(then) {
+  const { firstrun_step, ...rest } = ledger.settings;
+  ui.fr = null; ui.sheet = null; renderSheet();
+  await commit(S(), { ...rest, firstrun_done: M.phTimestamp() }, { quiet: true });
+  then?.();
+}
 // The welcome card of a new install: shown after the first-run notice and again on later starts until you tap Make it mine, or tick "Don't show this again", or log something.
 function maybeWelcome() {
   if (!ledger.settings.welcome_pending || ledger.settings.welcome_off || S().transactions.length) return;
@@ -2898,6 +2984,7 @@ function renderSheet() {
   if (ui.locked) return;
   if (holdingTap()) { afterTap(renderSheet); return; }
   const sh = ui.sheet;
+  if (!sh && ui.fr) { ui.sheet = { type: "firstrun" }; ui.form = ui.fr.form; renderSheet(); return; }   // a window opened from a setup step closes back onto that step
   if (!sh) { $("sheet").innerHTML = ""; lastSheetKey = null; lockPage(false); if (ui.screenStale) { ui.screenStale = false; renderBanner(); renderScreenQuiet(); } return; }
   const key = [sh.type, sh.id ?? "", sh.queueId ?? ""].join(":"), opening = lastSheetKey !== key, keepAt = lastSheetKey === key ? document.querySelector("#sheet .sheet")?.scrollTop ?? 0 : 0;
   lastSheetKey = key; lockPage(true);
@@ -3795,6 +3882,11 @@ function renderSheet() {
       <div class="wl" aria-hidden="true"><div class="wl-row">Food<small>Needs</small></div><div class="wl-row"><span class="wl-type">Weekend trips</span><small class="wl-bucket">Wants</small></div></div>
       <p><button class="primary" data-action="cat-card-show">Show me</button></p>
       <p><button data-action="cat-card-later" style="width:100%">Not now</button></p>`;
+  } else if (sh.type === "firstrun") {
+    body = frBody();
+  } else if (sh.type === "setup-restored") {
+    body = `<h3>Your ledger is back</h3><p class="note">${esc(M.ledgerCheckLine(S()))}</p><p class="note">${S().accounts.length} ${S().accounts.length === 1 ? "account" : "accounts"} and ${S().transactions.length} ${S().transactions.length === 1 ? "entry" : "entries"} came back from the backup.</p>
+      <p><button class="primary" data-action="close-sheet">Got it</button></p>`;
   } else if (sh.type === "notice") {
     body = `<h3>${esc(M.FIRST_RUN_NOTICE.title)}</h3>${figure("data")}<ol class="notes">${M.FIRST_RUN_NOTICE.lines.map((n) => `<li>${esc(n)}</li>`).join("")}</ol>
       <p><button class="primary" data-action="close-sheet">I understand</button></p>`;
@@ -3837,8 +3929,8 @@ function renderSheet() {
       <p class="note">Anything entered since this backup was made will be gone.${sh.all ? "" : ` Pictures are not in a backup, so those entries will say "picture not on this phone".`}</p>
       <p><button class="primary" id="f-save" data-action="restore-now">${ui.form.confirmRestore ? "Tap again to replace" : "Replace this phone's data"}</button></p>`;
   }
-  const closer = sh.type === "notice" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
-  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""} data-action="close-sheet"></div><div class="sheet${opening ? " enter" : ""}${sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
+  const closer = sh.type === "notice" || sh.type === "firstrun" || sh.type === "setup-restored" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
+  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""}${sh.type === "firstrun" ? "" : ' data-action="close-sheet"'}></div><div class="sheet${opening ? " enter" : ""}${sh.type === "firstrun" ? " full" : ""}${sh.type === "setup-restored" || sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
   const box = document.querySelector("#sheet .sheet"); if (box && keepAt) box.scrollTop = keepAt;
   if (voiceListener && sh.type === "voice") { const b = $("v-mic"); if (b) b.innerHTML = micLabel("Listening in " + LANG_NAME[ui.form.lang ?? firstLanguage()] + "... tap to stop"); setWave(true); }
   refreshSave();
@@ -4374,18 +4466,11 @@ async function onClick(el) {
     case "bv-kind": ui.form.kind = id; renderSheet(); break;
     case "bv-wd": ui.form.weekday = Number(id); renderSheet(); break;
     case "bv-paydays-save": {
-      const f = ui.form, k = f.kind ?? "twice", dayOf = (v) => (String(v ?? "").trim().toLowerCase() === "last" ? "last" : Number(String(v ?? "").trim()));
-      let schedule;
-      if (k === "biweekly") { if (!/^\d{4}-\d{2}-\d{2}$/.test(f.start ?? "")) { showToast("Choose the date of one of your paydays."); break; } schedule = { kind: "biweekly", start: f.start }; }
-      else if (k === "weekly") { if (!(Number.isInteger(f.weekday) && f.weekday >= 0 && f.weekday <= 6)) { showToast("Choose the weekday you are paid."); break; } schedule = { kind: "weekly", weekday: f.weekday }; }
-      else {
-        const d1 = dayOf(f.d1), d2 = dayOf(f.d2), ok1 = d1 === "last" ? k === "once" : Number.isInteger(d1) && d1 >= 1 && d1 <= 28;
-        if (!ok1) { showToast("Type the payday as a day from 1 to 28" + (k === "once" ? ", or last." : ".")); break; }
-        if (k === "twice" && !(d2 === "last" || (Number.isInteger(d2) && d2 > d1 && d2 <= 28))) { showToast("Type the 2nd payday as a day after the first, or last."); break; }
-        schedule = k === "twice" ? { kind: "twice", days: [d1, d2] } : { kind: "monthly", days: [d1] };
-      }
-      ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, pay_schedule: schedule }); showToast("Paydays saved."); break;
+      const r = M.scheduleFromForm(ui.form);   // the same rule as step 3 of the first-run setup
+      if (!r.ok) { showToast(r.message); break; }
+      ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, pay_schedule: r.schedule }); showToast("Paydays saved."); break;
     }
+    case "toggle-backup-reminder": await commit(S(), { ...ledger.settings, backup_reminder: !M.backupReminderOn(ledger.settings) }, { quiet: Boolean(ui.fr) }); renderScreen(); if (ui.fr) renderSheet(); break;
     case "open-plan-move": ui.sheet = { type: "plan-move" }; ui.form = { pm: {} }; renderSheet(); break;
     case "plan-move-pick": ui.form.pm = { ...(ui.form.pm ?? {}), [id]: el.dataset.pick }; renderSheet(); break;
     case "plan-move-run": {   // the Budget now holds data from the plan: the app first keeps a copy of the ledger by the same mechanism as before an upgrade, reads it back, and stops if it cannot
@@ -5101,6 +5186,26 @@ async function onClick(el) {
       if (await commit(p.state, { ...ledger.settings, last_account_id: f.from_id })) showToast(peso(a.centavos) + " set as a transfer. Verify it to count it.");
       break;
     }
+    case "fr-next": {
+      const n = ui.fr.step, f = ui.form;
+      if (n === 2 && ((f.aname ?? "").trim() || (f.aopen ?? "").trim()) && !(await frAddAccount())) break;   // what was typed but not yet added is added first
+      if (n === 2 && !activeAccounts().length) { ui.fr.err = "Add at least one account to go on, even Cash with 0."; renderSheet(); break; }   // owner, Nov 15: step 2 needs one account
+      if (n === 3) {
+        const r = M.scheduleFromForm(f), pay = (f.pay ?? "").trim() === "" ? null : M.parsePesos(f.pay);
+        if (!r.ok) { ui.fr.err = r.message; renderSheet(); break; }
+        if (pay && !(pay.ok && pay.centavos > 0)) { ui.fr.err = "Type the pay like 25000 or 25000.50, or leave it empty."; renderSheet(); break; }
+        await commit(S(), { ...ledger.settings, pay_schedule: r.schedule, ...(pay ? { income_base_pin: pay.centavos } : {}) }, { quiet: true });
+      }
+      await frGo(Math.min(n + 1, M.FIRSTRUN_STEPS), "fwd"); break;
+    }
+    case "fr-later": await frGo(Math.min(ui.fr.step + 1, M.FIRSTRUN_STEPS), "fwd"); break;   // steps 3 and 4 are optional: nothing of the step is saved
+    case "fr-back": await frGo(Math.max(ui.fr.step - 1, 1), "back"); break;
+    case "fr-add-open": ui.fr.adding = true; ui.fr.err = null; if (!ui.form.akind) ui.form.akind = "asset"; renderSheet(); $("fr-aname")?.focus(); break;
+    case "fr-akind": ui.form.akind = id; renderSheet(); break;
+    case "fr-add-acct": await frAddAccount(); break;
+    case "fr-restore": ui.sheet = { type: "restore", all: true }; ui.form = {}; renderSheet(); break;   // today's Restore; closing it comes back to step 1 with nothing saved
+    case "fr-cats": await frFinish(() => { ui.menu = false; ui.tab = "setup"; ui.setupPage = "categories"; ui.catEdit = true; renderAll(); window.scrollTo(0, 0); }); break;   // the "Make it yours" card's way in
+    case "fr-finish": await frFinish(() => { renderAll(); if (activeAccounts().length) { ui.sheet = { type: "other" }; ui.form = { amount: "", category_id: null, account_id: accountsFor(null)[0]?.id }; renderSheet(); } }); break;
     case "open-other": ui.sheet = { type: "other" }; ui.form = { amount: "", category_id: null, account_id: accountsFor(null)[0]?.id }; renderSheet(); break;
     case "pick-toggle": if (ui.sheet) { ui.sheet.pick = ui.sheet.pick === el.dataset.key ? null : el.dataset.key; renderSheet(); } break;
     case "pick-rcat": if (ui.sheet) ui.sheet.pick = null; form.refund_cat = id; renderSheet(); break;
@@ -5816,6 +5921,7 @@ async function restoreNow() {
 // Replacing the whole ledger (a backup, the copy from before an update, or putting a restore back) always goes through here: the data on the phone is saved
 // as a restore copy first, read back and checked, and if that fails NOTHING is replaced (model/restorecopy.js). The window "Your data was replaced" is shown once
 // after the reload; sessionStorage carries the word across it and nothing else is saved.
+const SETUP_RESTORED = "financialTracker.setupRestored";   // a restore just ran: after the reload the first-run setup is skipped (marked done) and, on a phone that had nothing, "Your ledger is back" says what its check found
 const RESTORED_FLAG = "financialTracker.justReplaced";
 const restoreIo = { readCopies: readRestoreCopies, writeCopies: writeRestoreCopies, writeLedger: writeLedgerHere };
 async function replaceLedger(next, { kind, pictures = 0 }) {
@@ -5825,6 +5931,8 @@ async function replaceLedger(next, { kind, pictures = 0 }) {
     ui.sheet = null; ui.error = "The new data could not be saved to " + [!r.written.local && "localStorage", !r.written.idb && "IndexedDB"].filter(Boolean).join(" and ") + ". Nothing else was changed, and the safety copy is kept.";
     renderAll(); return false;
   }
+  // Every restore ends the first-run setup: a backup made half way through it (step 4 has "Make a backup now") still holds `firstrun_step`, and must not bring the steps back.
+  if (kind === "restore") { try { sessionStorage.setItem(SETUP_RESTORED, "1"); } catch { /* the setup may then show once more after the reload; nothing is lost */ } }
   if (r.copied) { try { sessionStorage.setItem(RESTORED_FLAG, JSON.stringify({ kind, pictures })); } catch { /* the window is a courtesy; the copy is saved either way */ } }
   location.reload(); return true;
 }
@@ -6206,7 +6314,22 @@ async function start() {
   if (ui.sheet?.type === "replaced") renderSheet();
   if (ui.upgrade?.done) showToast("Your data was updated to the newest format. A copy of the old data is kept in Setup.");
   // A brand-new install shows the notice once: the moment is remembered in the settings, which are saved with the first save. Help shows it again on request.
-  if (device.allowEntry && boot.status === "NONE" && !ledger.settings.notice_seen_at) { ledger.settings = { ...ledger.settings, notice_seen_at: M.phTimestamp(), welcome_pending: true, cat_card_seen: M.phTimestamp() }; ui.sheet = { type: "notice" }; renderSheet(); }
+  // FIRST-RUN SETUP (owner, Nov 15): a brand-new install shows the five setup steps INSTEAD of the notice and the welcome card (Help still shows the notice);
+  // a setup left half way comes back at its step. A ledger put back from a backup at step 1 skips the rest and says what its ledger check found.
+  let setupRestored = false;
+  try { setupRestored = sessionStorage.getItem(SETUP_RESTORED) === "1"; sessionStorage.removeItem(SETUP_RESTORED); } catch { setupRestored = false; }
+  const frStep = device.allowEntry && !setupRestored ? M.firstRunStep(ledger.settings, { brandNew: boot.status === "NONE" }) : null;
+  if (setupRestored && device.allowEntry && boot.status === "OK") {
+    if (!ui.sheet) { ui.sheet = { type: "setup-restored" }; renderSheet(); }
+    if (!ledger.settings.firstrun_done || "firstrun_step" in ledger.settings) {   // saved at once: a restart must not bring the steps back
+      const { firstrun_step, ...rest } = ledger.settings;
+      await commit(S(), { ...rest, firstrun_done: ledger.settings.firstrun_done ?? M.phTimestamp() }, { quiet: true });
+    }
+  } else if (frStep && !ui.sheet) {
+    if (boot.status === "NONE") ledger.settings = { ...ledger.settings, notice_seen_at: M.phTimestamp(), cat_card_seen: M.phTimestamp() };   // saved with the first save (Start fresh)
+    ui.fr = { step: frStep, anim: null, form: {} }; ui.form = ui.fr.form; ui.sheet = { type: "firstrun" };
+    if (frStep === 3) await frGo(3, null); else renderSheet();
+  }
   else if (device.allowEntry && boot.status === "OK" && !ui.sheet) maybeWelcome();
   // After an update: the latest changes, once. "Got it" (or closing the window) remembers it, saved at once so it is not shown again.
   // The start-date rule (balances skip spending dated before an account was added) is told once, with the accounts whose balance it changed.

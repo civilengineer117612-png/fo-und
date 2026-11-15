@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-15-first-run", date: "2026-11-15", text: "The backup reminder on Log can now be turned off in Setup, Backup and restore. A new phone starts with five short setup steps." },
   { id: "2026-11-15-correct-entry", date: "2026-11-15", text: "Put right a verified entry is now one window: what it was, what it should be, and what changes once you verify it." },
   { id: "2026-11-14-owed-to-me", date: "2026-11-14", text: "Paid for others too? Turn on Split with others: only your share is spending, the rest shows under Owed to me on Cards until they pay you back." },
   { id: "2026-11-13-fixed-row", date: "2026-11-13", text: "Suggest a budget shows Fixed and Needs as two rows at the top, Fixed first, and lists each group from the highest budget to the lowest." },

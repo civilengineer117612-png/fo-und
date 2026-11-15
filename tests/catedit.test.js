@@ -74,8 +74,8 @@ test("required fields carry a * in the ink colour, never red, with one line sayi
   assert.match(app, /needed before you can save/);
 });
 
-test("the welcome card: centred, after the notice on a new install only, with Make it mine, Skip for now and a Don't show this again check", () => {
-  assert.match(app, /welcome_pending: true/, "only a brand-new install is marked");
+test("the welcome card: centred, with Make it mine, Skip for now and a Don't show this again check; since A1 a new install gets the setup instead", () => {
+  assert.ok(!/welcome_pending: true/.test(app), "A1 (owner, Nov 15): a brand-new install is no longer marked; only a ledger already marked still sees the card");
   assert.match(app, /if \(!ledger\.settings\.welcome_pending \|\| ledger\.settings\.welcome_off \|\| S\(\)\.transactions\.length\) return;/);
   assert.match(app, /data-action="welcome-mine">Make it mine/);
   assert.match(app, /data-action="welcome-skip" style="width:100%">Skip for now/);
@@ -103,7 +103,7 @@ test("Undo after a removal, Monthly payment, and the one-time card for ledgers t
   assert.match(app, /aria-pressed="\$\{!inst\}">Monthly payment<\/button>/);
   assert.ok(!app.includes("Repeats each month"));
   assert.match(app, /!ledger\.settings\.cat_card_seen && !ledger\.settings\.welcome_pending\) \{ ui\.sheet = \{ type: "catcard" \}/, "only an old ledger that has not seen it, never a new install");
-  assert.match(app, /welcome_pending: true, cat_card_seen: M\.phTimestamp\(\)/, "a new install is marked as having seen it");
+  assert.match(app, /notice_seen_at: M\.phTimestamp\(\), cat_card_seen: M\.phTimestamp\(\) \};   \/\/ saved with the first save/, "a new install is marked as having seen it");
   assert.match(app, /case "cat-card-later": [^\n]*cat_card_seen: M\.phTimestamp\(\)/, "Not now also counts: it never comes back");
   assert.match(app, /data-action="cat-card-show">Show me/);
 });
