@@ -71,4 +71,5 @@ const up = (x) => x.opened < x.before - 2 || x.after < x.before - 2;
 for (const v of V) {
   console.log(`BISECT ${v.label}: ${v.runs.filter(up).length} of ${R} jumped (warm-up ${up(v.warm) ? "jumped " + v.warm.before + ">" + v.warm.opened + ">" + v.warm.after : "kept"}) ` + v.runs.map((x) => x.before + ">" + x.after).join(" "));
 }
+if (process.env.RESULT_FILE) (await import("node:fs")).writeFileSync(process.env.RESULT_FILE, JSON.stringify(Object.fromEntries(V.map((v) => [v.label, v.runs.filter(up).length]))));
 await browser.close();

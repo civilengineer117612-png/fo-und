@@ -1,19 +1,24 @@
 name: Jump bisect
 # TEMPORARY (Nov 16, the owner's bisect of the WebKit window jump). Removed after the bisect; never merged.
-# Every variant is served side by side and run interleaved on the SAME machine (the jump rate differs between machines).
+# Owner's two stages: (1) every machine runs MAIN only, 20 rounds; (2) only the machine where main failed most runs every variant
+# interleaved, 60 rounds. Pass: main fails there in the same session and the fix gets 0 of 60. Cap: main under 5 of 60 there = report and stop.
 on:
   push:
     branches: [claude/serene-wright-3i0dga]
+permissions:
+  actions: read
+  contents: read
 jobs:
   jump:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        machine: [1, 2, 3, 4, 5]
     env:
       ENGINE: webkit
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with: { path: tools }
@@ -33,10 +38,37 @@ jobs:
           cp ../tools/.github/bisect/jump.mjs m/e2e/jump-bisect.mjs
           python3 -m http.server 8124 >/dev/null 2>&1 &
           for i in $(seq 1 20); do curl -fs http://localhost:8124/m/app/index.html >/dev/null && exit 0; sleep 1; done; exit 1
-      - name: Repeat the jump, every variant on this machine
+      - name: Stage 1, main only, 20 rounds on this machine
+        working-directory: srv/m
+        env: { ROUNDS: "20", NODE_PATH: /usr/local/lib/node_modules, VARIANTS: "main=m", RESULT_FILE: /tmp/stage1.json }
+        run: |
+          node e2e/jump-bisect.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+          n=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("/tmp/stage1.json","utf8")).main)')
+          echo "STAGE1 machine ${{ matrix.machine }}: main jumped $n of 20" | tee -a "$GITHUB_STEP_SUMMARY"
+          mkdir -p /tmp/s1 && echo "$n" > /tmp/s1/count
+      - uses: actions/upload-artifact@v4
+        with: { name: "stage1-${{ matrix.machine }}", path: /tmp/s1/count }
+      - name: Wait for every machine's stage 1, keep the one where main failed most
+        id: pick
+        run: |
+          for i in $(seq 1 120); do
+            names=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts?per_page=100" --jq '[.artifacts[].name | select(startswith("stage1-"))] | length')
+            [ "$names" -ge 5 ] && break; sleep 10
+          done
+          best=0; bestn=-1
+          for k in 1 2 3 4 5; do
+            id=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts?per_page=100" --jq ".artifacts[] | select(.name==\"stage1-$k\") | .id")
+            gh api "repos/${{ github.repository }}/actions/artifacts/$id/zip" > /tmp/a$k.zip && n=$(unzip -p /tmp/a$k.zip count)
+            echo "machine $k: main jumped $n of 20"
+            if [ "$n" -gt "$bestn" ]; then best=$k; bestn=$n; fi
+          done
+          echo "STAGE1 kept machine $best (main jumped $bestn of 20)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "best=$best" >> "$GITHUB_OUTPUT"
+      - name: Stage 2, every variant interleaved, 60 rounds (only the kept machine)
+        if: steps.pick.outputs.best == matrix.machine
         working-directory: srv/m
         env:
-          ROUNDS: "20"
+          ROUNDS: "60"
           NODE_PATH: /usr/local/lib/node_modules
-          VARIANTS: "main=m;before ONE PRESS (#356)=a1;no shrink=no-transform;all ONE PRESS off=no-press;will-change=will-change;scale(1) at rest=base-transform;shrink without the 70ms press timing=no-active-duration"
+          VARIANTS: "main=m;before ONE PRESS (#356)=a1;all ONE PRESS off=no-press;no shrink=no-transform;will-change=will-change;scale(1) at rest=base-transform;shrink without the 70ms press timing=no-active-duration"
         run: node e2e/jump-bisect.mjs | tee -a "$GITHUB_STEP_SUMMARY"
