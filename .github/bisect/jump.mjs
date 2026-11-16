@@ -5,11 +5,11 @@ import { emptyLedger, CHANGES, SCREEN_NAMES } from "../src/model/index.js";
 const browser = await launchBrowser();
 const base = process.env.BASE ?? "http://127.0.0.1:8124/app/index.html";
 const errors = [], TS = "2026-11-12T03:00:00Z";
-const seeded = () => {
+const seeded = (seen = CHANGES[0].id) => {
   const l = emptyLedger(), s = l.state; l.rev = 1; l.saved_at = "2026-11-10T08:00:00.000+08:00";
   const acct = (id, name, opening) => ({ id, name, class: "asset", role: "", opening_balance: opening, opening_date: "2026-01-01", hidden_by_default: false, archived: false });
   s.accounts.push(acct("w", "Wallet", 100000), acct("g", "GCash", 50000));
-  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, bankLogosTried: {}, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])) };
+  l.settings = { notice_seen_at: TS, whatsnew_seen: seen, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, bankLogosTried: {}, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])) };
   return l;
 };
 
@@ -19,7 +19,7 @@ const seeded = () => {
 // bgSave: the bank logos are answered only after the window is scrolled and its list is open, so the app's own quiet background save (the
 // logos) lands while the window is open, as in run.mjs 5i (the logos are answered there) and on a phone that fetches its logos at start.
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkqGeoBwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
-async function steps(extraCss, { wait = 400, blur = false, js = null, bgSave = false } = {}) {
+async function steps(extraCss, { wait = 400, blur = false, js = null, bgSave = false, base, seen } = {}) {
   const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,   // 2x like a phone and like run.mjs 5i
     userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1" });
   await ctx.addInitScript(() => { Object.defineProperty(navigator, "standalone", { get: () => true }); sessionStorage.setItem("logOpen", "1"); });
@@ -30,7 +30,7 @@ async function steps(extraCss, { wait = 400, blur = false, js = null, bgSave = f
   const page = await ctx.newPage(); page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(base); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 });
   await page.evaluate(async (text) => { localStorage.setItem("financialTracker.ledger", text);
-    await new Promise((res) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => { const tx = r.result.transaction("kv", "readwrite"); tx.objectStore("kv").put(text, "ledger"); tx.oncomplete = () => { r.result.close(); res(); }; }; }); }, JSON.stringify(seeded()));
+    await new Promise((res) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => { const tx = r.result.transaction("kv", "readwrite"); tx.objectStore("kv").put(text, "ledger"); tx.oncomplete = () => { r.result.close(); res(); }; }; }); }, JSON.stringify(seeded(seen)));
   armed = true;
   await page.reload({ waitUntil: "domcontentloaded" }); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 });
   if (extraCss) await page.addStyleTag({ content: extraCss });
@@ -60,10 +60,15 @@ async function steps(extraCss, { wait = 400, blur = false, js = null, bgSave = f
   return { before, opened, later, saved, after, chosen, same, ...sizes };
 }
 
-const N = Number(process.env.REPEATS ?? 60), runs = [];
-for (let i = 0; i < N; i++) runs.push(await steps(null, { wait: 0, bgSave: i % 2 === 0 }));
+// Every variant on the SAME machine, interleaved (the jump rate changes from machine to machine: main was 8/60 on one, 1/60 on another).
+// VARIANTS="label=dir;label=dir": each dir is a copy of the app served by the same server. One warm-up per variant is not counted.
+const V = process.env.VARIANTS.split(";").map((x) => { const [label, dir] = x.split("="); return { label, dir, url: `http://127.0.0.1:8124/${dir}/app/index.html`, runs: [] }; });
+for (const v of V) v.seen = (await import(new URL(`../../${v.dir}/src/model/index.js`, import.meta.url))).CHANGES[0].id;
+const R = Number(process.env.ROUNDS ?? 20);
+for (const v of V) v.warm = await steps(null, { wait: 0, bgSave: true, base: v.url, seen: v.seen });
+for (let r = 0; r < R; r++) for (let k = 0; k < V.length; k++) { const v = V[(k + r) % V.length]; v.runs.push(await steps(null, { wait: 0, bgSave: r % 2 === 0, base: v.url, seen: v.seen })); }
 const up = (x) => x.opened < x.before - 2 || x.after < x.before - 2;
-const bad = runs.filter(up);
-console.log(`BISECT ${process.env.LABEL} (${ENGINE}): ${bad.length} of ${N} jumped (on open ${runs.filter((x) => x.opened < x.before - 2).length}, on choose ${runs.filter((x) => x.after < x.before - 2).length}; with the background save ${runs.filter((x, i) => i % 2 === 0 && up(x)).length}, without ${runs.filter((x, i) => i % 2 === 1 && up(x)).length})`);
-console.log(`BISECT ${process.env.LABEL} detail: ` + runs.map((x) => x.before + ">" + x.opened + ">" + x.after).join(" "));
+for (const v of V) {
+  console.log(`BISECT ${v.label}: ${v.runs.filter(up).length} of ${R} jumped (warm-up ${up(v.warm) ? "jumped " + v.warm.before + ">" + v.warm.opened + ">" + v.warm.after : "kept"}) ` + v.runs.map((x) => x.before + ">" + x.after).join(" "));
+}
 await browser.close();

@@ -1,5 +1,6 @@
 name: Jump bisect
 # TEMPORARY (Nov 16, the owner's bisect of the WebKit window jump). Removed after the bisect; never merged.
+# Every variant is served side by side and run interleaved on the SAME machine (the jump rate differs between machines).
 on:
   push:
     branches: [claude/serene-wright-3i0dga]
@@ -10,31 +11,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { label: "main (again)", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: none }
-          - { label: "main, no shrink (again)", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: no-transform }
-          - { label: "main, shrink by the scale property", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: scale-prop }
-          - { label: "main, will-change transform on every button", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: will-change }
-          - { label: "main, transform scale(1) at rest", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: base-transform }
-          - { label: "main, no shrink inside a window", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: no-shrink-in-sheet }
+        shard: [1, 2, 3]
     env:
       ENGINE: webkit
     steps:
       - uses: actions/checkout@v4
         with: { path: tools }
       - uses: actions/checkout@v4
-        with: { ref: "${{ matrix.ref }}", path: app }
+        with: { ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, path: srv/m }
+      - uses: actions/checkout@v4
+        with: { ref: 7dbe7cd8f5eb6ef7ba3f14a4b9335e23ff5943a5, path: srv/a1 }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - run: npm install -g playwright@1.64.1 && npx playwright install --with-deps webkit
-      - name: Patch and serve
-        working-directory: app
+      - name: Make the variants and serve them
+        working-directory: srv
         run: |
-          [ "${{ matrix.variant }}" = none ] || node ../tools/.github/bisect/patch.mjs "${{ matrix.variant }}"
-          cp ../tools/.github/bisect/jump.mjs e2e/jump-bisect.mjs
+          for v in no-transform no-press will-change base-transform no-active-duration; do
+            cp -r m "$v" && rm -rf "$v/.git" && (cd "$v" && node ../../tools/.github/bisect/patch.mjs "$v")
+          done
+          cp ../tools/.github/bisect/jump.mjs m/e2e/jump-bisect.mjs
           python3 -m http.server 8124 >/dev/null 2>&1 &
-          for i in $(seq 1 20); do curl -fs http://localhost:8124/app/index.html >/dev/null && exit 0; sleep 1; done; exit 1
-      - name: Repeat the jump
-        working-directory: app
-        env: { LABEL: "${{ matrix.label }}", REPEATS: "60", NODE_PATH: "/usr/local/lib/node_modules" }
+          for i in $(seq 1 20); do curl -fs http://localhost:8124/m/app/index.html >/dev/null && exit 0; sleep 1; done; exit 1
+      - name: Repeat the jump, every variant on this machine
+        working-directory: srv/m
+        env:
+          ROUNDS: "20"
+          NODE_PATH: /usr/local/lib/node_modules
+          VARIANTS: "main=m;before ONE PRESS (#356)=a1;no shrink=no-transform;all ONE PRESS off=no-press;will-change=will-change;scale(1) at rest=base-transform;shrink without the 70ms press timing=no-active-duration"
         run: node e2e/jump-bisect.mjs | tee -a "$GITHUB_STEP_SUMMARY"
