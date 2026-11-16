@@ -1,0 +1,42 @@
+name: Jump bisect
+# TEMPORARY (Nov 16, the owner's bisect of the WebKit window jump). Removed after the bisect; never merged.
+on:
+  push:
+    branches: [claude/serene-wright-3i0dga]
+jobs:
+  jump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: "A1 #356 (before ONE PRESS)", ref: 7dbe7cd8f5eb6ef7ba3f14a4b9335e23ff5943a5, variant: none }
+          - { label: "ONE PRESS #357", ref: 3bce13bde16b7fb46b1f2d2d12deb7c955d9335a, variant: none }
+          - { label: "main", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: none }
+          - { label: "main, no shrink", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: no-transform }
+          - { label: "main, no 8px margin", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: no-before }
+          - { label: "main, no position relative", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: no-relative }
+          - { label: "main, transitions as before", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: no-transition }
+          - { label: "main, all ONE PRESS rules off", ref: e8e37d09b94ce8482e31f9a62a533620d8eca3a7, variant: no-press }
+    env:
+      ENGINE: webkit
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: tools }
+      - uses: actions/checkout@v4
+        with: { ref: "${{ matrix.ref }}", path: app }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install -g playwright@1.64.1 && npx playwright install --with-deps webkit
+      - name: Patch and serve
+        working-directory: app
+        run: |
+          [ "${{ matrix.variant }}" = none ] || node ../tools/.github/bisect/patch.mjs "${{ matrix.variant }}"
+          cp ../tools/.github/bisect/jump.mjs e2e/jump-bisect.mjs
+          python3 -m http.server 8124 >/dev/null 2>&1 &
+          for i in $(seq 1 20); do curl -fs http://localhost:8124/app/index.html >/dev/null && exit 0; sleep 1; done; exit 1
+      - name: Repeat the jump
+        working-directory: app
+        env: { LABEL: "${{ matrix.label }}", REPEATS: "60", NODE_PATH: "/usr/local/lib/node_modules" }
+        run: node e2e/jump-bisect.mjs | tee -a "$GITHUB_STEP_SUMMARY"
