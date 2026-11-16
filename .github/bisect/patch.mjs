@@ -11,4 +11,9 @@ if (v === "no-transition" || v === "no-press") {
   cut(`transition: transform var(--t-move) var(--ease-out), background-color var(--t-move) var(--ease-out), filter var(--t-move) var(--ease-out); }`, "}");
   cut(`button { transition: transform var(--t-move) var(--ease-out), background-color var(--t-move) var(--ease-out), filter var(--t-move) var(--ease-out);`, `button { transition: transform var(--t-press) ease, background-color var(--t-press) ease;`);
 }
+const BASE = `:where(button, .tile, .gcard, .row.tapcard, .swcard[data-action], [role="button"]) { position: relative;`;
+if (v === "scale-prop") { cut(`${SEL}:active { transform: scale(.97);`, `${SEL}:active { scale: .97;`); }
+if (v === "will-change") cut(BASE, BASE + " will-change: transform;");
+if (v === "base-transform") cut(BASE, BASE + " transform: scale(1);");
+if (v === "no-shrink-in-sheet") h = h.replace("</style>", `#sheet ${SEL}:active { transform: none; }\n</style>`);
 writeFileSync(f, h); console.log("patched: " + v);
