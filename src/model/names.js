@@ -6,7 +6,7 @@ export const SCREEN_NAMES = {
 };
 
 // The menu, in order: [group, [screen ids]]. Setup and Help are pinned at the bottom of the menu by the app.
-export const MENU_GROUPS = [["Your money", ["money", "cards", "budget", "goals", "scheduled"]], ["Tools", ["checkin", "checks", "scan", "trips", "buffer"]]];   // every screen, for Help; no one-row groups
+export const MENU_GROUPS = [["Your money", ["money", "cards", "budget", "goals", "scheduled"]], ["Tools", ["checkin", "checks", "scan", "trips"]]];   // every screen, for Help; no one-row groups
 
 // Screens that belong together share ONE menu row (the first id). On each of them a strip of pictures along the top switches between them, so the menu
 // stays short: Budget holds Goals and the pay plan, Weekly review holds Checks. (Cards has its own row: it shows where your money is, not where it went.)

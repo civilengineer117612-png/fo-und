@@ -18,7 +18,7 @@ test("the five quick notes are there, in the owner's words", () => {
 test("every screen in the menu, and the bottom bar, has a help topic (so adding a screen means writing its help)", () => {
   assert.match(app, /const MENU = M\.MENU_GROUPS\.map/, "the menu is built from the shared names");
   const screens = MENU_GROUPS.flatMap(([, ids]) => ids);
-  assert.ok(screens.length >= 10, "found the menu screens: " + screens.join());
+  assert.ok(screens.length >= 9, "found the menu screens: " + screens.join());   // was >= 10; A7 (Nov 16) took Buffer out of the menu on purpose, so 9
   const have = new Set(TOPICS.map((t) => t.tab));
   for (const id of [...screens, "setup", "log", "verify", "income"]) assert.ok(have.has(id), "a help topic for " + id);
   for (const t of TOPICS) { assert.ok(t.label && t.lines.length >= 1 && t.lines.every((l) => l.length < 260), t.tab + " is short and has words"); }

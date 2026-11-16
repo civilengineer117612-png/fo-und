@@ -34,7 +34,7 @@ test("the drawing is pure SVG in theme colours only, with the bars numbered for 
 });
 
 test("every screen of the menu that needs explaining has its popup, named like the screen and with the owner's words", () => {
-  const wanted = ["money", "income", "cards", "budget", "goals", "scheduled", "checkin", "scan", "trips", "buffer", "setup"];
+  const wanted = ["money", "income", "cards", "budget", "goals", "scheduled", "checkin", "scan", "trips", "setup"];   // A7: "buffer" left with its screen; Budget's popup covers it
   assert.deepEqual(Object.keys(INTROS).sort(), [...wanted].sort());
   for (const id of wanted) {
     const i = introFor(id);

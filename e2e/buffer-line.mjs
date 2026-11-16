@@ -42,7 +42,7 @@ const toBudget = async () => {
 };
 await toBudget();
 const heads = async (where) => (await page.locator(where + " h4.sugh").allTextContents()).map((h) => h.trim());
-const bufRow = () => page.locator('#screen button[data-action="open-buffer-monthly"]');
+const bufRow = () => page.locator('#screen button[data-action="open-buffer"]');   // A7 (Nov 16): the row opens the Buffer window; its first row is the monthly figure
 
 // ---- 1. no buffer set: an empty row to tap, after Wants
 ok(await bufRow().count() === 1 && (await bufRow().innerText()).replace(/\s+/g, " ").includes("Buffer For overspending; not savings Not set"), "with no buffer set, Budget shows one Buffer row: its name, what it is for, and Not set");
@@ -52,7 +52,9 @@ const actions = page.locator("#screen .actrow2 > button.act");
 ok(await actions.count() >= 1 && (await actions.allInnerTexts()).some((t) => t.trim() === "Record pay received") && await page.locator('#screen button.primary').count() === 1, "Record pay received is a compact plain button in the row of actions; Suggest a budget stays the one filled button");
 
 // ---- 2. typing the buffer in its own window
-await bufRow().click(); await page.waitForSelector("#sheet #f-amount");
+await bufRow().click(); await page.waitForSelector('#sheet button[data-action="open-buffer-monthly"]');
+ok((await page.locator("#sheet button.primary").innerText()).trim() === "Set up the buffer", "the row opens the Buffer window; with no wallet set up its one filled button is Set up the buffer");
+await page.click('#sheet button[data-action="open-buffer-monthly"]'); await page.waitForSelector("#sheet #f-amount");
 ok((await page.locator("#sheet").innerText()).includes("It is never counted as savings."), "the window says what the buffer is for and that it is not savings");
 await page.fill("#sheet #f-amount", "2,500");
 await page.waitForFunction(() => !document.querySelector("#f-save").disabled);
@@ -71,8 +73,8 @@ ok(/^Paid in this order: Fixed, Needs, your savings minimum, the buffer, then Wa
 await page.evaluate(() => document.querySelector("#scrim").click()); await page.waitForFunction(() => !document.querySelector("#sheet .sheet"));
 
 // ---- 4. No buffer clears it
-await page.waitForSelector('#screen button[data-action="open-buffer-monthly"]');
-await bufRow().click(); await page.waitForSelector('#sheet button[data-action="clear-buffer-monthly"]');
+await page.waitForSelector('#screen button[data-action="open-buffer"]');
+await bufRow().click(); await page.click('#sheet button[data-action="open-buffer-monthly"]'); await page.waitForSelector('#sheet button[data-action="clear-buffer-monthly"]');
 await page.click('#sheet button[data-action="clear-buffer-monthly"]'); await page.locator("#toast").filter({ hasText: "No buffer" }).waitFor({ timeout: 8000 });
 await page.waitForFunction(() => !document.documentElement.dataset.saving);
 ok(!("buffer_monthly" in (await stored(page)).settings) && (await bufRow().innerText()).includes("Not set"), "No buffer removes the setting and the row says Not set again");
