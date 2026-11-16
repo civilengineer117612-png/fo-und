@@ -1085,10 +1085,17 @@ await openBuffer();
 var bt2 = await text(page, "#sheet");
 check(bt2.includes("GCash spending now draws the buffer") && /Upskill[\s\S]*₱100\.00/.test(bt2) && bt2.includes("₱500.00"), "the draw is listed by category, and the empty allowance is said in words");
 await shot(page, "29-buffer");
-await closeBuffer();
+// P0-7 from the window: Add to the buffer is a DRAFT that waits in Verify, and the window says so before saving
+await page.click('#sheet button[data-action="open-bufund"]'); await page.waitForSelector("#sheet #f-amount");
+check((await text(page, "#sheet")).includes("Saved as a draft: it waits in Verify") && !(await text(page, "#sheet")).includes("Saved as verified"), "Add to the buffer says it is saved as a draft that waits in Verify");
+await page.fill("#f-amount", "50"); await page.waitForFunction(() => !document.querySelector("#f-save").disabled); await page.click("#f-save");
+check(await seen(page, "#toast", "Waiting in Verify"), "adding to the buffer from the window says it waits in Verify");
+await page.waitForFunction(() => !document.documentElement.dataset.saving);
+var bufTxs = JSON.parse((await stored(page)).local).state.transactions.filter((t) => /^Set aside: |^To Overrun Buffer$/.test(t.payee));
+check(bufTxs.length === 3 && bufTxs.every((t) => t.status === "draft"), "the setup's two entries and the top-up are all drafts (" + bufTxs.map((t) => t.payee + ":" + t.status).join(", ") + ")");
 await page.click('#nav button:has-text("Verify")');
 // P0-7: the two "Set aside" entries made by the setup now wait in Verify too, in no fixed order with the spend (same second): check them first, one at a time
-for (let guard = 0; guard < 4 && !(await text(page, "#screen")).includes("Upskill"); guard++) { await page.click('button:has-text("Correct")'); await page.waitForTimeout(400); }
+for (let guard = 0; guard < 6 && !(await text(page, "#screen")).includes("Upskill"); guard++) { await page.click('button:has-text("Correct")'); await page.waitForTimeout(400); }
 check((await text(page, "#screen")).includes("Upskill"), "a draft that took from two envelopes still shows its category when verifying");
 await page.click('button:has-text("Correct")'); await seen(page, "#screen", "of");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
@@ -2306,16 +2313,19 @@ var FIX = { v: 3, rev: 1, saved_at: "2026-10-01T08:00:00.000+08:00", settings: {
   await page.click("#f-save");
   check(await seen(page, "#toast", "Choose which goal is your emergency fund") && !(await text(page, "#toast")).includes("goal named"), "an overtime payslip with no emergency fund chosen says to choose one, with no fixed name");
   // the sweep order
-  await menuGo(page, "Buffer");
-  check((await text(page, "#screen")).includes("Choose which goals the leftover goes to, in order."), "the Buffer says plainly that the sweep order is not chosen yet");
+  // A7 (Nov 16). Before: the Buffer screen said "Choose which goals the leftover goes to, in order." After: Budget's Buffer row opens the window, whose
+  // "Leftover goes to" row says "Choose" until an order is saved. Every step after it is the same, inside the window.
+  await menuGo(page, "Plan & Save"); await page.click('#screen button[data-action="open-buffer"]'); await page.waitForSelector('#sheet [data-action="open-sweep"]');
+  check((await text(page, '#sheet button[data-action="open-sweep"]')).replace(/\s+/g, " ").includes("Leftover goes to Choose"), "the Buffer says plainly that the sweep order is not chosen yet");
   await page.click('button[data-action="sweep-buffer"]');
   check(await seen(page, "#toast", "Choose where the leftover goes first"), "sweeping before choosing says to choose where it goes");
   await page.click('button[data-action="open-sweep"]');
   await page.click('#sheet button[data-action="pick-sweep"]:has-text("Alpha")'); await page.click('#sheet button[data-action="pick-sweep"]:has-text("Beta")');
   check((await text(page, "#sheet")).includes("1 \u00b7 Alpha") && (await text(page, "#sheet")).includes("2 \u00b7 Beta") && await page.locator("#t_g-a").count() === 1 && await page.locator("#t_g-b").count() === 0, "the goals are numbered in the order tapped; only the first has a target box");
-  await page.fill("#t_g-a", "100"); await page.click("#f-save");
-  check(await seen(page, "#screen", "The sweep fills Alpha, then Beta"), "the order is saved and shown");
-  await page.click('button[data-action="sweep-buffer"]');
+  await page.fill("#t_g-a", "100"); await page.click("#f-save"); await seen(page, "#toast", "Saved: Alpha, then Beta");
+  await page.click('#screen button[data-action="open-buffer"]'); await page.waitForSelector('#sheet [data-action="open-sweep"]');
+  check((await text(page, '#sheet button[data-action="open-sweep"]')).includes("Alpha, then Beta"), "the order is saved and shown");
+  await page.click('#sheet button[data-action="sweep-buffer"]');
   check(await seen(page, "#toast", "Sweep saved as a draft"), "the sweep follows the saved order");
   const sw = JSON.parse((await stored(page)).local).state, swTx = sw.transactions.find((t) => t.payee === "Month-end buffer sweep");
   check(JSON.stringify(sw.entries.filter((e) => e.transaction_id === swTx.id).map((e) => [e.account_id, e.amount])) === JSON.stringify([["pa", 10000], ["pb", 20000], ["wal", -30000]]), "Alpha is filled to its 100.00 target and Beta takes the other 200.00");
@@ -2418,12 +2428,16 @@ console.log("What's new and how-tos");
   await holdOn('#screen .hub button[data-tab="goals"]');
   check(await seen(page, "#sheet", "Save toward a goal") && (await text(page, "#sheet")).includes("Put money in") && /example/i.test(await text(page, "#sheet")) && (await text(page, "#sheet")).includes("Tap a goal, tap Put money in"), "holding Goals in the menu plays the goals how-to (an example while there is no goal with a target)");
   await page.click('#sheet button:has-text("Close")');
-  for (const [id, title, phrase] of [["cards", "See what you owe", "Cards shows each account"], ["checkin", "Count your accounts", "Tap an account, type its real balance"], ["buffer", "Cover an overrun", "the buffer pays the gap"]]) {
+  for (const [id, title, phrase] of [["cards", "See what you owe", "Cards shows each account"], ["checkin", "Count your accounts", "Tap an account, type its real balance"]]) {
     await page.click("#menuBtn"); await page.waitForSelector("#menu .item"); await page.waitForTimeout(500);
     await holdOn(`#menu .item[data-tab="${id}"]`);
     check(await seen(page, "#sheet", title) && (await text(page, "#sheet")).includes(phrase), `holding ${id} in the menu plays its how-to`);
     await page.click('#sheet button:has-text("Close")');
   }
+  // A7 (Nov 16): the Buffer has no menu row to hold any more; its clip (same title and words as before) plays from Help's list
+  await menuGo(page, "Help"); await page.click('#screen button.clipbtn[data-id="buffer"]');
+  check(await seen(page, "#sheet", "Cover an overrun") && (await text(page, "#sheet")).includes("the buffer pays the gap"), "the buffer how-to still plays, from Help");
+  await page.click('#sheet button:has-text("Close")');
   await page.click("#menuBtn"); await page.click('#menu .item[data-tab="checkin"]'); await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
   await holdOn('#screen .hub button[data-tab="checks"]');
   check(await seen(page, "#sheet", "Check your card reserve") && /example/i.test(await text(page, "#sheet")), "holding Checks in its strip plays the card reserve how-to (a marked example)");
@@ -3071,7 +3085,7 @@ console.log("Popups on every screen");
   const settingsOf = async () => JSON.parse((await stored(page)).local).settings;
   const screens = [["Cash flow", "Your money, leaving footprints.", "Tap a bar to see where."], ["Cards", "What is yours, and what is borrowed.", "Swipe through your accounts."], ["Budget", "Give each habit a limit.", "Tap to set it."],
     ["Scheduled", "Bills that repeat, tracked for you.", "They wait in Verify on the day."], ["Weekly review", "Numbers don't lie. Face them weekly.", "A gap is shown, never hidden."], ["Scan", "Let your phone read the paper.", "All of it stays on your phone."],
-    ["Trips", "Spend on the road, count it once.", "Add dates and it fills itself."], ["Buffer", "A cushion for rainy months.", "Tap to add to it."], ["Setup", "Make the app yours.", "Tap anything to change it."]];
+    ["Trips", "Spend on the road, count it once.", "Add dates and it fills itself."], ["Setup", "Make the app yours.", "Tap anything to change it."]];
   const seenAll = [];
   for (const [name, one, two] of screens) {
     const menuName = name === "Budget" ? "Plan & Save" : name, title = name === "Budget" ? "Budget" : name;
@@ -3085,7 +3099,7 @@ console.log("Popups on every screen");
   check(seenAll.every(Boolean), "each screen of the menu opens with its popup: its name, the two lines, a drawing that moves and the check (" + seenAll.map((x) => (x ? "yes" : "NO")).join(",") + ")");
   check(await page.locator("#top .qmark").count() === 1, "and a ? sits beside the title");
   const st0 = await settingsOf();
-  check(Object.keys(st0.intro_seen ?? {}).length >= 9 && Object.values(st0.intro_seen).every((n) => n === 1), "each popup was counted once");
+  check(Object.keys(st0.intro_seen ?? {}).length >= 8 && Object.values(st0.intro_seen).every((n) => n === 1), "each popup was counted once");   // was >= 9: A7 took the Buffer screen and its popup out of the menu
   await menuGo(page, "Budget"); await page.waitForSelector(".in-draw"); await page.click('button[data-action="intro-done"]'); await page.waitForFunction(() => !document.querySelector("#sheet .in-draw"));
   const st0b = await settingsOf();
   check(st0b.intro_seen.budget === 2, "and again the next time the screen is opened");

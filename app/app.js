@@ -2997,7 +2997,7 @@ function renderSheet() {
     body = `<h3>Add to the buffer</h3>
       <label for="f-amount">Amount (\u20B1)${REQ}</label><input id="f-amount" data-field="amount" inputmode="decimal" value="${esc(ui.form.amount ?? "")}" autocomplete="off">
       <label>Take it from${REQ}</label>${accountPicker(accountsFor(null).filter((a) => a.id !== gcashOf().account_id), ui.form.account_id)}
-      <p class="note">Saved as verified, because you are choosing to set this money aside.</p>
+      <p class="note">Saved as a draft: it waits in Verify and counts once you verify it.</p>
       ${REQNOTE}
       <p><button class="primary" id="f-save" data-action="save-bufund" style="margin-top:6px" disabled>Save</button></p>`;
   } else if (sh.type === "trip") {
@@ -3034,7 +3034,7 @@ function renderSheet() {
       ${ui.form.category_id === M.REFUND_CATEGORY_ID ? `<label>Refund of${REQ}</label>${categoryPicker(expenseCategories(), ui.form.refund_cat, "rcat", "pick-rcat", "Choose the spending")}` : ""}
       <label>Arrived in${REQ}</label>${paidChips(ui.form.account_id)}
       ${REQNOTE}
-      <p class="note">Pay, interest or a refund. For a full payslip, use Add a payslip in Income. Saved as verified, since you copy it from paper.</p>
+      <p class="note">Pay, interest or a refund. For a full payslip, use Add a payslip in Income. Saved as a draft: it waits in Verify and counts once you verify it.</p>
       <p><button class="primary" id="f-save" data-action="save-income" style="margin-top:6px" disabled>Save</button></p>`;
   } else if (sh.type === "intro") {
     const it = M.introFor(sh.id);

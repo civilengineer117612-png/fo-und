@@ -50,7 +50,7 @@ export const SCREENS = [
   ["Budget", [menu("Plan & Save")]], ["Budget: Suggest window", [menu("Plan & Save"), act('[data-action="open-suggest"]')]],
   ["Goals", [menu("Plan & Save"), tap("Goals", "#screen .hub")]], ["Goals: goal window", [menu("Plan & Save"), tap("Goals", "#screen .hub"), act('#screen [data-action="view-goal"]')]],
   ["Scheduled", [menu("Scheduled")]], ["Weekly review", [menu("Weekly review")]], ["Checks", [menu("Weekly review"), tap("Checks", "#screen .hub")]],
-  ["Scan", [menu("Scan")]], ["Trips", [menu("Trips")]], ["Buffer", [menu("Buffer")]], ["Help", [menu("Help")]],
+  ["Scan", [menu("Scan")]], ["Trips", [menu("Trips")]], ["Budget: Buffer window", [menu("Plan & Save"), act('#screen [data-action="open-buffer"]')]], /* A7: was ["Buffer", [menu("Buffer")]] */ ["Help", [menu("Help")]],
   ["Setup", [menu("Setup")]], ["Setup: Accounts", [menu("Setup"), tap("Accounts")]], ["Setup: account window", [menu("Setup"), tap("Accounts"), act('#screen [data-action="acct-more"]')]], ["Setup: Categories", [menu("Setup"), tap("Categories")]], ["Setup: Backup and restore", [menu("Setup"), tap("Backup and restore")]], ["Setup: About this app", [menu("Setup"), tap("About this app")]],
   ["Menu", [async (p) => p.click("#menuBtn")]],
 ];

@@ -42,3 +42,28 @@ test("Budget's Buffer row opens the window; the menu entry, its screen, Help top
   const sweep = app.slice(app.indexOf('case "sweep-buffer": {'), app.indexOf('case "open-trip":'));
   assert.ok(sweep.includes('if (ui.sheet?.type === "buffer-view") { ui.sheet = null; renderSheet(); }'), "a sweep from the window closes it, so nothing stale stays on screen");
 });
+
+test("the old Buffer Help is MOVED into Budget's Help, word for word, not deleted", () => {
+  const budget = M.HELP_TOPICS.find((t) => t.tab === "budget").lines;
+  for (const line of ["Money kept aside in one account for when a category runs over its budget. Every draw is recorded against that category.",
+    "At month end, choose which goals the leftover goes to, in order. Each is filled to its target; the last takes the rest."])
+    assert.ok(budget.includes(line), "Budget's Help keeps: " + line);
+});
+
+test("P0-7: Buffer setup and funding from the window save as DRAFTS that wait in Verify, and the window says so", () => {
+  const save = (name, next) => app.slice(app.indexOf(`case "${name}": {`), app.indexOf(next, app.indexOf(`case "${name}": {`)));
+  const setup = save("save-bufsetup", 'case "open-bufund"'), fund = save("save-bufund", "break;\n    }");
+  assert.ok(setup.includes("M.planEnvelopeSetup(") && fund.includes("M.planBufferFunding("), "the window's saves go through the model's own plans");
+  for (const [name, code] of [["setup", setup], ["funding", fund]]) {
+    assert.ok(!/settle\(|verifyTransaction|status: "verified"/.test(code), name + ": nothing marks it verified on the way");
+    assert.match(code, /Waiting in Verify\./, name + ": the message says it waits in Verify");
+  }
+  const s = M.emptyState();
+  s.accounts.push({ id: "wal", name: "Sample Wallet", class: "asset", role: "", opening_balance: 100000, opening_date: "2026-10-01", hidden_by_default: false, archived: false },
+    { id: "chk", name: "Sample Checking", class: "asset", role: "", opening_balance: 500000, opening_date: "2026-10-01", hidden_by_default: false, archived: false });
+  const a = M.planEnvelopeSetup(s, { gcash_account_id: "wal", allowance_envelope_id: "al", buffer_envelope_id: "bu", allowance_amount: 30000, buffer_amount: 20000, date: "2026-10-05", transaction_ids: ["t1", "t2"] });
+  const b = M.planBufferFunding(a.state, { transaction_id: "t3", date: "2026-10-06", amount: 10000, from_account_id: "chk", gcash_account_id: "wal", buffer_envelope_id: "bu" });
+  assert.deepEqual(b.state.transactions.map((t) => [t.id, t.status]), [["t1", "draft"], ["t2", "draft"], ["t3", "draft"]], "all three entries are drafts");
+  const win = app.slice(app.indexOf('} else if (sh.type === "bufund") {'), app.indexOf('} else if (sh.type === "trip") {'));
+  assert.ok(win.includes("Saved as a draft: it waits in Verify") && !win.includes("Saved as verified"), "the Add to the buffer window no longer says it is saved as verified");
+});
