@@ -38,3 +38,15 @@ test("a dropdown list of more than 8 choices has a Search box that filters it, a
   assert.match(app, /type: "income" \}; ui\.form = \{ amount: "", date: today\(\), account_id: accountsFor\(null\)\[0\]\?\.id \?\? null, category_id: null \}/);
   assert.match(app, /btn\.disabled = !\(a\.ok && a\.centavos > 0 && f\.account_id && f\.category_id && f\.date\);/);
 });
+
+// THE WINDOW JUMP ON WEBKIT (Nov 16; e2e-webkit red on main since #357, e2e/sheet-scroll.mjs 16 to 18 of 20): opening a dropdown list rebuilt the
+// whole window, and Safari's engine then put the new window back at a scroll position it could not hold yet, so a tall window jumped up.
+test("opening or closing a list changes only the lists, never rebuilds the window; a rebuilt window that is held short tries once more", () => {
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  const toggle = app.slice(app.indexOf('case "pick-toggle":'), app.indexOf("\n", app.indexOf('case "pick-toggle":')));
+  assert.ok(toggle.includes("showPickLists()") && !toggle.includes("renderSheet"), "pick-toggle shows or hides the lists in place");
+  const fn = app.slice(app.indexOf("function showPickLists() {"), app.indexOf("const byName = (list) =>"));
+  assert.ok(fn.includes('row.setAttribute("aria-expanded", String(on))') && fn.includes("list.hidden = !on"), "each row says whether its list is open, and only the chosen one shows");
+  assert.ok(fn.includes('q.value = ""') && fn.includes("n.hidden = false"), "a list that opens starts with its search empty and every choice shown, as a rebuilt one did");
+  assert.match(app, /if \(box && keepAt && box\.scrollTop < keepAt - 1\) requestAnimationFrame\(\(\) => \{ if \(box\.isConnected && box\.scrollTop < keepAt - 1\) box\.scrollTop = keepAt; \}\);/, "a rebuilt window held short of its place tries once more on the next frame");
+});

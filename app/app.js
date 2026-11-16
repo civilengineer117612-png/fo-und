@@ -2704,6 +2704,19 @@ function picker(key, groups, selectedId, action, placeholder) {
   const list = groups.filter(([, items]) => items.length).map(([h, items]) => (h ? `<div class="pickh">${esc(h)}</div>` : "") + items.map(item).join("")).join("");
   return `<div class="pick"><button class="pickrow" type="button" data-action="pick-toggle" data-key="${esc(key)}" aria-expanded="${open}"><span class="pickface">${face}</span>${CHEVRON}</button><div class="picklist"${open ? "" : " hidden"}>${all.length > 8 ? `<div class="picksearchrow"><input class="picksearch" type="search" placeholder="Search" aria-label="Search the list" autocomplete="off" autocapitalize="off"></div>` : ""}${list}<p class="pickempty note" hidden>Nothing matches.</p></div></div>`;
 }
+// Opening or closing a dropdown list changes only that list (owner's window-jump bug, WebKit, Nov 16): rebuilding the whole window made Safari's
+// engine put it back at a scroll position the new window could not hold yet, so a tall window jumped up when a list at its bottom opened.
+// A list that opens starts with its search box empty and every choice shown, as a rebuilt one did.
+function showPickLists() {
+  for (const row of document.querySelectorAll("#sheet .pickrow")) {
+    const on = row.dataset.key === ui.sheet?.pick, list = row.nextElementSibling;
+    row.setAttribute("aria-expanded", String(on));
+    if (!list?.classList.contains("picklist") || list.hidden === !on) continue;
+    list.hidden = !on;
+    const q = list.querySelector(".picksearch");
+    if (on && q && q.value) { q.value = ""; for (const n of list.querySelectorAll(".pickh, .pickitem")) n.hidden = false; const none = list.querySelector(".pickempty"); if (none) none.hidden = true; }
+  }
+}
 const byName = (list) => [...list].sort((a, b) => a.name.localeCompare(b.name));
 // The category last used (the newest verified entry with one of these categories), then every category A to Z.
 function categoryPicker(items, selectedId, key = "cat", action = "pick-cat", placeholder = "Choose a category") {
@@ -3821,6 +3834,8 @@ function renderSheet() {
   const closer = sh.type === "notice" || sh.type === "firstrun" || sh.type === "setup-restored" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? "" : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "buffer-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
   $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""}${sh.type === "firstrun" ? "" : ' data-action="close-sheet"'}></div><div class="sheet${opening ? " enter" : ""}${sh.type === "firstrun" ? " full" : ""}${sh.type === "setup-restored" || sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
   const box = document.querySelector("#sheet .sheet"); if (box && keepAt) box.scrollTop = keepAt;
+  // A rebuilt window that cannot yet hold its old place (its new content not laid out on Safari's engine) tries once more on the next frame.
+  if (box && keepAt && box.scrollTop < keepAt - 1) requestAnimationFrame(() => { if (box.isConnected && box.scrollTop < keepAt - 1) box.scrollTop = keepAt; });
   if (voiceListener && sh.type === "voice") { const b = $("v-mic"); if (b) b.innerHTML = micLabel("Listening in " + LANG_NAME[ui.form.lang ?? firstLanguage()] + "... tap to stop"); setWave(true); }
   refreshSave();
   hydratePhotos();
@@ -5054,7 +5069,7 @@ async function onClick(el) {
     case "fr-cats": await frFinish(() => { ui.menu = false; ui.tab = "setup"; ui.setupPage = "categories"; ui.catEdit = true; renderAll(); window.scrollTo(0, 0); }); break;   // the "Make it yours" card's way in
     case "fr-finish": await frFinish(() => { renderAll(); if (activeAccounts().length) { ui.sheet = { type: "other" }; ui.form = { amount: "", category_id: null, account_id: accountsFor(null)[0]?.id }; renderSheet(); } }); break;
     case "open-other": ui.sheet = { type: "other" }; ui.form = { amount: "", category_id: null, account_id: accountsFor(null)[0]?.id }; renderSheet(); break;
-    case "pick-toggle": if (ui.sheet) { ui.sheet.pick = ui.sheet.pick === el.dataset.key ? null : el.dataset.key; renderSheet(); } break;
+    case "pick-toggle": if (ui.sheet) { ui.sheet.pick = ui.sheet.pick === el.dataset.key ? null : el.dataset.key; showPickLists(); } break;   // in place: the window is not rebuilt, so it never moves
     case "pick-rcat": if (ui.sheet) ui.sheet.pick = null; form.refund_cat = id; renderSheet(); break;
     case "pick-cat": if (ui.sheet) ui.sheet.pick = null; form.category_id = id; if (form.split_cat === id) form.split_cat = null; renderSheet(); break;
     case "toggle-split": form.split = !form.split; if (form.split) form.share = false; renderSheet(); break;   // one kind of split at a time: two categories, or with other people

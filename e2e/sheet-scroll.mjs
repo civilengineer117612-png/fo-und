@@ -49,8 +49,10 @@ async function steps(extraCss, { wait = 400, blur = false, js = null, bgSave = f
   await page.evaluate(() => { const s = document.querySelector("#sheet .sheet"); s.scrollTop = s.scrollHeight; });
   const before = await top();
   const paid = page.locator("#sheet .pick").nth(1);
+  await page.evaluate(() => { document.querySelector("#sheet .sheet").__same = true; });   // marks this window: a rebuilt one would not carry it
   await paid.locator(".pickrow").click();
   const opened = await top();
+  const same = await page.evaluate(() => document.querySelector("#sheet .sheet")?.__same === true && !document.querySelectorAll("#sheet .picklist")[1]?.hidden);
   if (blur) await page.evaluate(() => document.activeElement?.blur());
   if (bgSave) { release(); await page.waitForFunction(() => Object.keys(JSON.parse(localStorage.getItem("financialTracker.ledger") ?? "{}").settings?.bankLogosTried ?? {}).length > 0, null, { timeout: 30000 }); await page.waitForTimeout(300); }
   const saved = await top();
@@ -60,7 +62,7 @@ async function steps(extraCss, { wait = 400, blur = false, js = null, bgSave = f
   const chosen = await page.evaluate(() => document.querySelector("#sheet .pick:nth-of-type(2) .pickrow, #sheet .pickrow:nth-of-type(1)") && [...document.querySelectorAll("#sheet .pickrow")].map((r) => r.textContent.trim()).join(" | "));
   const sizes = await page.evaluate(() => { const s = document.querySelector("#sheet .sheet"); return { scrollHeight: s.scrollHeight, clientHeight: s.clientHeight }; });
   await ctx.close();
-  return { before, opened, saved, after, chosen, ...sizes };
+  return { before, opened, saved, after, chosen, same, ...sizes };
 }
 
 // diagnosis first (printed only): each rule the feel change added to the page, switched back on its own
@@ -95,6 +97,9 @@ console.log(`  diag sheet-scroll (${ENGINE}) as shipped: ${r.before} -> opened $
 ok(r.before > 50, "the window is taller than the short screen and was scrolled to its bottom (" + r.before + ")");
 ok(/GCash/.test(r.chosen), "GCash is chosen as Paid from");
 ok(r.after >= r.before - 2, "choosing something at the bottom does not throw the window back up (" + r.before + " to " + r.after + ")");
+// Nov 16 (WebKit red on main since #357): the jump happened when the list OPENED, because opening it rebuilt the whole window. Now only the list
+// changes: the window is the same element, its list is shown, and the place is kept on both engines.
+ok(r.same && r.opened >= r.before - 2, "opening Paid from shows its list in the same window, which stays where it was (" + r.before + " to " + r.opened + ")");
 // F4 (Nov 13): DRAW ONCE AT START. With nothing touched for 4 seconds (the bank logos tried, the start-up saves done), the header, the screen and the
 // bottom bar are each written once: a part rebuilt again under a finger loses the tap (Phase 1 counted 3 writes).
 { const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
@@ -120,6 +125,7 @@ const runs = [];
 for (let i = 0; i < 20; i++) runs.push(await steps(null, { wait: 0, bgSave: i % 2 === 0 }));   // half of them with the background save landing while the window is open
 const jumped = runs.filter((x) => !(x.before > 50 && x.after >= x.before - 2));
 console.log(`  diag sheet-scroll (${ENGINE}) 20 repeats typed at once: ` + runs.map((x) => x.before + ">" + x.after).join(" "));
+ok(runs.every((x) => x.same), "in all 20 repeats the list opened in the same window, never a rebuilt one");
 ok(jumped.length === 0, "20 of 20 repeats keep the window where it was (typed at once, half with a background save while open) (" + (20 - jumped.length) + " of 20)");
 ok(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await browser.close();
