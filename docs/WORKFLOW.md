@@ -161,8 +161,10 @@ How the owner wants to be talked to
   the OLD name still gets no live PR events, so it drives merges with a scheduled check-in; start new sessions with `fo-und` selected.
 - Data version 12 (Owed to me). Unit tests about 1,566; run.mjs about 1,560 checks plus 20 smaller e2e scripts, on Chromium (CI "e2e")
   and on Safari's engine (CI "e2e-webkit", not yet a required check).
-- FIXED (Nov 16, #361): e2e-webkit had been red on main since the ONE PRESS merge (#357): e2e/sheet-scroll.mjs held the window in only 13 to
-  18 of 20 repeats. Cause: opening a dropdown list rebuilt the whole window. Lists now open in place; WebKit holds 20 of 20.
+- KNOWN RED, PARTLY FIXED (Nov 16): e2e-webkit fails on main since the ONE PRESS merge (#357): e2e/sheet-scroll.mjs keeps the window in place
+  in only 13 to 18 of 20 repeats (212 -> 151). #361 stopped lists rebuilding the window (one run then held 20 of 20), but the next runs on main and
+  on #362 jumped again (18 of 20) with the window NOT rebuilt, so that was not the whole cause. All jumps happen when the amount was typed while
+  the window was still sliding up and the box still has focus when a list opens. Next PR: root cause; the check is not loosened.
 - The overhaul (rows A1 to A11, L1 to L16, F1 to F8) is mostly built; what is left is listed in PART 7 under OVERHAUL.
 - Older state (Oct 29 and before) is in git history.
 
