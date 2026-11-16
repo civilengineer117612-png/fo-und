@@ -161,9 +161,8 @@ How the owner wants to be talked to
   the OLD name still gets no live PR events, so it drives merges with a scheduled check-in; start new sessions with `fo-und` selected.
 - Data version 12 (Owed to me). Unit tests about 1,566; run.mjs about 1,560 checks plus 20 smaller e2e scripts, on Chromium (CI "e2e")
   and on Safari's engine (CI "e2e-webkit", not yet a required check).
-- KNOWN RED (Nov 16): e2e-webkit fails on main since the ONE PRESS merge (#357): e2e/sheet-scroll.mjs "20 of 20 repeats keep the window where
-  it was" gets 16 to 18 of 20 (a window jumps from 212 to 151 when typing right after it opens). Being root-caused next, in its own PR; the check
-  is not loosened. Every other WebKit check passes.
+- FIXED (Nov 16, #361): e2e-webkit had been red on main since the ONE PRESS merge (#357): e2e/sheet-scroll.mjs held the window in only 13 to
+  18 of 20 repeats. Cause: opening a dropdown list rebuilt the whole window. Lists now open in place; WebKit holds 20 of 20.
 - The overhaul (rows A1 to A11, L1 to L16, F1 to F8) is mostly built; what is left is listed in PART 7 under OVERHAUL.
 - Older state (Oct 29 and before) is in git history.
 
@@ -204,9 +203,8 @@ OVERHAUL (owner, Nov 12: Phase 1 report approved, rows A1 to A11; data loss firs
   up, "Scheduled" on Log); A4 Split and Owed to me (data version 12; not built: money that is all someone else's, a remove button per person, a
   pay-back matched from a statement); A3 Correct this entry; A1 first-run setup and the backup reminder switch; A2 swipe between periods; A7 the
   Buffer in Budget's Buffer row; A10 the unreachable Pay plan screens removed; WHAT THE SCREEN SAYS IS WHAT IS SAVED (no draft says "verified",
-  tests/verifiedwords.test.js); A6 is L1; A9 kept as merged.
-- STILL TO DO: L10, L11 speed; L13, F5 (keeping a box above the keyboard: needs the owner's iPhone) and drag down to close a window; L15 stray dots
-  in Log rows; F8 the scanner ring covering buttons; A8 real titles on Plan & Save and Weekly review; A11 the rest of the test isolation (each long
+  tests/verifiedwords.test.js); A6 is L1; A9 kept as merged; L15 a Log row joins only the parts it has (no stray dots); F8 the scan ring: already clear since the Cards rework (43 px at 320 wide), now guarded by e2e/ui-audit.mjs on every screen.
+- STILL TO DO: L10, L11 speed; L13, F5 (keeping a box above the keyboard: needs the owner's iPhone) and drag down to close a window; A8 real titles on Plan & Save and Weekly review; A11 the rest of the test isolation (each long
   e2e block its own ledger); the screens one at a time with less text, a picture first for each (Log and Verify, Spending, Budget and Goals, Cards
   and Setup, Weekly review and Checks); the Weekly review with less text (waits on the owner's answer: which text is read and which is skipped);
   then the final report with the owner's iPhone checks.

@@ -13,7 +13,7 @@
 
 ## What is not built yet
 The open list with its order is `docs/WORKFLOW.md`, PART 7. In short (Nov 16): the rest of the overhaul's small fixes (L10, L11 speed;
-L13, F5 windows and the keyboard; L15 stray dots; F8 the scanner ring; A8 titles; the rest of A11 test isolation; drag down to close a
+L13, F5 windows and the keyboard; A8 titles; the rest of A11 test isolation; drag down to close a
 window), the screens one at a time with less text, and the Weekly review with less text (waits on the owner's answer).
 
 ## Back up and restore
