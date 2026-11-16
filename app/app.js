@@ -2710,6 +2710,15 @@ function picker(key, groups, selectedId, action, placeholder) {
 // Opening or closing a dropdown list changes only that list (owner's window-jump bug, WebKit, Nov 16): rebuilding the whole window made Safari's
 // engine put it back at a scroll position the new window could not hold yet, so a tall window jumped up when a list at its bottom opened.
 // A list that opens starts with its search box empty and every choice shown, as a rebuilt one did.
+// The window keeps its place when a list opens (WebKit, Nov 16): text typed while the window was still sliding up leaves Safari's engine a pending
+// "show the cursor" that it carries out at the next layout, which is the list opening, so a tall window jumped up (212 -> 151) though nothing was
+// rebuilt. The layout is forced here, inside the tap, and a place that moved UP is put back; once more on the next frame. A list opening below never
+// needs the window to move up, so nothing the owner did is undone.
+function holdPlace(box, keep) {
+  void box.offsetHeight;
+  if (box.scrollTop < keep - 1) box.scrollTop = keep;
+  requestAnimationFrame(() => { if (box.isConnected && box.scrollTop < keep - 1) box.scrollTop = keep; });
+}
 function showPickLists() {
   for (const row of document.querySelectorAll("#sheet .pickrow")) {
     const on = row.dataset.key === ui.sheet?.pick, list = row.nextElementSibling;
@@ -5072,7 +5081,7 @@ async function onClick(el) {
     case "fr-cats": await frFinish(() => { ui.menu = false; ui.tab = "setup"; ui.setupPage = "categories"; ui.catEdit = true; renderAll(); window.scrollTo(0, 0); }); break;   // the "Make it yours" card's way in
     case "fr-finish": await frFinish(() => { renderAll(); if (activeAccounts().length) { ui.sheet = { type: "other" }; ui.form = { amount: "", category_id: null, account_id: accountsFor(null)[0]?.id }; renderSheet(); } }); break;
     case "open-other": ui.sheet = { type: "other" }; ui.form = { amount: "", category_id: null, account_id: accountsFor(null)[0]?.id }; renderSheet(); break;
-    case "pick-toggle": if (ui.sheet) { ui.sheet.pick = ui.sheet.pick === el.dataset.key ? null : el.dataset.key; showPickLists(); } break;   // in place: the window is not rebuilt, so it never moves
+    case "pick-toggle": if (ui.sheet) { const box = document.querySelector("#sheet .sheet"), keep = box?.scrollTop ?? 0; ui.sheet.pick = ui.sheet.pick === el.dataset.key ? null : el.dataset.key; showPickLists(); if (box) holdPlace(box, keep); } break;   // in place: the window is not rebuilt, and it keeps its place
     case "pick-rcat": if (ui.sheet) ui.sheet.pick = null; form.refund_cat = id; renderSheet(); break;
     case "pick-cat": if (ui.sheet) ui.sheet.pick = null; form.category_id = id; if (form.split_cat === id) form.split_cat = null; renderSheet(); break;
     case "toggle-split": form.split = !form.split; if (form.split) form.share = false; renderSheet(); break;   // one kind of split at a time: two categories, or with other people
