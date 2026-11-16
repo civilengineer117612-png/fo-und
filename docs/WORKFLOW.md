@@ -154,16 +154,18 @@ How the owner wants to be talked to
 - A message starting with "qq" is a side question: answer in a few sentences, no tools, no change to the work.
 - The owner is visual: charts and pictures matter; every chart has a list twin; one colour per single series.
 
-## PART 6: State on Oct 29, 2026 (verify before relying on it)
+## PART 6: State on Nov 16, 2026 (verify before relying on it)
 
 - App: local-first PWA on GitHub Pages (`civilengineer117612-png.github.io/fo-und/app/`), repo `civilengineer117612-png/fo-und`
-  (the old name Financial-Tracker still redirects; the build session may only reach it by the old name).
-- Data version 10. README still says 9.
-- Tests on main: 1,065 unit; e2e 1,385 checks (Chromium with an iPhone user agent only).
-- Merged Oct 29: #266 goals sharing one account no longer count it twice; #267 Suggest a budget shows a real shortage instead of
-  cutting needs; #268 the card due-day draft counts only real payments.
-- Not reproduced: the Dinner tile saving as Other (it saves Food), a negative "Saved toward goals" (already floored at zero).
-- Vercel still deploys previews of every PR (the owner removes it).
+  (the old name Financial-Tracker still redirects). The Claude GitHub App is installed (owner, Nov 16); a build session started under
+  the OLD name still gets no live PR events, so it drives merges with a scheduled check-in; start new sessions with `fo-und` selected.
+- Data version 12 (Owed to me). Unit tests about 1,566; run.mjs about 1,560 checks plus 20 smaller e2e scripts, on Chromium (CI "e2e")
+  and on Safari's engine (CI "e2e-webkit", not yet a required check).
+- KNOWN RED (Nov 16): e2e-webkit fails on main since the ONE PRESS merge (#357): e2e/sheet-scroll.mjs "20 of 20 repeats keep the window where
+  it was" gets 16 to 18 of 20 (a window jumps from 212 to 151 when typing right after it opens). Being root-caused next, in its own PR; the check
+  is not loosened. Every other WebKit check passes.
+- The overhaul (rows A1 to A11, L1 to L16, F1 to F8) is mostly built; what is left is listed in PART 7 under OVERHAUL.
+- Older state (Oct 29 and before) is in git history.
 
 ## PART 7: Backlog (the owner sets the order)
 
@@ -194,7 +196,21 @@ Next (owner, Nov 1, in order): photo-reader fix (BUILDING: payslip photos read a
 
 STATE ON NOV 8 (owner asked for a week of rest; supersedes the older WebKit lines above where they differ). MERGED: #324 (P0-7), #325 (photo reader: our own resampling for Safari's engine; section headings match only known words, unreadable ones save a draft), #326 (Chromium draws the test pictures for both engines; block 5k's picture is drawn before the skip), #321 (brag skill). WEBKIT: 1404 pass, 4 fail, 7 skipped; all 4 are block 5k ("a reader that never answers"): WebKit fails a held-open request at once, the app falls back to the plain reader, and the "stopped responding" message never appears. Not yet decided whether this is a named tool skip (a 4th; tests/webkit-ci.test.js pins three); the 10-green-runs count has not started. WAITING ON THE OWNER: (1) the 5k skip, yes or no; (2) P0-6 PR 4 (one Emergency target, Fixed, the savings split by monthly need), a HIGH task: needs the four answers (what Fixed holds and whether the 50/30/20 targets change; the emergency target when no figure is typed; pro rata or priority when money cannot cover every need, and the need of a goal with no finish date; which target is "your figure" when a typed one and an older goal target both exist) and then a preview with the owner's yes before any visible part is built; PR 5 (labels and the buffer line) follows. OWNER-ONLY: the iPhone `?trial` save test (open the app with ?trial in Safari, add one practice entry, report saved or nothing happens); scan a payslip PDF file and compare every line with the paper; listen to the promo video (never posted anywhere; posting needs an explicit yes); the other owner-only actions below. No check-in is scheduled; the next message or GitHub event brings the agent back.
 
-OVERHAUL (owner, Nov 12: Phase 1 report approved, rows A1 to A11; data loss first). Order: PR 1 two windows (L1): BUILT. PR 2 bank logos never reveal the owner's banks (P1): BUILT. PR 3 amounts with commas (L2, with a read-only "Check these amounts" card): BUILT. PR 4 date guard for the tests (L9): BUILT. PR 5 e2e never reaches the internet (L12): BUILT; long blocks isolated (A11) still to do. PR 6 feel (press 100 ms, move 200 ms, no rubber band, Reduce Motion): BUILT. Then: budget labels and the Buffer line (L4, L5, A5): BUILT; Suggest reads schedules (L3): BUILT; pay received and weekend paydays (L6, L7, P4, P5): BUILT (the "other money in" line on screen waits for a drawing); small wording (L8, L14 to L16); speed (L10, L11); windows (F3, F5, L13); the screens; swipe (A2): BUILT Nov 15 (where period arrows or tabs exist; Budget Month got month arrows; never Per week); first-run setup (A1): BUILT Nov 15 (five steps replace the notice and the welcome card on a new install; step 2 needs one account, owner Nov 15; the Log backup reminder has an On/Off switch); Correct this entry (A3): BUILT Nov 15 (the corrected entry waits in Verify, owner Nov 15); Split and Owed to me (A4): BUILT Nov 14, data version 12 (not built: money that is all someone else's, a remove button per person, a pay-back matched from a statement); merge Buffer into Budget (A7): BUILT Nov 16 (Budget's Buffer row opens a Buffer window with every action of the old screen and ONE monthly figure; the menu entry, its Help topic and popup went; the owner's spacing mark fixed by using barRow); remove the unreachable Pay plan screens (A10): BUILT Nov 16 (no visible change; model code and saved plans stay; tests/payplan-removed.test.js); WHAT THE SCREEN SAYS IS WHAT IS SAVED (owner, Nov 16, the M1 flaw, in PR 22): Money received and Add to the buffer said "Saved as verified" for drafts; fixed, and tests/verifiedwords.test.js lists every message that claims verified with the model function that makes it true; docs.
+OVERHAUL (owner, Nov 12: Phase 1 report approved, rows A1 to A11; data loss first). Status on Nov 16:
+- BUILT: L1 two windows; P1 bank logos never reveal the owner's banks; L2 amounts with commas (and the "Check these amounts" card); L9 the date guard;
+  L12 e2e never reaches the internet; feel F1, F6, F7 (motion tokens, no rubber band, Reduce Motion); F2 ONE PRESS (Nov 15); F4 draw once and the
+  WebKit window jump; F3 a tap outside asks before throwing away what was typed; L4, L5, A5 budget labels and the Buffer line; L3 Suggest reads
+  the schedules; L6, L7 pay received and early pay (the "other money in" line waits for a drawing); L8, L14, L16 (before the start date, shares add
+  up, "Scheduled" on Log); A4 Split and Owed to me (data version 12; not built: money that is all someone else's, a remove button per person, a
+  pay-back matched from a statement); A3 Correct this entry; A1 first-run setup and the backup reminder switch; A2 swipe between periods; A7 the
+  Buffer in Budget's Buffer row; A10 the unreachable Pay plan screens removed; WHAT THE SCREEN SAYS IS WHAT IS SAVED (no draft says "verified",
+  tests/verifiedwords.test.js); A6 is L1; A9 kept as merged.
+- STILL TO DO: L10, L11 speed; L13, F5 (keeping a box above the keyboard: needs the owner's iPhone) and drag down to close a window; L15 stray dots
+  in Log rows; F8 the scanner ring covering buttons; A8 real titles on Plan & Save and Weekly review; A11 the rest of the test isolation (each long
+  e2e block its own ledger); the screens one at a time with less text, a picture first for each (Log and Verify, Spending, Budget and Goals, Cards
+  and Setup, Weekly review and Checks); the Weekly review with less text (waits on the owner's answer: which text is read and which is skipped);
+  then the final report with the owner's iPhone checks.
+- Docs (PR 23, Nov 16): docs/UI.md, HANDOVER.md, README.md and this PART 6 and 7 brought up to date.
 
 P2 (wait for "next"): voice entry disclosure in Help and the first-run notice; library licence note; trim
 contradictions in CLAUDE.md; Android block decision; custom domain plan; Trips year grouping and period picker; ratchet screen;
@@ -205,6 +221,5 @@ Open decisions (do not assume): 1 Income Trends by payment date; 2 a cash advanc
 as already deducted; 4 zero and negative net pay; 5 phone-local mappings in backups; 6 budget order of funding and the wants cap;
 7 the restore safety copy; 8 scheduled payments link automatically or ask first; 9 rename "Buffer".
 
-Owner-only actions: add "e2e" as a required check in the ruleset; install the Claude GitHub app on the renamed repo
-(github.com/apps/claude/installations/select_target) so CI results reach the build agent; remove the Vercel project and its GitHub
+Owner-only actions: add "e2e" as a required check in the ruleset; remove the Vercel project and its GitHub
 access; edit the six old PR descriptions; scan your own payslip and compare every line with paper; decide on git history.
