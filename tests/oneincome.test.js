@@ -81,5 +81,7 @@ test("a hidden category gets 0 and no line anywhere in the suggestions (Suggest,
 test("the screens read these: the Suggest window passes the hidden list and shows the figure that is not used", () => {
   assert.match(app, /hidden: M\.hiddenCategoryIds\(set\), fixed: set\.fixed_overrides \?\? \{\} \}\); \};/, "Suggest passes the hidden categories (and the owner's Fixed switches)");
   assert.match(app, /"Your payslips say"/, "both figures are shown when a typed one differs");
-  assert.match(app, /Your payslips say \$\{peso\(inc\.other\.amount\)\}; your own figure is used\./, "the Pay plan says which one is used");
+  // before: read from the Pay plan form's payday window; after (A10, Nov 16): that form could no longer be opened and was removed, so the same
+  // sentence is checked where the owner sees it, on Budget
+  assert.match(app, /Your payslips say \$\{peso\(v\.income\.other\.amount\)\}; your own figure is used\./, "Budget says which one is used");
 });

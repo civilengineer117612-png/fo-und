@@ -90,73 +90,7 @@ function clipFor(id) {
   return M.howtoClip(id, { date: longDate(today()), tiles, account: a ? { name: a.name, picture: iconOf(a, 20) } : null, total: M.dayTotal(S(), today()).verified, budget, trips, goal, accounts, months, schedules });
 }
 const REQ = ' <span class="req" aria-hidden="true">*</span>';   // marks what is needed before an entry can be saved (ink colour, never red)
-// ---------- The Pay plan form: one payday at a time, a thin bar for each line ----------
-// It opens already filled from the suggestion (see planFormFill), so the owner reviews a plan instead of filling one in. The main view shows one payday; a tap on
-// a bar, the pay figure, "+ Add" or the leftover opens a small view inside the same window (ui.form.view); "Done" comes back. Nothing is saved until "Save plan".
-let pfMemo = { key: null, sug: null };
-const pfSug = () => { const f = ui.form, key = [f.twice, f.d1, f.d2, f.p1, f.p2].join("|"); if (pfMemo.key !== key) pfMemo = { key, sug: M.planFormSuggestion(S(), f, { today: today(), settings: ledger.settings }) }; return pfMemo.sug; };
-let pfDayMemo = { key: null, notes: ["", ""] };
-const pfDayNotes = () => { const f = ui.form, key = [f.twice, f.d1, f.d2].join("|"); if (pfDayMemo.key !== key) pfDayMemo = { key, notes: M.payslipDayNotes(S(), f) }; return pfDayMemo.notes; };
-const pesoW = (c) => peso(c).replace(/\.00$/, "");
-const pfVal = (f, k, i) => { const a = M.parsePesos(f[k + i] || "0"); return a.ok ? a.centavos : 0; };   // k "a": the 1st payday, "b": the 2nd
-const pfDay = (f, w) => (!f.twice ? "Each month" : w ? (String(f.d2).trim().toLowerCase() === "last" ? "Last day" : M.ordinal(Number(f.d2))) : M.ordinal(Number(f.d1)));
-const pfName = (f, i) => String(f["n" + i] ?? "").trim();
-const pfRowsOf = (f, k) => Array.from({ length: f.count ?? 0 }, (_, i) => i).filter((i) => pfName(f, i) && pfVal(f, k, i) > 0).sort((x, y) => pfVal(f, k, y) - pfVal(f, k, x) || pfName(f, x).localeCompare(pfName(f, y)));   // the biggest amount first
-const pfSuggestedFor = (sug, f, i) => (sug?.ok ? sug.rows[pfName(f, i).toLowerCase()] ?? null : null);
-function planformBody(f) {
-  const w = f.twice ? f.which ?? 0 : 0, k = w ? "b" : "a", sug = pfSug(), view = f.view ?? "main", st = M.planFormStatus(f), cur = st[w] ?? st[0];
-  const done = `<p><button class="primary" data-action="pf-view" data-id="main">Done</button></p>`;
-  if (view === "line") {
-    const i = f.line, row = pfSuggestedFor(sug, f, i), custom = f["c" + i];
-    return `<h3>${custom ? "New line" : esc(f["n" + i])}</h3>
-      ${custom ? `<label for="pf-n${i}">Name</label><input id="pf-n${i}" data-field="n${i}" value="${esc(f["n" + i] ?? "")}" autocomplete="off" placeholder="Rent"><div class="chips">${Object.entries(M.KIND_NAMES).map(([kk, nm]) => `<button class="chip" data-action="pf-kind" data-id="${kk}" aria-pressed="${(f["k" + i] ?? "expense") === kk}">${nm}</button>`).join("")}</div>` : ""}
-      <label for="pf-a${i}">${esc(pfDay(f, 0))}</label><input id="pf-a${i}" data-field="a${i}" inputmode="decimal" placeholder="0" value="${esc(f["a" + i] ?? "")}" autocomplete="off">
-      ${f.twice ? `<label for="pf-b${i}">${esc(pfDay(f, 1))}</label><input id="pf-b${i}" data-field="b${i}" inputmode="decimal" placeholder="0" value="${esc(f["b" + i] ?? "")}" autocomplete="off">` : ""}
-      ${row ? `<p class="note small">Suggested ${pesoW(row.first)}${f.twice ? " · " + pesoW(row.second) : ""} <button class="act small" type="button" data-action="pf-use-line" data-id="${i}">Use</button></p>` : ""}
-      ${done}<p><button data-action="pf-remove" data-id="${i}" style="width:100%">Remove from plan</button></p>`;
-  }
-  if (view === "pay") {
-    const pay = (ww) => `<label for="pf-d${ww + 1}">${f.twice ? (ww ? "2nd payday" : "1st payday") : "Payday"}: day of the month${ww ? ", or last" : " (1 to 28)"}${REQ}</label><input id="pf-d${ww + 1}" data-field="d${ww + 1}" inputmode="${ww ? "text" : "numeric"}" value="${esc(f["d" + (ww + 1)] ?? "")}" autocomplete="off" autocapitalize="off">
-      <label for="pf-p${ww + 1}">Pay (₱)${REQ}</label><input id="pf-p${ww + 1}" data-field="p${ww + 1}" inputmode="decimal" value="${esc(f["p" + (ww + 1)] ?? "")}" autocomplete="off">${pfDayNotes()[ww] ? `<p class="note small">▲ ${esc(pfDayNotes()[ww])}</p>` : ""}`;
-    const inc = sug?.incomeSource, incNote = inc?.amount ? `<p class="note small">Income: ${peso(inc.amount)} a month, ${inc.source === "pinned" ? "your own figure" : inc.source === "payslips" ? "from your payslips" : "from your pay plan"}.${inc.other ? ` Your payslips say ${peso(inc.other.amount)}; your own figure is used.` : ""}</p>` : "";
-    return `<h3>Payday</h3>${incNote}
-      <label for="pf-start">Starts on${REQ}</label><input id="pf-start" type="date" data-field="start" value="${esc(f.start ?? "")}">
-      <div class="chips"><button class="chip" data-action="plan-once" aria-pressed="${!f.twice}">Paid once a month</button><button class="chip" data-action="plan-twice" aria-pressed="${f.twice}">Paid twice a month</button></div>
-      ${pay(0)}${f.twice ? pay(1) : ""}
-      ${sug?.needsRent ? `<p class="note small">${esc(sug.message)}</p><label for="pf-rent">Monthly rent (₱)</label><input id="pf-rent" data-field="rentbox" inputmode="decimal" value="${esc(f.rentbox ?? "")}" placeholder="0 if you pay none" autocomplete="off"><p><button type="button" class="chip wide" data-action="pf-rent-save">Use this rent</button></p>` : ""}
-      ${REQNOTE}${done}<p><button data-action="pf-refill" style="width:100%">Suggest again</button></p>`;
-  }
-  if (view === "add") {
-    const hidden = Array.from({ length: f.count ?? 0 }, (_, i) => i).filter((i) => pfName(f, i) && !(pfVal(f, k, i) > 0));
-    return `<h3>Add</h3><div class="chips">${hidden.map((i) => `<button class="chip" data-action="pf-line" data-id="${i}">${esc(pfName(f, i))}</button>`).join("")}${(f.count ?? 0) < M.MAX_FORM_LINES ? `<button class="chip" data-action="pf-new-line">Another line</button>` : ""}</div>
-      <p><button data-action="pf-view" data-id="main" style="width:100%">Back</button></p>`;
-  }
-  if (view === "rest") {
-    return `<h3>Put ${pesoW(Math.max(0, cur.left))} on</h3><div class="chips">${Array.from({ length: f.count ?? 0 }, (_, i) => i).filter((i) => pfName(f, i)).map((i) => `<button class="chip" data-action="pf-rest-to" data-id="${i}">${esc(pfName(f, i))}</button>`).join("")}</div>
-      <p><button data-action="pf-view" data-id="main" style="width:100%">Back</button></p>`;
-  }
-  // the main view
-  const rows = pfRowsOf(f, k), max = Math.max(1, ...rows.map((i) => pfVal(f, k, i)));
-  const left = cur.left > 0 ? `<button class="pp-left" type="button" data-action="pf-view" data-id="rest">${pesoW(cur.left)} left</button>` : `<span class="pp-left">${cur.left === 0 ? "All placed" : pesoW(-cur.left) + " over"}</span>`;
-  const hint = !sug?.ok && !rows.length ? `<button class="act small" type="button" data-action="pf-view" data-id="pay">${sug?.needsRent ? "Add your rent for suggestions" : cur.pay > 0 ? esc(sug?.message ?? "") : "Type this payday’s pay"}</button>` : "";
-  return `<h3>Pay plan<button class="qmark" type="button" data-action="intro" data-id="plan" aria-label="Help"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.25"/><path d="M12 11v5.5"/><circle cx="12" cy="7.75" r=".6" fill="currentColor"/></svg></button></h3>
-    ${f.twice ? `<div class="seg" role="group" aria-label="Which payday">${[0, 1].map((ww) => `<button data-action="pf-which" data-id="${ww}" aria-pressed="${w === ww}">${esc(pfDay(f, ww))}</button>`).join("")}</div>` : ""}
-    <div class="pp-big"><button class="pp-pay" type="button" data-action="pf-view" data-id="pay" aria-label="Change the pay and paydays">${pesoW(cur.pay)}</button>${left}</div>
-    <div class="pp-whole" role="img" aria-label="${pesoW(cur.placed)} of ${pesoW(cur.pay)} placed"><span style="width:${cur.pay > 0 ? Math.min(100, Math.round((cur.placed * 100) / cur.pay)) : 0}%"></span></div>
-    ${hint}
-    ${rows.map((i) => `<button class="pp-row" type="button" data-action="pf-line" data-id="${i}"><span class="nm">${esc(pfName(f, i))}</span><span class="tr"><span class="fl" style="width:${Math.max(2, Math.round((pfVal(f, k, i) * 70) / max))}%"></span><span class="v">${pesoW(pfVal(f, k, i))}</span></span></button>`).join("")}
-    <p><button type="button" data-action="pf-view" data-id="add" style="width:100%">+ Plan a category</button></p>
-    <p><button class="primary" id="f-save" data-action="save-planform" style="margin-top:10px" disabled>Save plan</button></p>`;
-}
-// The plan form as it opens: filled from the suggestion for a new plan, or from the current plan for a newer one.
-function openPlanForm() {
-  const cur = planOf(), hidden = M.hiddenCategoryIds(ledger.settings);
-  if (ui.planDraft) { ui.form = ui.planDraft; ui.sheet = { type: "planform" }; pfMemo = { key: null, sug: null }; pfDayMemo = { key: null, notes: ["", ""] }; renderSheet(); return; }   // the work left by a tap outside
-  if (cur) { const f = M.formFromPlan(cur, today()), sug = M.planFormSuggestion(S(), f, { today: today(), settings: ledger.settings }); ui.form = M.withListedLines(f, M.planFormLines(S(), hidden, sug.extras ?? [])); }
-  else ui.form = M.planFormFill(S(), M.newPlanForm(today()), { today: today(), settings: ledger.settings, hidden }).form;
-  ui.form.view = "main"; ui.form.which = 0;
-  ui.sheet = { type: "planform" }; pfMemo = { key: null, sug: null }; pfDayMemo = { key: null, notes: ["", ""] }; renderSheet();
-}
+const pesoW = (c) => peso(c).replace(/\.00$/, "");   // a figure without its .00, where whole pesos read better
 const REQNOTE = `<p class="note small"><span class="req" aria-hidden="true">*</span> needed before you can save</p>`;
 // The four buttons for choosing a bucket by hand; the one in force is pressed.
 // What the name says, in the add window: the bucket it reads as, or that it is not clear and will be asked.
@@ -463,7 +397,7 @@ function renderScreen() {
   if (ui.tab !== "setup") ui.setupPage = null;
   // Each view starts with its own <h1>; it is moved up into the bar beside the menu button.
   const html = !device.allowEntry ? `<h1>fo/und</h1><p class="note">Entry is switched off on this device. See the note above.</p>`
-    : ui.tab === "verify" ? viewVerify() : ui.tab === "setup" ? viewSetup() : ui.tab === "help" ? viewHelp() : ui.tab === "money" ? viewMoney() : ui.tab === "cards" ? viewCards() : ui.tab === "budget" ? viewBudget() : ui.tab === "checkin" ? viewCheckin() : ui.tab === "goals" ? viewGoals() : ui.tab === "checks" ? viewChecks() : ui.tab === "trips" ? viewTrips() : ui.tab === "scheduled" ? viewScheduled() : ui.tab === "buffer" ? viewBuffer() : ui.tab === "scan" ? viewScan() : ui.tab === "income" ? viewIncome() : viewLog();
+    : ui.tab === "verify" ? viewVerify() : ui.tab === "setup" ? viewSetup() : ui.tab === "help" ? viewHelp() : ui.tab === "money" ? viewMoney() : ui.tab === "cards" ? viewCards() : ui.tab === "budget" ? viewBudget() : ui.tab === "checkin" ? viewCheckin() : ui.tab === "goals" ? viewGoals() : ui.tab === "checks" ? viewChecks() : ui.tab === "trips" ? viewTrips() : ui.tab === "scheduled" ? viewScheduled() : ui.tab === "scan" ? viewScan() : ui.tab === "income" ? viewIncome() : viewLog();
   const m = /^<h1>([^<]*)<\/h1>/.exec(html);
   renderTop(m ? m[1] : "fo/und");
   const scr0 = $("screen"), sameTab = ui.tab === lastTabSig, oldBar = scr0.querySelector(".modebar, .viewmark"), barWas = oldBar?.getBoundingClientRect().top, bodyWas = scr0.querySelector(".viewbody")?.offsetHeight ?? 0;
@@ -2253,31 +2187,6 @@ function viewBudgets(hero, month, maps, asOf, now, label) {
 // ---------- overrun buffer ----------
 // The account the owner picks (a wallet, say) holds two envelopes the ledger tracks apart: an everyday allowance and the overrun buffer.
 const gcashOf = () => (ledger.settings.gcash && S().accounts.some((a) => a.id === ledger.settings.gcash.account_id) ? ledger.settings.gcash : null);
-function viewBuffer() {
-  const g = gcashOf();
-  if (!g) return `<h1>Buffer</h1><p class="note">Money kept aside for when a category goes over budget. Every draw is recorded against that category.</p>
-    <p><button class="primary" data-action="open-bufsetup">Set up the buffer</button></p>`;
-  const month = M.monthOf(today());
-  const sum = M.bufferSummary(S(), { allowance_envelope_id: g.allowance_id, buffer_envelope_id: g.buffer_id, month });
-  const line = planOf()?.lines.find((l) => l.kind === "buffer");
-  const monthly = line ? line.first + line.second : null;
-  const acct = S().accounts.find((a) => a.id === g.account_id);
-  const empty = sum.allowance <= 0;
-  const draws = sum.draws.length ? `<table class="tbl"><tr><th>Category</th><th class="n">Drawn</th></tr>${sum.draws.map((d) => `<tr><td>${esc(d.name)}</td><td class="n">${d.amount === 0 && d.pending ? peso(d.pending) + "<small> not verified</small>" : peso(d.amount) + (d.pending ? `<small> + ${peso(d.pending)} not verified</small>` : "")}</td></tr>`).join("")}
-      <tr class="total"><td>Total drawn</td><td class="n">${peso(sum.drawn)}</td></tr></table>` : `<p class="note">Nothing has been drawn from the buffer this month.</p>`;
-  const sweepNames = (ledger.settings.sweep_order ?? []).map((o) => S().goals.find((x) => x.id === o.goal_id)?.name).filter(Boolean);
-  const flagged = M.underBudgetedCategories(S(), g.buffer_id, 2).map((c) => categoryName(c.category_id));
-  return `<h1>Buffer</h1><p class="sub">Inside ${esc(acct.name)}</p>
-    <div class="card"><dl><dt>Buffer left</dt><dd class="big">${peso(sum.buffer)}</dd>${monthly != null ? `<dt>Plan per month</dt><dd>${peso(monthly)}</dd>` : ""}<dt>Allowance left</dt><dd>${peso(sum.allowance)}</dd></dl></div>
-    ${empty ? `<p class="note"><b>The everyday allowance in ${esc(acct.name)} is empty.</b> More ${esc(acct.name)} spending will draw the buffer.</p>` : ""}
-    <h2>Drawn in ${esc(M.monthLabel(month))}</h2>${draws}
-    ${flagged.length ? `<p class="note">${esc(flagged.join(", "))} drew the buffer in more than one month. That line may be under-budgeted: set a new budget from next month.</p>` : ""}
-    <p><button class="primary" data-action="open-bufund" style="margin-top:8px">Add to the buffer</button></p>
-    <p><button data-action="sweep-buffer" style="width:100%">Sweep what is left (month end)</button></p>
-    <p class="note">${sweepNames.length ? "The sweep fills " + esc(sweepNames.join(", then ")) + ": each one up to its target, and the last one takes the rest." : "Choose which goals the leftover goes to, in order."} It is saved as a draft for you to verify.</p>
-    <p><button class="act" data-action="open-sweep">Choose where the leftover goes</button></p>`;
-}
-
 // ---------- trips ----------
 // A trip is a tag with an optional budget. Switch one on and new entries are tagged with it, with no extra taps.
 // ---------- scheduled payments (src/model/schedules.js) ----------
@@ -2458,43 +2367,6 @@ function viewChecks() {
 // ---------- pay plan ----------
 const plansOf = () => ledger.settings.plans ?? [];
 const planOf = () => M.planInEffect(plansOf(), today());
-const paydayText = (d) => (d === "last" ? "the last day of the month" : "the " + d + ord(d));
-const paydaysLine = (plan) => (plan.paydays.length === 1
-  ? `Payday on ${paydayText(plan.paydays[0].day)}. In effect since ${longDate(plan.effective_from)}.`
-  : `Paydays on ${paydayText(plan.paydays[0].day)} and ${paydayText(plan.paydays[1].day)}. In effect since ${longDate(plan.effective_from)}.`);
-function viewPlan() {
-  const plan = planOf(), all = plansOf();
-  const howto = `<h2>How to use it</h2><p class="note">Use it when you are paid in parts and want each payday planned.</p><p class="note">Each line is tracked only when its name matches one of your categories, such as Rent or Food.</p><p class="note">Every payday's lines must add up to that payday's pay.</p>`;
-  const buttons = (first) => `<p><button class="${first ? "primary" : ""}" data-action="open-planform" style="${first ? "" : "width:100%"}">${first ? "Type in a pay plan" : "Add a newer plan"}</button></p>`;
-  if (!plan) return `<h1>Pay plan</h1><p class="note">${all.length ? "Your plan starts " + esc(longDate([...all].sort((x, y) => (x.effective_from < y.effective_from ? -1 : 1))[0].effective_from)) + "." : "Your plan for each payday: how much goes to rent, daily spending and savings. You can skip it. Buckets works without it."}</p>${all.length ? "" : buttons(true) + howto}`;
-  return `<h1>Pay plan</h1><p class="sub">This divides each payday. Buckets sets your limit per category for the month.</p><p class="sub">${esc(paydaysLine(plan))}</p>
-    ${planAgreeHtml(plan)}${planBody(plan, all)}${buttons(false)}${howto}`;
-}
-// The plan's tables: lines by payday, income against what arrived, this cutoff (the Pay plan screen).
-function planBody(plan, all) {
-  const t = M.planTotals(plan), two = plan.paydays.length === 2, [p1, p2] = plan.paydays;
-  const lines = plan.lines.map((l) => `<tr><td>${esc(l.name)}</td><td class="n">${peso(l.first)}</td>${two ? `<td class="n">${peso(l.second)}</td>` : ""}<td class="n">${peso(l.first + l.second)}</td></tr>`).join("");
-  const prog = M.planProgress(S(), plan, today(), { categoryMaps: S().categoryMaps });
-  const mine = prog.rows.filter((r) => r.kind === "expense" && r.matched);
-  const unmatched = prog.rows.filter((r) => r.kind === "expense" && !r.matched);
-  const which = plan.paydays[prog.period.index - 1];
-  const rem = mine.map((r) => `<tr><td>${esc(r.name)}</td><td class="n">${peso(r.planned)}</td><td class="n">${peso(r.spent)}</td>${vcell(r.remaining)}</tr>`).join("");
-  const history = all.length > 1 ? `<p class="note">Earlier plans stay saved: ${esc([...all].sort((x, y) => (x.effective_from < y.effective_from ? -1 : 1)).map((x) => longDate(x.effective_from)).join(", "))}.</p>` : "";
-  const day = (iso, n) => new Date(Date.parse(iso) + n * 86400000).toISOString().slice(0, 10);
-  const ivar = (v) => v === 0 ? "As planned" : (v > 0 ? "+" : "-") + peso(Math.abs(v)) + (v > 0 ? " more" : " less");
-  const incomeRows = [M.planIncome(S(), plan, day(prog.period.start, -1)), M.planIncome(S(), plan, today())].map((v) =>
-    `<tr><td>${esc(v.label)}<small> ${esc(longDate(v.period.start))}</small></td><td class="n">${peso(v.planned)}</td><td class="n">${peso(v.actual)}</td><td class="n">${esc(ivar(v.variance))}</td></tr>`).join("");
-  return `<table class="tbl"><tr><th>Line</th><th class="n">${esc(p1.label)}</th>${two ? `<th class="n">${esc(p2.label)}</th>` : ""}<th class="n">Monthly</th></tr>${lines}
-      <tr class="total"><td>Total (= income)</td><td class="n">${peso(t.first)}</td>${two ? `<td class="n">${peso(t.second)}</td>` : ""}<td class="n">${peso(t.month)}</td></tr></table>
-    <h2>Income</h2><table class="tbl"><tr><th>Payday</th><th class="n">Plan</th><th class="n">Received</th><th class="n">Difference</th></tr>${incomeRows}</table>
-    <p class="note">The plan holds planned income. Your real pay is recorded below. The gap is shown, never changed.</p>
-    <p><button data-action="open-income" style="width:100%">Record pay received</button></p>
-    <h2>This cutoff</h2><p class="note">${esc(which.label)} to the day before the next: ${esc(longDate(prog.period.start))} to ${esc(longDate(prog.period.end))}. Only verified spending counts.</p>
-    ${mine.length ? `<table class="tbl"><tr><th>Line</th><th class="n">Plan</th><th class="n">Spent</th><th class="n">Left</th></tr>${rem}</table>` : `<p class="note">No plan line matches one of your categories yet.</p>`}
-    ${unmatched.length ? `<p class="note">Not matched to a category, so not tracked: ${esc(unmatched.map((r) => r.name).join(", "))}.</p>` : ""}
-    ${history}`;
-}
-const ord = (n) => (n % 100 >= 11 && n % 100 <= 13 ? "th" : { 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th");
 
 // ---------- goals ----------
 // A goal's picture: the one the owner chose, else a plain first-letter tile.
@@ -2695,9 +2567,9 @@ function viewBudget() {
   const spentNote = (r) => { if (!prog || r.kind !== "category") return ""; const sp = prog.spent[r.id] ?? 0, d = r.amount - sp; return `Spent ${peso(sp)} \u00b7 ${d >= 0 ? peso(d) + " left" : peso(-d) + " over"}`; };
   const shareNote0 = (r) => { if (per === "month" && r.kind === "category") return changeNote(r.id, r.amount); if (per !== "payday" || v.paydays.length < 2) return r.kind === "buffer" ? BUFFER_SUB : ""; const pin = set.payday_pins?.[r.key]; return Number.isInteger(pin) ? (pin === w ? "Whole amount here" : "Whole amount on the " + v.paydays[pin].label.toLowerCase() + " payday") : r.kind === "buffer" ? BUFFER_SUB : ""; };
   const shareNote = (r) => [shareNote0(r), spentNote(r)].filter(Boolean).join(" \u00b7 ");
-  const act = (r) => (per === "payday" ? { action: "bv-line", id: r.key } : per === "month" ? (r.kind === "category" ? { action: "open-budget", id: r.id } : r.kind === "goal" ? { action: "open-goal-monthly", id: r.id } : r.kind === "buffer" ? { action: "open-buffer-monthly", id: "buffer" } : {}) : {});
+  const act = (r) => (per === "payday" ? { action: "bv-line", id: r.key } : per === "month" ? (r.kind === "category" ? { action: "open-budget", id: r.id } : r.kind === "goal" ? { action: "open-goal-monthly", id: r.id } : r.kind === "buffer" ? { action: "open-buffer", id: "buffer" } : {}) : {});
   // THE BUFFER LINE (P0-6 PR 5): one figure, settings.buffer_monthly; with none set, Month offers it as an empty row to tap.
-  const noBuffer = per === "month" && !rows.some((r) => r.kind === "buffer") ? `<h4 class="sugh">Buffer</h4>` + barCard([{ id: "buffer", action: "open-buffer-monthly", name: BUFFER_NAME, sub: BUFFER_SUB, fig: "Not set", pct: null }]) : "";
+  const noBuffer = per === "month" && !rows.some((r) => r.kind === "buffer") ? `<h4 class="sugh">Buffer</h4>` + barCard([{ id: "buffer", action: "open-buffer", name: BUFFER_NAME, sub: BUFFER_SUB, fig: "Not set", pct: null }]) : "";
   const card = (g) => { const list = rows.filter((r) => r.group === g); return !list.length ? (g === "Buffer" ? noBuffer : "") : `<h4 class="sugh">${g}</h4>` + barCard(list.map((r) => ({ name: `${r.kind === "buffer" ? BUFFER_NAME : esc(r.name)}${r.kind === "category" ? hiddenTag(r.id) : ""}`, sub: shareNote(r), fig: peso(r.amount), pct: Math.round((r.amount * 100) / max), label: r.name, ...(past ? {} : act(r)) }))); };
   const noBudget = per === "month" ? expenseCategories().filter((c) => !M.isHiddenCategory(set, c.id) && !(M.budgetFor(S().rules, c.id, month) > 0)) : [];
   const noBudgetCard = noBudget.length ? `<h4 class="sugh">No budget yet</h4>` + barCard(noBudget.map((c) => ({ ...(past ? {} : { id: c.id, action: "open-budget" }), name: esc(c.name), sub: changeNote(c.id, null), fig: "No budget", pct: null }))) : "";
@@ -2741,18 +2613,6 @@ async function savePinsFromForm() {
   if (JSON.stringify(pins) !== JSON.stringify(ledger.settings.budget_pins ?? {})) await commit(S(), { ...ledger.settings, budget_pins: pins }, { quiet: true });
 }
 
-// The plan and the budgets it implies are written by ONE save (M.planWithBudgets), and this says whether they agree.
-// Says whether the plan and the budgets agree (and offers to make them match). Used by the Pay plan screen.
-function planAgreeHtml(plan) {
-  const month = M.monthOf(today()), next = M.addMonths(month, 1);
-  const now = M.planBudgetMismatches(S(), ledger.settings, month), then = M.planBudgetMismatches(S(), ledger.settings, next);
-  const miss = now.unmatched.length ? ` No budget for ${esc(now.unmatched.join(", "))}: no spending category has that name.` : "";
-  const agree = !now.plan ? "" : then.mismatches.length === 0 ? (now.mismatches.length === 0 ? `<p class="note" id="plan-agree">Your plan and your budgets agree for ${esc(M.monthLabel(month))}.${miss}</p>`
-      : `<p class="note" id="plan-agree">Your budgets will match your plan from ${esc(M.monthLabel(next))}.${miss}</p>`)
-    : `<p class="note" id="plan-differ"><b>Your budgets differ from your plan:</b> ${esc(then.mismatches.map((m) => `${m.name} budget ${m.budget === null ? "none" : peso(m.budget)}, plan ${peso(m.planned)}`).join("; "))}.${miss}</p>
-      <p><button data-action="sync-plan-budgets" style="width:100%">Make the budgets match the plan, from ${esc(M.monthLabel(next))}</button></p>`;
-  return agree;
-}
 
 
 // With the new Budget on, saving a plan also sets the budgets it implies (one save). This says which, before anything is saved.
@@ -3176,8 +3036,6 @@ function renderSheet() {
       ${REQNOTE}
       <p class="note">Pay, interest or a refund. For a full payslip, use Add a payslip in Income. Saved as verified, since you copy it from paper.</p>
       <p><button class="primary" id="f-save" data-action="save-income" style="margin-top:6px" disabled>Save</button></p>`;
-  } else if (sh.type === "planform") {
-    body = planformBody(ui.form);
   } else if (sh.type === "intro") {
     const it = M.introFor(sh.id);
     body = `<div class="in-wrap">${M.introDrawing(it.drawing)}<h3 class="wl-title">${esc(it.title)}</h3>${it.lines.map((l) => `<p class="note">${esc(l)}</p>`).join("")}
@@ -3371,6 +3229,30 @@ function renderSheet() {
       <label for="f-amount">Per month (\u20B1)${REQ}</label><input id="f-amount" data-field="amount" inputmode="decimal" value="${esc(ui.form.amount ?? "")}" autocomplete="off">
       ${REQNOTE}
       <p><button class="primary" id="f-save" data-action="save-income-base" style="margin-top:6px" disabled>Use this figure</button></p>`;
+  } else if (sh.type === "buffer-view") {
+    // A7 (overhaul, owner's yes Nov 15): the old Buffer screen, folded into Budget's Buffer row. One monthly figure (`buffer_monthly`), then,
+    // once a wallet holds the buffer, what is left in it, the draws this month and the month-end sweep. Every action of the old screen is here.
+    const g = gcashOf(), bm = ledger.settings.buffer_monthly, month = M.monthOf(today());
+    // The same rows as every list in the app (barRow, like the draws below), so the two cards space alike (owner's mark, Nov 16).
+    const monthLine = { id: "buffer", action: "open-buffer-monthly", name: "A month", sub: "", fig: Number.isInteger(bm) ? peso(bm) : "Not set", pct: null };
+    if (!g) {
+      body = `<div class="gview"><h3>${BUFFER_NAME}</h3><div class="gsub">${BUFFER_SUB}</div></div>${barCard([monthLine])}
+        <p class="note">Keep it in one account, like a wallet. When a category goes over its budget, the buffer pays the gap.</p>
+        <p><button class="primary" data-action="open-bufsetup">Set up the buffer</button></p>`;
+    } else {
+      const sum = M.bufferSummary(S(), { allowance_envelope_id: g.allowance_id, buffer_envelope_id: g.buffer_id, month }), acct = S().accounts.find((a) => a.id === g.account_id);
+      const sweepNames = (ledger.settings.sweep_order ?? []).map((o) => S().goals.find((x) => x.id === o.goal_id)?.name).filter(Boolean);
+      const flagged = M.underBudgetedCategories(S(), g.buffer_id, 2).map((c) => categoryName(c.category_id));
+      const draws = sum.draws.length ? barCard(sum.draws.map((d) => ({ name: esc(d.name), sub: d.pending ? (d.amount ? "+ " + peso(d.pending) + " waiting in Verify" : "Waiting in Verify") : "", fig: peso(d.amount || d.pending), pct: null }))) : `<p class="note">Nothing drawn this month.</p>`;
+      body = `<div class="gview"><h3>${BUFFER_NAME}</h3><div class="gfig">${peso(sum.buffer)}</div><div class="gsub">Left, inside ${esc(acct.name)}</div>
+        <p><button class="primary" data-action="open-bufund">Add to the buffer</button></p></div>
+        ${barCard([monthLine, { name: "Everyday allowance left", sub: sum.allowance <= 0 ? esc(acct.name) + " spending now draws the buffer" : "", fig: peso(sum.allowance), pct: null },
+          { id: "buffer", action: "open-sweep", name: "Leftover goes to", sub: "", fig: sweepNames.length ? esc(sweepNames.join(", then ")) : "Choose", pct: null }])}
+        <h4 class="sugh">Drawn in ${esc(M.monthLabel(month))}</h4>${draws}
+        ${flagged.length ? `<p class="note">${esc(flagged.join(", "))} drew the buffer in more than one month. That budget may be too low.</p>` : ""}
+        <p><button data-action="sweep-buffer" style="width:100%">Sweep what is left (month end)</button></p>
+        <p class="note">The sweep is saved as a draft for you to verify.</p>`;
+    }
   } else if (sh.type === "buffer-monthly") {
     const set0 = Number.isInteger(ledger.settings.buffer_monthly);
     body = `<h3>Buffer: a month</h3><p class="note">Money kept for when a category goes over its budget. It is never counted as savings.</p>
@@ -3936,8 +3818,8 @@ function renderSheet() {
       <p class="note">Anything entered since this backup was made will be gone.${sh.all ? "" : ` Pictures are not in a backup, so those entries will say "picture not on this phone".`}</p>
       <p><button class="primary" id="f-save" data-action="restore-now">${ui.form.confirmRestore ? "Tap again to replace" : "Replace this phone's data"}</button></p>`;
   }
-  const closer = sh.type === "notice" || sh.type === "firstrun" || sh.type === "setup-restored" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" || (sh.type === "planform" && (ui.form.view ?? "main") !== "main") ? "" : sh.type === "planform" ? `<p><button data-action="plan-cancel" style="width:100%">Cancel</button></p>` : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
-  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""}${sh.type === "firstrun" ? "" : ' data-action="close-sheet"'}></div><div class="sheet${opening ? " enter" : ""}${sh.type === "firstrun" ? " full" : ""}${sh.type === "setup-restored" || sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" || sh.type === "planform" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
+  const closer = sh.type === "notice" || sh.type === "firstrun" || sh.type === "setup-restored" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? "" : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "buffer-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
+  $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""}${sh.type === "firstrun" ? "" : ' data-action="close-sheet"'}></div><div class="sheet${opening ? " enter" : ""}${sh.type === "firstrun" ? " full" : ""}${sh.type === "setup-restored" || sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
   const box = document.querySelector("#sheet .sheet"); if (box && keepAt) box.scrollTop = keepAt;
   if (voiceListener && sh.type === "voice") { const b = $("v-mic"); if (b) b.innerHTML = micLabel("Listening in " + LANG_NAME[ui.form.lang ?? firstLanguage()] + "... tap to stop"); setWave(true); }
   refreshSave();
@@ -4127,9 +4009,6 @@ function refreshSave() {
     const a = M.parsePesos(f.amount);
     btn.disabled = !(a.ok && a.centavos > 0 && f.account_id && f.category_id && f.date);
     if (f.category_id === M.REFUND_CATEGORY_ID && !f.refund_cat) btn.disabled = true;   // a refund also says which spending it was for
-  } else if (type === "planform") {
-    const t = M.planTextFromForm(f), r = t.ok ? M.parsePlan(t.text) : null;
-    btn.disabled = !r?.ok;
   } else if (type === "goal") {
     const a = f.amount ? M.parsePesos(f.amount) : { ok: true };
     btn.disabled = !((f.name ?? "").trim() && a.ok);
@@ -4384,15 +4263,7 @@ async function onClick(el) {
     case "open-month": ui.period = { kind: "month", month: id }; ui.view = "budget"; ui.sel = null; ui.asList = false; renderScreen(); break;
     case "pick-bar": ui.sel = ui.sel === id ? null : id; renderScreen(); break;
     case "tl-range": ui.tl = { key: id, ...M.rangeFor(id, today(), M.firstSpendingDate(SV())), sel: null }; paintLine(); break;
-    case "sync-plan-budgets": {
-      const month = M.addMonths(M.monthOf(today()), 1), plan = M.planInEffect(plansOf(), month + "-01");
-      if (!plan) break;
-      const w = M.planWithBudgets(S(), ledger.settings, { plan, newId: () => newId("rule"), start: month, addPlanRow: false });
-      if (!w.ok) { showToast("Could not save: " + w.message); break; }
-      await commit(w.state, w.settings);
-      showToast((w.changes.length === 1 ? "1 budget" : w.changes.length + " budgets") + " set from " + M.monthLabel(month) + ".");
-      break;
-    }
+    case "open-buffer": ui.sheet = { type: "buffer-view" }; ui.form = {}; renderSheet(); break;
     case "open-buffer-monthly": { const cur = ledger.settings.buffer_monthly, sug = runSuggest(), row = sug?.ok ? sug.saved.find((x) => x.kind === "buffer") : null; ui.sheet = { type: "buffer-monthly" }; ui.form = { amount: Number.isInteger(cur) ? (cur / 100).toFixed(2) : row ? (row.amount / 100).toFixed(2) : "" }; renderSheet(); break; }
     case "save-buffer-monthly": { const a = M.parsePesos(ui.form.amount ?? ""); if (!a.ok || a.centavos < 0) break; ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, buffer_monthly: a.centavos }); showToast("Buffer: " + pesoW(a.centavos) + " a month"); break; }
     case "clear-buffer-monthly": { const { buffer_monthly, ...rest } = ledger.settings; ui.sheet = null; renderSheet(); await commit(S(), rest); showToast("No buffer"); break; }
@@ -4703,8 +4574,8 @@ async function onClick(el) {
       break;
     }
     case "open-bufsetup": {
-      const line = planOf()?.lines.find((l) => l.kind === "buffer");
-      ui.sheet = { type: "bufsetup" }; ui.form = { account_id: null, buf: line ? ((line.first + line.second) / 100).toFixed(2) : "", allow: "" }; renderSheet(); break;
+      const bm = ledger.settings.buffer_monthly;   // A7: the one monthly figure (Budget's Buffer row), never an old Pay plan line
+      ui.sheet = { type: "bufsetup" }; ui.form = { account_id: null, buf: Number.isInteger(bm) && bm > 0 ? (bm / 100).toFixed(2) : "", allow: "" }; renderSheet(); break;
     }
     case "save-bufsetup": {
       const buf = ui.form.buf ? M.parsePesos(ui.form.buf) : { ok: true, centavos: 0 }, allow = ui.form.allow ? M.parsePesos(ui.form.allow) : { ok: true, centavos: 0 };
@@ -4853,7 +4724,8 @@ async function onClick(el) {
     }
     case "sweep-buffer": {
       const g = gcashOf(), order = M.sweepOrderAccounts(S(), ledger.settings.sweep_order);
-      if (!order) { showToast("Choose where the leftover goes first (Buffer, Choose where the leftover goes)."); break; }
+      if (!order) { showToast("Choose where the leftover goes first: tap Leftover goes to."); break; }
+      if (ui.sheet?.type === "buffer-view") { ui.sheet = null; renderSheet(); }
       const plan = M.planSweep(S(), { transaction_id: newId("tx"), date: today(), gcash_account_id: g.account_id, buffer_envelope_id: g.buffer_id, order }, new Date());
       if (!plan.ok) { showToast("Could not save: " + plan.violations[0].message); break; }
       if (!plan.transaction) { showToast("Nothing left in the buffer to sweep."); break; }
@@ -4911,45 +4783,12 @@ async function onClick(el) {
       showToast("Saved. Waiting in Verify: " + peso(amount.centavos));   // typed money is a draft (P0-7); never silent about it
       break;
     }
-    case "open-planform": {   // the first times, a small popup says what the screen is for; then the form opens already filled
-      openPlanForm(); break;
-    }
     case "intro": ui.introOff = false; ui.sheet = { type: "intro", id: el.dataset.id, back: ui.sheet, manual: true }; renderSheet(); break;   // the ? : brought back on purpose, not counted
     case "intro-off": ui.introOff = !ui.introOff; renderSheet(); break;
     case "intro-done": {
       const sh = ui.sheet; const settings = M.markIntro(ledger.settings, sh.id, ui.introOff === true, !sh.manual);
-      if (sh.back) { ui.sheet = sh.back; await commit(S(), settings, { quiet: true }); renderSheet(); } else { await commit(S(), settings, { quiet: true }); if (sh.then === "planform") openPlanForm(); else { ui.sheet = null; renderSheet(); } }
+      if (sh.back) { ui.sheet = sh.back; await commit(S(), settings, { quiet: true }); renderSheet(); } else { await commit(S(), settings, { quiet: true }); ui.sheet = null; renderSheet(); }
       break;
-    }
-    case "pf-view": ui.form.view = el.dataset.id; renderSheet(); break;
-    case "pf-which": ui.form.which = Number(el.dataset.id); renderSheet(); break;
-    case "pf-line": ui.form.line = Number(el.dataset.id); ui.form.view = "line"; renderSheet(); break;
-    case "pf-kind": ui.form["k" + ui.form.line] = el.dataset.id; renderSheet(); break;
-    case "pf-new-line": { const f = ui.form, i = f.count ?? 0; if (i < M.MAX_FORM_LINES) { ui.form = { ...f, count: i + 1, ["n" + i]: "", ["k" + i]: "expense", ["a" + i]: "", ["b" + i]: "", ["c" + i]: true, line: i, view: "line" }; renderSheet(); } break; }
-    case "pf-use-line": { const i = Number(el.dataset.id), row = pfSuggestedFor(pfSug(), ui.form, i); if (!row) break; ui.form["a" + i] = row.first > 0 ? M.amountText(row.first) : ""; ui.form["b" + i] = ui.form.twice && row.second > 0 ? M.amountText(row.second) : ""; for (const k of ["a", "b"]) { const box = $("pf-" + k + i); if (box) box.value = ui.form[k + i] ?? ""; } break; }
-    case "pf-remove": { const i = el.dataset.id; ui.form["a" + i] = ""; ui.form["b" + i] = ""; ui.form.view = "main"; renderSheet(); break; }
-    case "pf-rest-to": { const f = ui.form, w = f.twice ? f.which ?? 0 : 0, k = w ? "b" : "a", st = M.planFormStatus(f)[w], i = el.dataset.id; if (st && st.left > 0) f[k + i] = M.amountText(pfVal(f, k, i) + st.left); f.view = "main"; renderSheet(); break; }
-    case "pf-refill": {   // fill every listed line again from the suggestion built on the pay now in the form; lines you added yourself are kept
-      const f = { ...ui.form }; for (let i = 0; i < (f.count ?? 0); i++) if (!f["c" + i]) { f["a" + i] = ""; f["b" + i] = ""; }
-      const r = M.planFormFill(S(), f, { today: today(), settings: ledger.settings, hidden: M.hiddenCategoryIds(ledger.settings), keepPay: true });
-      ui.form = { ...r.form, view: "main", which: 0 }; pfMemo = { key: null, sug: null }; renderSheet(); break;
-    }
-    case "pf-rent-save": { const a = M.parsePesos(ui.form.rentbox ?? ""); if (!a.ok || a.centavos < 0) { showToast("Type the rent like 12000, or 0 if you pay none."); break; } pfMemo = { key: null, sug: null }; await commit(S(), { ...ledger.settings, starter_rent: a.centavos }); renderSheet(); break; }
-    case "plan-once": ui.form.twice = false; ui.form.which = 0; renderSheet(); break;
-    case "plan-twice": ui.form.twice = true; renderSheet(); break;
-    case "save-planform": {
-      const t = M.planTextFromForm(ui.form); if (!t.ok) { showToast(t.error); break; }
-      const r = M.parsePlan(t.text);
-      if (!r.ok) { showToast(r.error); break; }
-      ui.planDraft = null;
-      {   // the plan row and its budgets are written together, or not at all
-        const w = M.planWithBudgets(S(), ledger.settings, { plan: r.plan, newId: () => newId("rule") });
-        if (!w.ok) { showToast(w.message); break; }
-        ui.sheet = null; renderSheet();
-        await commit(w.state, w.settings);
-        showToast(w.changes.length ? "Plan loaded. " + (w.changes.length === 1 ? "1 budget" : w.changes.length + " budgets") + " set from " + M.monthLabel(w.month) + "." : "Plan loaded. The budgets already match.");
-        break;
-      }
     }
     case "open-cal": { const target = el.dataset.target ?? "day"; ui.calMonth = M.monthOf(calSelected(target) ?? today()); ui.sheet = { type: "cal", target }; renderSheet(); break; }
     case "cal-step": { let next = M.addMonths(ui.calMonth, Number(el.dataset.step)); if (next > M.monthOf(today())) next = M.monthOf(today()); ui.calMonth = next; renderSheet(); break; }
@@ -5416,9 +5255,8 @@ async function onClick(el) {
       } else if (await commit(next)) showToast(said);
       break;
     }
-    case "plan-cancel": ui.planDraft = null; ui.sheet = null; renderSheet(); break;
     case "close-sheet": { if (el.id === "scrim" && ui.sheet && ui.sheetTyped && !(await askDiscard())) break;   // F3: keep what was typed unless the owner says Discard
-      voiceListener?.stop(); if (pdfPasswordResolve) { const go = pdfPasswordResolve; pdfPasswordResolve = null; go(null); } if (ui.sheet?.type === "planform") ui.planDraft = ui.form;
+      voiceListener?.stop(); if (pdfPasswordResolve) { const go = pdfPasswordResolve; pdfPasswordResolve = null; go(null); }
       if (ui.sheet?.type === "intro") { const sh = ui.sheet; await commit(S(), M.markIntro(ledger.settings, sh.id, ui.introOff === true, !sh.manual), { quiet: true }); if (sh.back) { ui.sheet = sh.back; renderSheet(); break; } }   // a tap outside the popup counts as seen, too   // a tap outside the plan keeps the work for next time; Cancel throws it away
       if (ui.sheet?.type === "budget-suggest") await savePinsFromForm(); const wasNotice = ui.sheet?.type === "notice"; ui.sheet = null; renderSheet(); if (wasNotice) maybeWelcome(); break; }
     case "cat-card-later": ui.sheet = null; renderSheet(); await commit(S(), { ...ledger.settings, cat_card_seen: M.phTimestamp() }, { quiet: true }); break;

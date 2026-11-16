@@ -299,7 +299,7 @@ test("one buffer: Suggest a budget proposes exactly the monthly buffer Budget sh
 test("the Buffer row: named the same everywhere, set and cleared from its own window, offered empty when none is set", () => {
   assert.match(app, /const BUFFER_NAME = "Buffer", BUFFER_SUB = "For overspending; not savings";/);
   assert.match(app, /fig: "Not set", pct: null \}\]\) : "";/, "Month shows an empty Buffer row to tap when none is set");
-  assert.ok(app.includes('r.kind === "buffer" ? { action: "open-buffer-monthly", id: "buffer" }'), "the row opens the buffer window");
+  assert.ok(app.includes('r.kind === "buffer" ? { action: "open-buffer", id: "buffer" }'), "the row opens the Buffer window (A7; it opened the monthly figure straight away, which is now the window's first row)");
   assert.match(app, /case "save-buffer-monthly": \{ const a = M\.parsePesos\(ui\.form\.amount \?\? ""\); if \(!a\.ok \|\| a\.centavos < 0\) break; ui\.sheet = null; renderSheet\(\); await commit\(S\(\), \{ \.\.\.ledger\.settings, buffer_monthly: a\.centavos \}\);/);
   assert.match(app, /case "clear-buffer-monthly": \{ const \{ buffer_monthly, \.\.\.rest \} = ledger\.settings;/, "No buffer removes the setting; no entry is touched");
   assert.ok(app.includes('<p class="note">Money kept for when a category goes over its budget. It is never counted as savings.</p>'));

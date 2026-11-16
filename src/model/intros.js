@@ -18,7 +18,6 @@ const WORDS = {
   checkin: L("gap", "Numbers don't lie. Face them weekly.", "A gap is shown, never hidden."),
   scan: L("paper", "Let your phone read the paper.", "All of it stays on your phone."),
   trips: L("route", "Spend on the road, count it once.", "Add dates and it fills itself."),
-  buffer: L("cushion", "A cushion for rainy months.", "Tap to add to it."),
   setup: L("rows", "Make the app yours.", "Tap anything to change it."),
 };
 export const INTROS = Object.fromEntries(Object.entries(WORDS).map(([id, w]) => [id, { title: STRIP_NAMES[id] ?? SCREEN_NAMES[id], ...w }]));

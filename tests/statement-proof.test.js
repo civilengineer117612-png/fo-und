@@ -91,7 +91,7 @@ test("SAFETY COPY: a copy that cannot be saved, or does not read back, stops it:
 });
 test("the screen: the gap is kept only through the copy, and the window offers the choice", () => {
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
-  const save = app.slice(app.indexOf('case "save-import": {'), app.indexOf('case "plan-cancel":'));
+  const save = app.slice(app.indexOf('case "save-import": {'), app.indexOf('case "close-sheet":'));
   assert.match(save, /if \(gapKept\) \{[^]*?M\.replaceWithCopy\(\{ current: ledger, next: nl, io: \{ readCopies, writeCopies, writeLedger[^]*?kind: "repair"[^]*?\} else if \(await commit\(next\)\)/);
   assert.match(app, /data-action="stm-gap" aria-pressed="\$\{keepGap\}">Keep the difference as not yet explained/);
   assert.match(app, /case "stm-gap": form\.keepGap = !\(form\.keepGap \?\? true\)/);
