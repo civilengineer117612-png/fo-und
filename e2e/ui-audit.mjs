@@ -71,6 +71,7 @@ const AUDIT = (isHelp) => {
   return { links, filled };
 };
 const browser = await launchBrowser(), { ledger, TS } = makeLedger(), errors = [];
+let ringScreens = 0;   // F8: how many screens the ring check ran on (it must not pass by never running)
 for (const scheme of ["light", "dark"]) {
   const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA });
   await ctx.route("**/*", (r) => new URL(r.request().url()).origin === new URL(base).origin ? r.continue() : r.abort());
@@ -86,10 +87,21 @@ for (const scheme of ["light", "dark"]) {
       const r = await page.evaluate(AUDIT, /^Help/.test(name));
       check(r.links.length === 0, `${scheme}: ${name}: no text-link action`, "underlined or link-styled: " + JSON.stringify(r.links));
       check(r.filled.length <= 1, `${scheme}: ${name}: at most one filled main button`, "filled buttons: " + JSON.stringify(r.filled));
+      // F8 (overhaul): scrolled to its very bottom, a screen's last buttons stay clear of the scan ring that rises above the bottom bar
+      // (the audit found "See all accounts" on Cards under it). Screens only; a window or the menu covers the bar anyway.
+      const under = await page.evaluate(() => {
+        if (document.querySelector("#sheet .sheet") || document.querySelector("#menu .drawer")) return null;
+        const ring = document.querySelector("#nav .navring")?.getBoundingClientRect(); if (!ring) return null;
+        window.scrollTo(0, 1e7);
+        return [...document.querySelectorAll("#screen button, #screen [data-action]")].filter((b) => { const r = b.getBoundingClientRect(); return r.height > 0 && b.offsetParent !== null && getComputedStyle(b).visibility !== "hidden" && r.bottom > ring.top && r.top < ring.bottom && r.right > ring.left && r.left < ring.right; })
+          .map((b) => (b.getAttribute("aria-label") || b.textContent || "").replace(/\s+/g, " ").trim().slice(0, 30));
+      });
+      if (under) { ringScreens++; check(under.length === 0, `${scheme}: ${name}: at the bottom, nothing sits under the scan ring`, "under the ring: " + JSON.stringify(under)); }
     } catch (e) { check(false, `${scheme}: ${name}: could not be opened`, String(e.message).split("\n")[0]); }
   }
   await ctx.close();
 }
+check(ringScreens >= 20, "the scan-ring check ran on " + ringScreens + " screens (light and dark)");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await browser.close();
 console.log(`ui-audit: ${passed} passed, ${failed} failed`); process.exit(failed ? 1 : 0);

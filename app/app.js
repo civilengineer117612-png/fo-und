@@ -527,11 +527,14 @@ function entriesListHtml() {
   const shown = ui.showCancelled ? list : list.filter((t) => !gone.has(t.id)), nGone = list.length - list.filter((t) => !gone.has(t.id)).length;
   return `${nGone ? `<p class="note"><button class="act" data-action="toggle-cancelled">${ui.showCancelled ? "Hide" : "Show"} ${nGone} cancelled ${nGone === 1 ? "entry" : "entries"}</button></p>` : ""}${shown.length ? shown.map(rowFor).join("") : `<p class="note">Nothing logged in this period.</p>`}`;
 }
+// L15 (overhaul): the small line under a Log row joins only the parts that exist, so an entry with no detail (a set-aside inside one wallet)
+// reads "draft", never "· draft" or "Sun, Nov 8 · · verified".
+const rowLine = (t, d, withDate) => [withDate ? listDate(t.date) : "", d.detail, t.status === "draft" ? "draft" : "verified", M.correctionTag(S(), t) === "Corrected" ? "cancelled" : ""].filter(Boolean).join(" · ");
 function rowFor(t, withDate = false, spendingAmount = null) {
   spendingAmount = Number.isFinite(spendingAmount) ? spendingAmount : null;
   const d = describe(t);
   const acct = d.kind === "expense" ? S().accounts.find((a) => a.id === d.account_id) : null;
-  return `<button class="row rowbtn" data-action="open-tx" data-id="${esc(t.id)}" aria-label="Details of ${esc(d.title)}, ${d.kind === "income" ? "money in " : d.kind === "expense" || d.kind === "split" ? "money out " : ""}${peso(d.amount)}"><div>${esc(d.title)}<small class="who" style="gap:6px">${acct ? iconOf(acct, 16) : ""}<span>${withDate ? esc(listDate(t.date)) + " · " : ""}${esc(d.detail)}${t.status === "draft" ? " · draft" : " · verified"}${M.correctionTag(S(), t) === "Corrected" ? " · cancelled" : ""}</span></small></div><div class="amt${d.kind === "income" ? " in" : ""}">${spendingAmount !== null ? peso(spendingAmount) : signed(d)}</div></button>`;
+  return `<button class="row rowbtn" data-action="open-tx" data-id="${esc(t.id)}" aria-label="Details of ${esc(d.title)}, ${d.kind === "income" ? "money in " : d.kind === "expense" || d.kind === "split" ? "money out " : ""}${peso(d.amount)}"><div>${esc(d.title)}<small class="who" style="gap:6px">${acct ? iconOf(acct, 16) : ""}<span>${esc(rowLine(t, d, withDate))}</span></small></div><div class="amt${d.kind === "income" ? " in" : ""}">${spendingAmount !== null ? peso(spendingAmount) : signed(d)}</div></button>`;
 }
 
 // Everything waiting, oldest first. Nothing has to wait for tomorrow: verify whenever you have the time.

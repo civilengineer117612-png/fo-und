@@ -287,3 +287,10 @@ test("Goals hides and shows amounts with the same eye and five dots as Cards, no
   assert.doesNotMatch(js, /Show balances|Hide balances|Hidden\. Tap Show balances/, "the old link and line are gone");
   assert.match(js, /fig: veil\(r\.fig\), pct: r\.pct == null \? null : 0/, "a hidden goal is the same row as a shown one: its figure veiled (the same room, five dots over it), its bar an empty track");
 });
+
+test("L15: a Log row's small line joins only the parts that exist (no stray dots)", () => {
+  const js = read("app/app.js");
+  assert.match(js, /const rowLine = \(t, d, withDate\) => \[withDate \? listDate\(t\.date\) : "", d\.detail, t\.status === "draft" \? "draft" : "verified", M\.correctionTag\(S\(\), t\) === "Corrected" \? "cancelled" : ""\]\.filter\(Boolean\)\.join\(" · "\);/);
+  const row = js.slice(js.indexOf("function rowFor("), js.indexOf("\n}\n", js.indexOf("function rowFor(")));
+  assert.ok(row.includes("${esc(rowLine(t, d, withDate))}") && !row.includes('" · draft"') && !row.includes('" · verified"'), "rowFor writes the joined line, never a fixed separator");
+});

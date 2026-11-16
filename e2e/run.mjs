@@ -1079,6 +1079,9 @@ check(bt.includes("₱600.00") && bt.includes("₱300.00"), "the buffer and the 
 check((await page.locator('#sheet [data-action="open-bufund"], #sheet [data-action="sweep-buffer"], #sheet [data-action="open-sweep"], #sheet [data-action="open-buffer-monthly"]').count()) === 4, "the window keeps every action: add, sweep, where the leftover goes, and the monthly figure");
 await closeBuffer();
 await page.click('#nav button:has-text("Log")');
+// L15: every Log row's small line joins only the parts it has: it never starts or ends with a dot and never shows "· ·" (the exact rule is in tests/app.test.js)
+var rowLines = (await page.locator("#screen .rowbtn small").allInnerTexts()).map((l) => l.trim());
+check(rowLines.length >= 2 && rowLines.every((l) => !/^·|·$|·\s*·/.test(l)), "no Log row line has a stray dot: " + JSON.stringify(rowLines));
 await page.click('button:has-text("Add expense")'); await page.fill("#f-amount", "400"); await page.click('#sheet .chip:has-text("Upskill")'); await page.click('#sheet .chip:has-text("GCash")'); await page.click("#f-save");
 check(await seen(page, "#toast", "₱100.00 came out of the overrun buffer"), "spending past the allowance says how much came out of the buffer");
 await openBuffer();
@@ -1240,13 +1243,16 @@ await openGoal(page, "Apartment");
 { const gt = await text(page, "#sheet");   // P0-6 PR 4: a saved Pay plan no longer feeds any goal figure; the window shows the goal's own account and no plan pace
   check(/Account\s*\S/.test(gt) && !/plan's pace/.test(gt), "a goal's window shows its account and no pace taken from a saved plan"); }
 await page.click('#sheet button[data-action="close-sheet"]');
-await page.click('button:has-text("Add a goal")'); await page.fill("#g-name", "Emergency Fund"); await page.click('#sheet button[data-action="pick-goal-role"]'); await page.fill("#f-amount", "999"); await page.click("#sheet .chip >> nth=0"); await page.click("#f-save");
+// Nov 16: the goal takes the account listed first ("Last used"), and which drafts the Verify walk above confirmed comes in no fixed order (same second,
+// random ids), so that account and its balance change from run to run; one run listed a bank holding 4,650.00, past a 999 target, and the app
+// rightly said Reached. The target was 999; it is 99,999, which no account here reaches, so both checks below hold whatever account comes first.
+await page.click('button:has-text("Add a goal")'); await page.fill("#g-name", "Emergency Fund"); await page.click('#sheet button[data-action="pick-goal-role"]'); await page.fill("#f-amount", "99999"); await page.click("#sheet .chip >> nth=0"); await page.click("#f-save");
 await seen(page, "#screen", "Emergency Fund");
 if (await page.locator('button[data-action="toggle-reveal"][aria-pressed="false"]').count()) await page.click('button[data-action="toggle-reveal"][aria-pressed="false"]');
 await openGoal(page, "Emergency Fund");
 var efText = await text(page, "#sheet");
-check(/Target\s*₱999\.00\s*·\s*your figure/.test(efText), "the Emergency Fund target is the 999 typed when the goal was made, called your figure (a saved plan is not read)");
-check(/Months to target\s*Not known yet/.test(efText) && /Monthly contribution\s*not set/.test(efText), "with no monthly amount typed for the goal, months to target says it is not known");
+check(/Target\s*₱99,999\.00\s*·\s*your figure/.test(efText), "the Emergency Fund target is the 99,999 typed when the goal was made, called your figure (a saved plan is not read)");
+check(/Months to target\s*Not known yet/.test(efText) && /Monthly contribution\s*not set/.test(efText), "with no monthly amount typed for the goal, months to target says it is not known" + (/Months to target\s*Not known yet/.test(efText) && /Monthly contribution\s*not set/.test(efText) ? "" : " -> window said: " + efText.replace(/\s+/g, " ").slice(0, 600)));
 check(!efText.includes("Your plan suggests") && !efText.includes("Use it"), "there is no 'use it' button that would freeze the target as a typed number");
 await shot(page, "41-emergency-target");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
