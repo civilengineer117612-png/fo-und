@@ -17,4 +17,5 @@ if (v === "will-change") cut(BASE, BASE + " will-change: transform;");
 if (v === "base-transform") cut(BASE, BASE + " transform: scale(1);");
 if (v === "no-shrink-in-sheet") h = h.replace("</style>", `#sheet ${SEL}:active { transform: none; }\n</style>`);
 if (v === "no-active-duration") cut(`${SEL}:active { transform: scale(.97); transition-duration: var(--t-touch); }`, `${SEL}:active { transform: scale(.97); }`);
+if (v === "instant-press") cut(`${SEL}:active { transform: scale(.97); transition-duration: var(--t-touch); }`, `${SEL}:active { transform: scale(.97); transition: none; }`);
 writeFileSync(f, h); console.log("patched: " + v);

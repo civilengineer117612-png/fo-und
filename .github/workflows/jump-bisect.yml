@@ -32,7 +32,7 @@ jobs:
       - name: Make the variants and serve them
         working-directory: srv
         run: |
-          for v in no-transform no-press will-change base-transform no-active-duration; do
+          for v in instant-press no-active-duration; do
             cp -r m "$v" && rm -rf "$v/.git" && (cd "$v" && node ../../tools/.github/bisect/patch.mjs "$v")
           done
           cp ../tools/.github/bisect/jump.mjs m/e2e/jump-bisect.mjs
@@ -70,5 +70,5 @@ jobs:
         env:
           ROUNDS: "60"
           NODE_PATH: /usr/local/lib/node_modules
-          VARIANTS: "main=m;before ONE PRESS (#356)=a1;all ONE PRESS off=no-press;no shrink=no-transform;will-change=will-change;scale(1) at rest=base-transform;shrink without the 70ms press timing=no-active-duration"
+          VARIANTS: "main=m;C: press-in instant, release 200 ms=instant-press;A: press-in 200 ms=no-active-duration"
         run: node e2e/jump-bisect.mjs | tee -a "$GITHUB_STEP_SUMMARY"
