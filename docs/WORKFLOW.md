@@ -43,7 +43,7 @@ test catches it. That careful work happens in the build agent, so that is where 
 7. The build agent builds, tests, mutation-checks, opens the PR, and replies with the report (PART 4).
 8. The report always ends with a box "PASTE TO PROJECT CHAT", or with the line "Nothing to paste to the project chat."
    The owner pastes the box into the project chat only when there is one.
-9. Merging: the build agent merges every PR automatically when BOTH checks are green on its current head (merge rule in PART 5). A PR that changes saved data or repairs past data takes its own safety copy first, with a test.
+9. Merging: the build agent merges every PR automatically when BOTH checks are green on its current head AND e2e-webkit is green on that head (owner, Nov 16; a red e2e-webkit on main blocks every merge until fixed) (merge rule in PART 5). A PR that changes saved data or repairs past data takes its own safety copy first, with a test.
 
 The build agent may fix a bug it finds on the way WITHOUT going through the project chat only when ALL of these hold:
 it is a real defect (a wrong figure, lost data, a broken screen), it is reproduced by a failing test first, the fix changes no
@@ -134,7 +134,8 @@ Building and checking
 
 Merging and deploying
 - Merge rule (owner, Oct 29, FINAL; it replaces every earlier one): the build agent merges EVERY PR automatically as soon as BOTH
-  checks (test and e2e) are green on the PR's current head. Never on red, never on pending, never skip or disable a test. After a
+  checks (test and e2e) are green on the PR's current head, AND e2e-webkit is green on that same head (owner, Nov 16: his phone
+  is WebKit; a red e2e-webkit on main blocks every merge until main is fixed). Never on red, never on pending, never skip or disable a test. After a
   merge it brings the other open PRs up to date (merge main in, keep both What's new lines), lets their checks run again, and
   reports what was merged. Visible changes are already held by the preview rule (the owner's yes comes before building).
 - A PR that changes the SHAPE of saved data or REPAIRS past data makes the app take its own safety copy of the ledger BEFORE the
@@ -161,10 +162,10 @@ How the owner wants to be talked to
   the OLD name still gets no live PR events, so it drives merges with a scheduled check-in; start new sessions with `fo-und` selected.
 - Data version 12 (Owed to me). Unit tests about 1,566; run.mjs about 1,560 checks plus 20 smaller e2e scripts, on Chromium (CI "e2e")
   and on Safari's engine (CI "e2e-webkit", not yet a required check).
-- KNOWN RED, PARTLY FIXED (Nov 16): e2e-webkit fails on main since the ONE PRESS merge (#357): e2e/sheet-scroll.mjs keeps the window in place
-  in only 13 to 18 of 20 repeats (212 -> 151). #361 stopped lists rebuilding the window (one run then held 20 of 20), but the next runs on main and
-  on #362 jumped again (18 of 20) with the window NOT rebuilt, so that was not the whole cause. All jumps happen when the amount was typed while
-  the window was still sliding up and the box still has focus when a list opens. Next PR: root cause; the check is not loosened.
+- WINDOW JUMP ROOT CAUSE (Nov 17): e2e-webkit was red on main since ONE PRESS (#357). Owner's bisect rule: screen 5 CI machines with
+  main only (20 rounds), then on the machine where main failed most, every variant interleaved for 60 rounds. Cause: the 70 ms press transition
+  (`transition-duration: var(--t-touch)` on :active), not the shrink or the 8 px margin. Fix (owner's option C): press-in instant, release eases
+  back in 200 ms; same session: main 13 of 60, C 0 of 60 (A, a 200 ms press-in, 1 of 60). #363's holdPlace was dropped (not needed).
 - The overhaul (rows A1 to A11, L1 to L16, F1 to F8) is mostly built; what is left is listed in PART 7 under OVERHAUL.
 - Older state (Oct 29 and before) is in git history.
 

@@ -54,7 +54,7 @@ Buffer window, Nov 16), so two cards on one screen space alike. The percentage i
 ## Motion and touch (overhaul, Nov 12 to 15)
 - Two tokens: `--t-press` (.1s, a pressed look shows within 100 ms) and `--t-move` (.2s, anything that slides, fades or turns), with `--ease-out`.
   Every transition and one-shot animation uses them; the slide-up window keeps its .22s. No overshoot, no bounce.
-- ONE press for every button and tile: it darkens and shrinks to 0.97, quick on touch (`--t-touch`, 70 ms) and eased back on release. A transform
+- ONE press for every button and tile: it darkens and shrinks to 0.97, at once on touch (no transition while pressed: a 70 ms one made Safari throw a scrolled window back up) and eased back on release (200 ms). A transform
   takes no room, so nothing else moves, and an invisible 8 px margin keeps the touched area while pressed. Safari's tap highlight is off.
 - No rubber band (`overscroll-behavior: none`), no double-tap zoom.
 - Reduce Motion: one rule at the end of the stylesheet makes every transition instant and turns off every slide and fade; a press only darkens.
