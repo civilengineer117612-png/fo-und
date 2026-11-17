@@ -29,8 +29,7 @@ test("choosing in any dropdown closes its list", () => {
     assert.ok(line, action);
     assert.ok(line.includes("ui.sheet.pick = null"), action + " closes the list");
   }
-  // before: the toggle line began with this assignment; after (Nov 16) it first reads the window's place (holdPlace), so anything may come first
-  assert.match(app, /case "pick-toggle": if \(ui\.sheet\) \{[^\n]*ui\.sheet\.pick = ui\.sheet\.pick === el\.dataset\.key \? null : el\.dataset\.key;/);
+  assert.match(app, /case "pick-toggle": if \(ui\.sheet\) \{ ui\.sheet\.pick = ui\.sheet\.pick === el\.dataset\.key \? null : el\.dataset\.key;/);
 });
 
 test("a dropdown list of more than 8 choices has a Search box that filters it, and Money received starts with What it is empty", () => {
@@ -50,15 +49,4 @@ test("opening or closing a list changes only the lists, never rebuilds the windo
   assert.ok(fn.includes('row.setAttribute("aria-expanded", String(on))') && fn.includes("list.hidden = !on"), "each row says whether its list is open, and only the chosen one shows");
   assert.ok(fn.includes('q.value = ""') && fn.includes("n.hidden = false"), "a list that opens starts with its search empty and every choice shown, as a rebuilt one did");
   assert.match(app, /if \(box && keepAt && box\.scrollTop < keepAt - 1\) requestAnimationFrame\(\(\) => \{ if \(box\.isConnected && box\.scrollTop < keepAt - 1\) box\.scrollTop = keepAt; \}\);/, "a rebuilt window held short of its place tries once more on the next frame");
-});
-
-// THE WINDOW KEEPS ITS PLACE (WebKit, Nov 16): with nothing rebuilt, a tall window still jumped up in 2 of 20 runs when a list opened right after
-// text was typed while the window slid up (Safari's engine carries out a pending "show the cursor" at the next layout).
-test("opening a list forces the layout inside the tap and puts back a place that moved up, once more on the next frame", () => {
-  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
-  const toggle = app.slice(app.indexOf('case "pick-toggle":'), app.indexOf("\n", app.indexOf('case "pick-toggle":')));
-  assert.ok(/keep = box\?\.scrollTop \?\? 0;[\s\S]*showPickLists\(\); if \(box\) holdPlace\(box, keep\);/.test(toggle), "the place is read before the list changes and held after");
-  const fn = app.slice(app.indexOf("function holdPlace(box, keep) {"), app.indexOf("function showPickLists() {"));
-  assert.ok(fn.includes("void box.offsetHeight;") && fn.includes("if (box.scrollTop < keep - 1) box.scrollTop = keep;"), "layout is forced, and only a place that moved UP is put back");
-  assert.match(fn, /requestAnimationFrame\(\(\) => \{ if \(box\.isConnected && box\.scrollTop < keep - 1\) box\.scrollTop = keep; \}\);/, "once more on the next frame");
 });

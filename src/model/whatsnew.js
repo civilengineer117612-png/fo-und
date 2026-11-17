@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-17-press-jump", date: "2026-11-17", text: "Fixed: on the iPhone a tall window could jump back up when you chose something near its bottom. A pressed button now shows its press at once." },
   { id: "2026-11-16-row-dots", date: "2026-11-16", text: "Fixed: a Log row with no account line no longer starts with a stray dot." },
   { id: "2026-11-16-list-in-place", date: "2026-11-16", text: "Fixed: in a tall window, opening a list near the bottom could throw the window back up on the iPhone." },
   { id: "2026-11-16-buffer-in-budget", date: "2026-11-16", text: "The Buffer moved from the menu into Budget: tap its row. Money received and Add to the buffer now say plainly that what you save waits in Verify." },
