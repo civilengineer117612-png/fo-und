@@ -25,7 +25,7 @@ test("a seed section is its own block: it opens its own phone right after its ow
     assert.match(lines[at - 2], /^\/\/ ===== /, name + " is a marked block");
   }
   assert.match(run, /async function fromSeed\(name, opts = \{\}\) \{\n  const file = new URL\("\.\/fixtures\/seeds\/" \+ name \+ "\.json", import\.meta\.url\);/);
-  assert.match(run, /return open\(\{ \.\.\.opts, seed: saved\.ledger, now: new Date\(saved\.now\) \}\);/, "the clock starts where the section before left it");
+  assert.match(run, /return open\(\{ \.\.\.opts, seed: ledger, now: new Date\(saved\.now\) \}\);/, "the clock starts where the section before left it");
 });
 
 test("the helpers every block shares are defined before the first block, not inside one", () => {
@@ -70,4 +70,8 @@ for (const name of files) test("seed " + name + " is a current ledger the app op
   // reference number on the drawn transfer picture) or the seed's own fixed clock in milliseconds (inside an id the app makes).
   const invented = new Set([...run.matchAll(/\b\d{10,}\b/g)].map((m) => m[0]).concat(String(Date.parse(saved.now))));
   assert.deepEqual([...text.matchAll(/\b\d{10,}\b/g)].map((m) => m[0]).filter((n) => !invented.has(n)), [], "no long number that could be an account number");
+});
+
+test("a seed stays as it was recorded when a later PR adds a What's new line: it is opened with the newest line already seen", () => {
+  assert.match(run, /const ledger = opts\.whatsNew \? saved\.ledger : \{ \.\.\.saved\.ledger, settings: \{ \.\.\.saved\.ledger\.settings, whatsnew_seen: CHANGES\[0\]\.id \} \};\n  return open\(\{ \.\.\.opts, seed: ledger, now: new Date\(saved\.now\) \}\);/);
 });

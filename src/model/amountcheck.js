@@ -6,7 +6,6 @@
 import { payeeKey } from "./payees.js";
 
 export const AMOUNT_CHECK_TIMES = 10, AMOUNT_CHECK_MIN_OTHERS = 2;
-const median = (list) => { const s = [...list].sort((a, b) => a - b); return s[Math.floor((s.length - 1) / 2)]; };   // the lower middle: no half centavos
 
 // [{id, date, payee, amount, usual, times}], newest first. `usual` is the median of the OTHER entries of the same item (the same name, or the same
 // category when the entry has no name), whatever way they came in; at least two others are needed, or nothing can be said.
@@ -29,12 +28,21 @@ export function suspectAmounts(state) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);
   }
+  // Each group's amounts sorted ONCE (L11, Nov 20: every entry copied and sorted the rest of its group, so 4,000 entries of 30 names took most of
+  // the time the Weekly review needed to open). The lower middle of the OTHERS (one copy of this amount taken out) is read by position.
+  const sorted = new Map([...groups].map(([k, g]) => [k, g.map((o) => o.amount).sort((a, b) => a - b)]));
+  const medianWithout = (list, v) => {   // list sorted, v in it: the lower middle (no half centavos) of list with one v removed
+    let lo = 0, hi = list.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (list[mid] < v) lo = mid + 1; else hi = mid; }
+    const k = Math.floor((list.length - 2) / 2);
+    return k < lo ? list[k] : list[k + 1];
+  };
   const out = [];
   for (const r of rows) {
     if (r.t.source !== "manual" || r.amount % 100 !== 0) continue;
-    const others = groups.get(r.key).filter((o) => o !== r).map((o) => o.amount);
-    if (others.length < AMOUNT_CHECK_MIN_OTHERS) continue;
-    const usual = median(others);
+    const all = sorted.get(r.key);
+    if (all.length - 1 < AMOUNT_CHECK_MIN_OTHERS) continue;
+    const usual = medianWithout(all, r.amount);
     if (usual <= 0 || r.amount < usual * AMOUNT_CHECK_TIMES) continue;
     out.push({ id: r.t.id, date: r.t.date, created_at: r.t.created_at, payee: r.t.payee ?? "", category_id: legs.get(r.t.id).category_id, status: r.t.status, amount: r.amount, usual, times: Math.floor(r.amount / usual) });
   }
