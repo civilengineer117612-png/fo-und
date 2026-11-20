@@ -29,6 +29,17 @@ async function steps(extraCss, { wait = 400, blur = false, js = null, bgSave = f
   const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,   // 2x like a phone and like run.mjs 5i
     userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1" });
   await ctx.addInitScript(() => { Object.defineProperty(navigator, "standalone", { get: () => true }); sessionStorage.setItem("logOpen", "1"); });
+  // DIAGNOSIS (Nov 20: main jumped 212 to 151 in 1 repeat of 20 as Paid from's list opened): a timeline of every place the window takes, with what
+  // had focus and what was pressed, kept in the page and printed only for a repeat that jumped. Read only: it changes nothing the app does.
+  await ctx.addInitScript(() => {
+    const t0 = performance.now(), log = window.__trail = [], ms = () => Math.round(performance.now() - t0);
+    const who = (el) => !el || el === document.body ? "body" : (el.id ? "#" + el.id : el.tagName.toLowerCase() + (el.dataset?.action ? "[" + el.dataset.action + "]" : el.className ? "." + String(el.className).split(" ")[0] : ""));
+    let last = null;
+    const watch = () => { const s = document.querySelector("#sheet .sheet"); if (s && s.scrollTop !== last) { last = s.scrollTop; log.push(ms() + " top " + s.scrollTop + " h " + s.scrollHeight + " focus " + who(document.activeElement)); } requestAnimationFrame(watch); };
+    requestAnimationFrame(watch);
+    for (const type of ["pointerdown", "pointerup", "click", "focusin", "focusout"]) document.addEventListener(type, (e) => log.push(ms() + " " + type + " " + who(e.target)), true);
+    document.addEventListener("scroll", (e) => { if (e.target?.classList?.contains?.("sheet")) log.push(ms() + " scroll event " + e.target.scrollTop); }, true);
+  });
   await ctx.clock.setFixedTime(new Date(TS));
   // Only the reloaded page's lookups are held: the first page's are refused at once, else WebKit's reload waits for them and never finishes (CI, Nov 13).
   let release = () => {}, armed = false; const held = new Promise((res) => { release = res; });
@@ -62,8 +73,9 @@ async function steps(extraCss, { wait = 400, blur = false, js = null, bgSave = f
   const after = await top();
   const chosen = await page.evaluate(() => document.querySelector("#sheet .pick:nth-of-type(2) .pickrow, #sheet .pickrow:nth-of-type(1)") && [...document.querySelectorAll("#sheet .pickrow")].map((r) => r.textContent.trim()).join(" | "));
   const sizes = await page.evaluate(() => { const s = document.querySelector("#sheet .sheet"); return { scrollHeight: s.scrollHeight, clientHeight: s.clientHeight }; });
+  const trail = await page.evaluate(() => (window.__trail ?? []).slice(-60));
   await ctx.close();
-  return { before, opened, later, saved, after, chosen, same, ...sizes };
+  return { before, opened, later, saved, after, chosen, same, trail, ...sizes };
 }
 
 // diagnosis first (printed only): each rule the feel change added to the page, switched back on its own
@@ -127,6 +139,7 @@ for (let i = 0; i < 20; i++) runs.push(await steps(null, { wait: 0, bgSave: i % 
 const jumped = runs.filter((x) => !(x.before > 50 && x.after >= x.before - 2));
 console.log(`  diag sheet-scroll (${ENGINE}) 20 repeats typed at once: ` + runs.map((x) => x.before + ">" + x.after).join(" "));
 console.log(`  diag sheet-scroll (${ENGINE}) 20 repeats, the place as the list opened (now/frame/100 ms): ` + runs.map((x) => x.later).join(" "));
+for (const [k, x] of runs.entries()) if (!(x.before > 50 && x.after >= x.before - 2) || !(x.opened >= x.before - 2)) console.log(`  diag sheet-scroll (${ENGINE}) repeat ${k + 1} moved: ` + x.trail.join(" | "));
 ok(runs.every((x) => x.same), "in all 20 repeats the list opened in the same window, never a rebuilt one");
 ok(jumped.length === 0, "20 of 20 repeats keep the window where it was (typed at once, half with a background save while open) (" + (20 - jumped.length) + " of 20)");
 ok(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
