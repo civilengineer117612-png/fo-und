@@ -54,7 +54,7 @@ const finishSetup = async (page, name = "Cash", amount = "100") => {
 const dismissNotice = async (page) => { if (await page.locator("#sheet .fr").count()) return;   // the setup is left on screen: the block decides
   try { await page.waitForSelector('#sheet button:has-text("I understand")', { timeout: 2500 }); await page.click('#sheet button:has-text("I understand")'); } catch { /* an old ledger shows no notice */ }
   try { await page.waitForSelector('#sheet button:has-text("Skip for now")', { timeout: 700 }); await page.click('#sheet button:has-text("Skip for now")'); } catch { /* the welcome card only shows on a new install */ } };
-async function open({ storageMode = null, logOpen = true, setupFlat = true, ua = IPHONE, standalone = true, blockSw = !TOOLS.serviceWorkerNetwork, url = BASE, noSpeech = false, fakeSpeech = false, seed = undefined, routes = [], keepNotice = false, styled = true, whatsNew = false, keepCatCard = false, keepIntro = false, keepWarn = false } = {}) {
+async function open({ storageMode = null, logOpen = true, setupFlat = true, ua = IPHONE, standalone = true, blockSw = !TOOLS.serviceWorkerNetwork, url = BASE, noSpeech = false, fakeSpeech = false, seed = undefined, routes = [], keepNotice = false, styled = true, whatsNew = false, keepCatCard = false, keepIntro = false, now = T0, keepWarn = false } = {}) {
   if (seed === undefined) seed = styled ? OWNER_STYLE : null;
   if (seed && !whatsNew) seed = { ...seed, settings: { ...(seed.settings ?? {}), whatsnew_seen: seed.settings?.whatsnew_seen ?? CHANGES[0].id, start_rule_seen: seed.settings?.start_rule_seen ?? "2026-10-01T08:00:00.000+08:00" } };   // the What's new pop-up is tested on its own
   if (seed && !keepIntro) seed = { ...seed, settings: { ...(seed.settings ?? {}), intro_off: { ...Object.fromEntries(["plan", "money", "income", "cards", "budget", "goals", "scheduled", "checkin", "scan", "trips", "buffer", "setup"].map((id) => [id, true])), ...(seed.settings?.intro_off ?? {}) } } };   // the small "what is this screen" popup is tested on its own
@@ -103,7 +103,7 @@ async function open({ storageMode = null, logOpen = true, setupFlat = true, ua =
   page.on("console", (m) => { if (/Content Security Policy|Refused to (load|execute|connect|create)/i.test(m.text())) errors.push("CSP: " + m.text().slice(0, 200)); });   // the content security policy must never refuse something the app needs
   page.on("console", (m) => { if (m.type() === "error" && !/favicon|gstatic|duckduckgo|icon\.horse|apple-touch-icon|wikipedia|wikimedia/.test(m.location().url ?? "")) errors.push(m.text() + " [reported at " + (m.location().url || "no address") + "]"); });   // blocked icon requests are staged on purpose
   if (!keepIntro) await page.addLocatorHandler(page.locator('#sheet button[data-action="intro-done"]'), async (b) => { await b.click(); });   // a new install has no switched-off popups: any other test just says Got it when one gets in the way
-  await page.clock.setFixedTime(T0);
+  await page.clock.setFixedTime(now);
   await page.goto(url);
   await page.waitForSelector("#nav button");
   // A brand-new install shows the first-run notice once; every test but the one about the notice closes it first.
@@ -193,6 +193,30 @@ async function addAccount(page, name, kind, opening, covers) {
 let blockName = "";
 const blockFailed = async (e) => { failures++; console.log("  FAIL block \"" + blockName + "\" stopped: " + String(e?.message ?? e).split("\n")[0].slice(0, 240)); try { await ctx?.close(); } catch { /* already closed */ } };
 
+// Log and verify through the real screens (shared by 5e, 5g and 5vd: they live here, so a block never needs another block to have run first).
+const logPreset = async (name, acct) => { await page.click('#nav button:has-text("Log")'); await page.click(`button.tile:has-text("${name}")`); await page.click(`#sheet .chip:has-text("${acct}")`); await seen(page, "#toast", "Saved " + name); };
+const logOther = async (amount, cat, acct) => { await page.click('#nav button:has-text("Log")'); await page.click('button:has-text("Add expense")'); await page.fill("#f-amount", amount); await page.click(`#sheet .chip:has-text("${cat}")`); await page.click(`#sheet .chip:has-text("${acct}")`); await page.click("#f-save"); await seen(page, "#toast", "Saved"); };
+const verifyAll = async () => {
+  await page.click('#nav button:has-text("Verify")');
+  for (let guard = 0; guard < 20; guard++) {
+    const t = await text(page, "#screen");
+    if (t.includes("Nothing to verify")) return;
+    const n = Number(/(\d+) to check/.exec(t)[1]);
+    await page.click('button:has-text("Correct")');
+    await page.waitForFunction((k) => { const x = document.getElementById("screen").innerText; return x.includes("Nothing to verify") || x.includes((k - 1) + " to check"); }, n);
+  }
+};
+// A11 (overhaul, Nov 20): a long block is cut into sections, and each later section starts a fresh phone from its OWN ledger:
+// e2e/fixtures/seeds/<name>.json (invented data, recorded once from the real screens: the ledger and the clock exactly as the section before
+// left them). One section that fails or waits out a timeout no longer takes the sections after it down, and none depends on what ran before.
+// E2E_RECORD_SEEDS=1 records them again from the chain (run with the sections in order; a seed is the previous section's own end state).
+async function fromSeed(name, opts = {}) {
+  const file = new URL("./fixtures/seeds/" + name + ".json", import.meta.url);
+  if (process.env.E2E_RECORD_SEEDS) { const now = await page.evaluate(() => Date.now()); writeFileSync(file, JSON.stringify({ now: new Date(now).toISOString(), ledger: JSON.parse((await stored(page)).local) }) + "\n"); }
+  try { await ctx?.close(); } catch { /* the section before already closed it */ }
+  const saved = JSON.parse(readFileSync(file, "utf8"));
+  return open({ ...opts, seed: saved.ledger, now: new Date(saved.now) });
+}
 // ===== 1. first run, setup =====
 try { blockName = "1. first run, setup";
 console.log("First run and setup");
@@ -636,18 +660,6 @@ check((await text(page, "#sheet")).includes("Remove the picture"), "a picture ca
 await page.click('#sheet button:has-text("Cancel")');
 
 // log and verify across three months, through the real screens
-var logPreset = async (name, acct) => { await page.click('#nav button:has-text("Log")'); await page.click(`button.tile:has-text("${name}")`); await page.click(`#sheet .chip:has-text("${acct}")`); await seen(page, "#toast", "Saved " + name); };
-var logOther = async (amount, cat, acct) => { await page.click('#nav button:has-text("Log")'); await page.click('button:has-text("Add expense")'); await page.fill("#f-amount", amount); await page.click(`#sheet .chip:has-text("${cat}")`); await page.click(`#sheet .chip:has-text("${acct}")`); await page.click("#f-save"); await seen(page, "#toast", "Saved"); };
-var verifyAll = async () => {
-  await page.click('#nav button:has-text("Verify")');
-  for (let guard = 0; guard < 20; guard++) {
-    const t = await text(page, "#screen");
-    if (t.includes("Nothing to verify")) return;
-    const n = Number(/(\d+) to check/.exec(t)[1]);
-    await page.click('button:has-text("Correct")');
-    await page.waitForFunction((k) => { const x = document.getElementById("screen").innerText; return x.includes("Nothing to verify") || x.includes((k - 1) + " to check"); }, n);
-  }
-};
 await page.clock.setFixedTime(new Date("2026-08-14T04:00:00Z"));
 await logPreset("Lunch", "Wallet"); await logPreset("Dinner", "Wallet"); await logOther("500", "Shopping", "Bank"); await verifyAll();
 await page.clock.setFixedTime(new Date("2026-09-12T04:00:00Z"));
@@ -719,7 +731,12 @@ check(await page.locator('button[aria-label="Later"]').isDisabled(), "but not pa
 for (let i = 0; i < 4; i++) await page.click('button[aria-label="Earlier"]');
 check((await text(page, "#screen")).includes("Nothing verified for this month yet"), "an empty month says so plainly");
 
-// ---- the menu: only Log and Verify stay on the bottom bar ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e2. the menu: only Log and Verify stay on the bottom bar =====
+try { blockName = "5e2. the menu: only Log and Verify stay on the bottom bar";
+({ ctx, page, errors } = await fromSeed("5e2", { blockSw: true }));   // A11: its own ledger, as the section before left it
 console.log("Menu and budgets");
 await page.click('#nav button:has-text("Log")');
 check((await page.locator("#nav button:not(.navscan)").count()) === 2 && (await page.locator("#nav button.navscan").count()) === 1, "the bottom bar has just Log and Verify, with the scanner in the middle");
@@ -744,7 +761,13 @@ await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
 check((await page.locator("#menu .drawer").count()) === 0 && (await text(page, "#top")).includes("Budget"), "choosing an item closes the menu and opens the screen");
 check((await page.locator("#nav [aria-current]").count()) === 0, "no bottom button is marked while a menu screen is open");
 
-// ---- setting budgets ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e3. setting budgets =====
+try { blockName = "5e3. setting budgets";
+({ ctx, page, errors } = await fromSeed("5e3", { blockSw: true }));   // A11: its own ledger, as the section before left it
+await menuGo(page, "Plan & Save");   // the section before ended on Budget
 // (Nov 12, A5) Month now also shows the Buffer row, "Not set", before any buffer is set: it is counted apart, the category rows are checked as before
 var budgetRows = await page.locator('button.catrow[data-action="open-budget"]').allInnerTexts();
 check(budgetRows.length === 8 && !budgetRows.some((r) => r.includes("Unlogged")) && budgetRows.every((r) => r.includes("No budget")) && (await page.locator("button.catrow").count()) === 9 && (await page.locator('button.catrow[data-action="open-buffer"]').innerText()).includes("Not set"), "every spending category can have a budget, except Unlogged; none set yet; and one Buffer row, not set");
@@ -780,7 +803,12 @@ ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.state.rules.length === 6 && ledgerNow.state.rules.every((r) => r.kind === "budget"), "every change is a new dated row; none was edited: " + ledgerNow.state.rules.length);
 check(ledgerNow.state.rules.filter((r) => r.subject_id === "cat-shopping").map((r) => r.amount).join() === "35000,25000", "the first Shopping budget is still there, then the new one");
 
-// ---- the colours: light blue to dark blue, red only when over ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e4. the colours: light blue to dark blue, red only when over =====
+try { blockName = "5e4. the colours: light blue to dark blue, red only when over";
+({ ctx, page, errors } = await fromSeed("5e4", { blockSw: true }));   // A11: its own ledger, as the section before left it
 await menuGo(page, "Spending");
 for (let i = 0; i < 9; i++) if (await page.locator('button[aria-label="Later"]').isEnabled()) await page.click('button[aria-label="Later"]');
 await page.click('#screen .seg button:has-text("Category")');
@@ -805,7 +833,13 @@ check((await text(page, "#top")).includes("Income"), "tapping it goes to Income"
 await page.click("#top .titleswitch");
 check((await text(page, "#top")).includes("Spending"), "and back to Spending");
 
-// ---- the period picker at the top ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e5. the period picker at the top =====
+try { blockName = "5e5. the period picker at the top";
+({ ctx, page, errors } = await fromSeed("5e5", { blockSw: true }));   // A11: its own ledger, as the section before left it
+await menuGo(page, "Spending"); await page.click('#screen .seg button:has-text("Category")');   // the section before ended on Spending, Category
 check((await page.locator('.seg button:has-text("Year"), .seg button:has-text("Date range")').count()) === 0, "there are no Year or Date range buttons among the views");
 await page.click(".ptitle");
 check((await text(page, "#sheet")).includes("Show money for") && (await page.locator('#sheet button[data-action="period-kind"]').count()) === 3, "tapping the month at the top opens a picker: Month, Year, Date range");
@@ -897,7 +931,12 @@ if (!noBud) console.log("   screen was:", JSON.stringify((await text(page, "#scr
 check(noBud && /Upskill\s+₱80\.00/.test(await text(page, "#screen")), "spending in a category with no budget is shown under its own heading");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
-// ---- the monthly trend ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e6. the monthly trend =====
+try { blockName = "5e6. the monthly trend";
+({ ctx, page, errors } = await fromSeed("5e6", { blockSw: true }));   // A11: its own ledger, as the section before left it
 await menuGo(page, "Spending");
 await page.click('#screen .seg button:has-text("Trends")');
 check((await page.locator("svg.trend").count()) === 1 && (await page.locator(".tmonth").count()) === 6, "the trend line chart has one tappable label per month");
@@ -911,7 +950,12 @@ await page.locator(".tmonth").last().click();
 check((await text(page, "#screen")).includes("October 2026") && await page.locator(".catrow").count() > 0, "tapping a month opens that month's budgets");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
-// ---- the weekly check-in ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e7. the weekly check-in =====
+try { blockName = "5e7. the weekly check-in";
+({ ctx, page, errors } = await fromSeed("5e7", { blockSw: true }));   // A11: its own ledger, as the section before left it
 await menuGo(page, "Weekly review");
 check((await text(page, "#top")).includes("Weekly review") && (await text(page, "#screen")).includes("0 / "), "the weekly review lists every account, none counted yet");
 check(!(await text(page, "#screen")).includes("Weekly questions"), "the weekly questions wait until something is counted");
@@ -969,7 +1013,12 @@ await page.click('#nav button:has-text("Log")');
 check(await page.locator('.row[class*="tint-"]').count() === 0 && await page.locator(".tints").count() === 0 && !(await text(page, "#screen")).includes("Fixed costs"), "the Log list has no tints, no group words and no key: plain rows");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
-// ---- quick day totals ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e8. quick day totals =====
+try { blockName = "5e8. quick day totals";
+({ ctx, page, errors } = await fromSeed("5e8", { blockSw: true }));   // A11: its own ledger, as the section before left it
 await page.click('#nav button:has-text("Log")');
 var todayTotal = await text(page, ".daytotal");
 check(/^₱\d/.test(todayTotal) && !(await text(page, "#screen")).includes("Spent today") && (await page.locator(".daycap").count()) === 0, "today's total is centered on the Log screen with no label");
@@ -992,7 +1041,12 @@ check((await text(page, ".daytotal")) === todayTotal && (await page.locator(".da
 check((await text(page, "#entries-toggle")).includes("entr") && !(await text(page, "#screen")).includes("Nothing logged that day"), "and today's entries");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
-// ---- checks: card reserve and the Unlogged habit ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e9. checks: card reserve and the Unlogged habit =====
+try { blockName = "5e9. checks: card reserve and the Unlogged habit";
+({ ctx, page, errors } = await fromSeed("5e9", { blockSw: true }));   // A11: its own ledger, as the section before left it
 await menuGo(page, "Checks");
 var ctext = await text(page, "#screen");
 check(/No card reserve|Covered|Short by/.test(ctext), "the card reserve check says covered, short, or that none is set up");
@@ -1005,7 +1059,12 @@ await shot(page, "27-checks");
 await page.click('button:has-text("Show as chart")');
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
-// ---- trips ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e10. trips =====
+try { blockName = "5e10. trips";
+({ ctx, page, errors } = await fromSeed("5e10", { blockSw: true }));   // A11: its own ledger, as the section before left it
 await menuGo(page, "Trips");
 check((await text(page, "#screen")).includes("No trips yet"), "trips start empty");
 await page.click('button:has-text("Add a trip")');
@@ -1058,7 +1117,12 @@ await page.click('#nav button:has-text("Log")');
 check(!(await text(page, "#screen")).includes("Tagging new entries"), "tagging can be switched off");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
-// ---- the overrun buffer ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e11. the overrun buffer =====
+try { blockName = "5e11. the overrun buffer";
+({ ctx, page, errors } = await fromSeed("5e11", { blockSw: true }));   // A11: its own ledger, as the section before left it
 // A7 (owner's yes Nov 16). Before: the menu's Buffer screen held the setup, the figures, the draws and the actions. After: Budget's Buffer row opens a
 // window with the same content and actions; every check below is the same, read from the window (#sheet) instead of the screen.
 var openBuffer = async () => { await menuGo(page, "Plan & Save"); await page.click('#screen button[data-action="open-buffer"]'); await page.waitForSelector('#sheet [data-action="open-bufsetup"], #sheet [data-action="open-bufund"]'); };
@@ -1103,7 +1167,12 @@ check((await text(page, "#screen")).includes("Upskill"), "a draft that took from
 await page.click('button:has-text("Correct")'); await seen(page, "#screen", "of");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
-// ---- choosing a bank: one button that opens a scrollable list ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e12. choosing a bank: one button that opens a scrollable list =====
+try { blockName = "5e12. choosing a bank: one button that opens a scrollable list";
+({ ctx, page, errors } = await fromSeed("5e12", { blockSw: true }));   // A11: its own ledger, as the section before left it
 await menuGo(page, "Setup");
 check((await page.locator("#screen .chips .chip").count()) === 0 && (await page.locator("#a-bank").count()) === 1 && (await page.locator("#a-name").count()) === 1, "Setup shows one 'Choose a bank' button instead of a wall of tiles, and still lets you type a name");
 await page.click("#a-bank");
@@ -1136,7 +1205,13 @@ ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.state.accounts.filter((a) => a.bank === "gotyme").length === 2, "the bank is remembered on each account");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
-// ---- bank logos: loaded for every listed bank by themselves (the network is faked here) ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e13. bank logos: loaded for every listed bank by themselves (the network is faked here) =====
+try { blockName = "5e13. bank logos: loaded for every listed bank by themselves (the network is faked here)";
+({ ctx, page, errors } = await fromSeed("5e13", { blockSw: true }));   // A11: its own ledger, as the section before left it
+await menuGo(page, "Setup");   // the section before ended on Setup
 var pngB64 = await page.evaluate(() => { const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d"); x.fillStyle = "#1a8"; x.fillRect(0, 0, 64, 64); return c.toDataURL("image/png").split(",")[1]; });
 var tileB64 = await page.evaluate(() => { const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d"); x.fillStyle = "#d6d6d6"; x.fillRect(0, 0, 128, 128); x.fillStyle = "#9a9a9a"; x.font = "bold 60px sans-serif"; x.textAlign = "center"; x.fillText("U", 64, 88); return c.toDataURL("image/png").split(",")[1]; });   // the flat grey letter tile some services invent
 var pngReply = (b64, cors) => ({ status: 200, contentType: "image/png", headers: cors ? { "access-control-allow-origin": "*" } : {}, body: Buffer.from(b64, "base64") });
@@ -1199,7 +1274,12 @@ check(ledgerNow.state.accounts.find((a) => a.name === "Landbank").bank === "land
 await page.click('#sheet button:has-text("Cancel")');
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
-// ---- goals ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e14. goals =====
+try { blockName = "5e14. goals";
+({ ctx, page, errors } = await fromSeed("5e14", { blockSw: true }));   // A11: its own ledger, as the section before left it
 await menuGo(page, "Goals");
 check((await text(page, "#screen")).includes("No goals yet"), "goals start empty");
 await page.click('button:has-text("Add a goal")');
@@ -1220,7 +1300,12 @@ ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.state.goals.length === 1 && ledgerNow.state.transactions.some((t) => t.payee === "To Apartment" && t.status === "draft"), "the deposit is a draft transfer until verified");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 
-// ---- the pay plan has moved into Budget: it is no longer a screen of its own ----
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
+
+// ===== 5e15. the pay plan has moved into Budget: it is no longer a screen of its own =====
+try { blockName = "5e15. the pay plan has moved into Budget: it is no longer a screen of its own";
+({ ctx, page, errors } = await fromSeed("5e15", { blockSw: true }));   // A11: its own ledger, as the section before left it
 await menuGo(page, "Budget");
 check((await page.locator('#screen .hub button:has-text("Pay plan")').count()) === 0 && (await page.locator('#screen .hub button').count()) === 2, "Plan & Save has two tabs, Budget and Goals: there is no Pay plan tab");
 check((await text(page, "#screen")).includes("Budget") && (await page.locator('button[data-action="open-planform"]').count()) === 0 && (await page.locator('button:has-text("Load a plan")').count()) === 0, "and no button to type in a pay plan");
