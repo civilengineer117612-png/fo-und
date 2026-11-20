@@ -73,7 +73,7 @@ test("checks that keep a picture are skipped on WebKit with the owner's reason, 
   assert.match(engine, /pictureStore: ENGINE === "chromium"/);
   assert.ok(engine.includes('"WebKit test build cannot store pictures in IndexedDB; the owner\'s iPhone does (pictures are saved and backed up there)."'), "the owner's words, exactly");
   const blocks = [...run.matchAll(/^try \{ blockName = "(.+)"; if \(!TOOLS\.pictureStore\) skippedPictures\(blockName\); else \{$/gm)].map((m) => m[1]);
-  assert.equal([...run.matchAll(/skippedPictures\(/g)].length, 5, "the four blocks, and 5f from saving its photo on");
+  assert.equal([...run.matchAll(/skippedPictures\(/g)].length, 10, "the nine blocks, and 5f from saving its photo on");
   assert.match(run, /if \(!TOOLS\.pictureStore\) \{ skippedPictures\("5f from saving the photo on: /);
-  assert.deepEqual(blocks, ["5k. Read now while the app is already reading by itself", "5x. old pictures are shrunk, recent ones are not", '5x2. \\"Shrink them now\\"', "5y. the Pictures file: back up, lose the pictures, put them back"]);
+  assert.deepEqual(blocks, ["5f3. one receipt, two categories", "5f4. money moved between your own accounts: last 4 digits, the scan window, Verify, a repeat", "5f7. quick capture from the scanner button on the Log screen", "5f8. closing the app right after the photo: nothing is lost, it is read the next time the app opens", "5f9. when the paper does not name the account, the photo is kept and the app asks instead of guessing", "5k. Read now while the app is already reading by itself", "5x. old pictures are shrunk, recent ones are not", '5x2. \\"Shrink them now\\"', "5y. the Pictures file: back up, lose the pictures, put them back"]);
 });
