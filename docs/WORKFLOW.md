@@ -207,8 +207,8 @@ OVERHAUL (owner, Nov 12: Phase 1 report approved, rows A1 to A11; data loss firs
   pay-back matched from a statement); A3 Correct this entry; A1 first-run setup and the backup reminder switch; A2 swipe between periods; A7 the
   Buffer in Budget's Buffer row; A10 the unreachable Pay plan screens removed; WHAT THE SCREEN SAYS IS WHAT IS SAVED (no draft says "verified",
   tests/verifiedwords.test.js); A6 is L1; A9 kept as merged; L15 a Log row joins only the parts it has (no stray dots); F8 the scan ring: already clear since the Cards rework (43 px at 320 wide), now guarded by e2e/ui-audit.mjs on every screen.
-- STILL TO DO: L10, L11 speed; L13, F5 (keeping a box above the keyboard: needs the owner's iPhone) and drag down to close a window; A8 real titles on Plan & Save and Weekly review; A11 the rest of the test isolation (each long
-  e2e block its own ledger: 5e DONE Nov 20 as 15 blocks from recorded seeds, `fromSeed`; 6w DONE Nov 20 as 19 blocks, its shared invented ledgers above the first block; 5f next; 5g stays one payslip flow); the screens one at a time with less text, a picture first for each (Log and Verify, Spending, Budget and Goals, Cards
+- STILL TO DO: L10, L11 speed; L13, F5 (keeping a box above the keyboard: needs the owner's iPhone) and drag down to close a window; A8 real titles on Plan & Save and Weekly review; A11 DONE Nov 20 (each long
+  e2e block its own ledger: 5e as 15 blocks from recorded seeds, `fromSeed`; 6w as 19 blocks, its shared invented ledgers above the first block; 5f as 8 blocks from seeds, its drawn pictures above the first block; 5g stays one payslip flow); the screens one at a time with less text, a picture first for each (Log and Verify, Spending, Budget and Goals, Cards
   and Setup, Weekly review and Checks); the Weekly review with less text (waits on the owner's answer: which text is read and which is skipped);
   then the final report with the owner's iPhone checks.
 - Docs (PR 23, Nov 16): docs/UI.md, HANDOVER.md, README.md and this PART 6 and 7 brought up to date.

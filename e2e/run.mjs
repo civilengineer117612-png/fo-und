@@ -235,6 +235,25 @@ const importer = async (file) => { ({ ctx, page, errors } = await open({ blockSw
 const pkAcc = (id, name, last4) => ({ id, name, class: "asset", role: "pocket", hidden_by_default: false, archived: false, opening_balance: 450000, opening_date: "2026-10-02", bank: "gotyme", last4 });
 const mainG = { id: "gm", name: "GoTyme", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 120000, opening_date: "2026-10-02", bank: "gotyme" };
 const pocketSeed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [mainG, pkAcc("pe", "GoTyme \u00b7 Emergency", "3002"), pkAcc("pt", "GoTyme \u00b7 Travel", "4004")] } };
+// The invented pictures the scan blocks read, drawn in the page so no real paper is ever in the repository, and the photo viewer's close
+// (A11, Nov 20: they lived in 5f, so 5f2, 5j and 5k worked only after 5f had run; now every block draws its own).
+const receiptPicture = (page) => page.evaluate(() => {
+  const c = document.createElement("canvas"); c.width = 900; c.height = 1000;
+  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 900, 1000); x.fillStyle = "#000"; x.font = "bold 44px monospace";
+  ["SAMPLE BURGER HOUSE", "Official Receipt", "Date: Oct 2, 2026", "1 Burger meal   150.00", "Subtotal   150.00", "VAT 12%   16.07", "TOTAL   150.00", "Cash   200.00", "Change   50.00", "Thank you"].forEach((l, i) => x.fillText(l, 40, 80 + i * 80));
+  return c.toDataURL("image/png").split(",")[1];
+});
+const bankPicture = (page) => page.evaluate(() => {
+  const c = document.createElement("canvas"); c.width = 900; c.height = 1000;
+  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 900, 1000); x.fillStyle = "#000"; x.font = "bold 40px sans-serif";
+  ["Transaction Details", "PHP 592.50", "From MariBank", "To SAMPLE SUPERMARKET", "Transaction Amount PHP 592.50", "Transaction Type Credit Card Transaction", "Transaction Time 01 Oct 2026, 19:52"].forEach((l, i) => x.fillText(l, 40, 80 + i * 90));
+  return c.toDataURL("image/png").split(",")[1];
+});
+const closeViewer = async () => {   // tap the dark strip above the picture; wait for the picture to settle first, and tap once more if the first tap landed too early
+  await page.waitForFunction(() => { const i = document.querySelector(".lightbox img"); return i && i.complete; }, null, { timeout: 5000 }).catch(() => {}); await page.waitForTimeout(300);
+  for (let k = 0; k < 3 && await page.locator(".lightbox").count(); k++) { const b = await page.locator(".lightbox .lbstage").boundingBox(); await page.mouse.click(b.x + 5, b.y + 3); await page.waitForTimeout(400); }
+};
+
 // ===== 1. first run, setup =====
 try { blockName = "1. first run, setup";
 console.log("First run and setup");
@@ -1372,22 +1391,12 @@ await ctx.close();
 
 // ===== 5f. scanning a photo =====
 try { blockName = "5f. scanning a photo";
-var closeViewer = async () => {   // tap the dark strip above the picture; wait for the picture to settle first, and tap once more if the first tap landed too early
-  await page.waitForFunction(() => { const i = document.querySelector(".lightbox img"); return i && i.complete; }, null, { timeout: 5000 }).catch(() => {}); await page.waitForTimeout(300);
-  for (let k = 0; k < 3 && await page.locator(".lightbox").count(); k++) { const b = await page.locator(".lightbox .lbstage").boundingBox(); await page.mouse.click(b.x + 5, b.y + 3); await page.waitForTimeout(400); }
-};
 console.log("Scan");
 ({ ctx, page, errors } = await open({ blockSw: true }));
 await addAccount(page, "Wallet", "asset", "1000");
 await addAccount(page, "MariBank", "asset", "0");
 await addAccount(page, "MariBank \u00b7 Credit card", "liability", "0");   // the same bank holds a money account and a credit card
-// An invented receipt drawn in the page, so no real paper is ever in the repository.
-var receiptPng = await page.evaluate(() => {
-  const c = document.createElement("canvas"); c.width = 900; c.height = 1000;
-  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 900, 1000); x.fillStyle = "#000"; x.font = "bold 44px monospace";
-  ["SAMPLE BURGER HOUSE", "Official Receipt", "Date: Oct 2, 2026", "1 Burger meal   150.00", "Subtotal   150.00", "VAT 12%   16.07", "TOTAL   150.00", "Cash   200.00", "Change   50.00", "Thank you"].forEach((l, i) => x.fillText(l, 40, 80 + i * 80));
-  return c.toDataURL("image/png").split(",")[1];
-});
+var receiptPng = await receiptPicture(page);
 await menuGo(page, "Scan");
 check((await text(page, "#screen")).includes("Nothing is sent anywhere"), "the Scan screen says the photo never leaves the phone");
 check(await page.locator('#screen input[data-scan="1"][capture="environment"]').count() === 1 && await page.locator('#screen input[data-scan="1"]:not([capture])').count() === 1 && (await text(page, "#screen")).includes("Take a photo") && (await text(page, "#screen")).includes("Choose from photos or files"), "the Scan screen offers both the camera and photos or files");
@@ -1404,13 +1413,7 @@ check((await text(page, "#scan-why")) === "Choose the account it was paid from t
 await page.fill("#f-date", "2026-10-03");   // dated today, so the entry shows in the Log list
 await page.click('#sheet .chip:has-text("Wallet")');
 check((await text(page, "#scan-why")) === "" && await page.locator("#f-save").isEnabled(), "once the account is chosen the line is gone and saving is on");
-// A bank app screenshot (drawn here, before the block a WebKit run skips, because later blocks read it too): the bank on the From line paid, and nothing else is guessed over it.
-var bankPng = await page.evaluate(() => {
-  const c = document.createElement("canvas"); c.width = 900; c.height = 1000;
-  const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 900, 1000); x.fillStyle = "#000"; x.font = "bold 40px sans-serif";
-  ["Transaction Details", "PHP 592.50", "From MariBank", "To SAMPLE SUPERMARKET", "Transaction Amount PHP 592.50", "Transaction Type Credit Card Transaction", "Transaction Time 01 Oct 2026, 19:52"].forEach((l, i) => x.fillText(l, 40, 80 + i * 90));
-  return c.toDataURL("image/png").split(",")[1];
-});
+var bankPng = await bankPicture(page);   // drawn before the part a WebKit run skips: WebKit reads it too
 if (!TOOLS.pictureStore) { skippedPictures("5f from saving the photo on: the saved photo, See the photo, Verify's photo and the photo queue"); await ctx.close(); } else {
 await page.click("#f-save");
 check(await seen(page, "#screen", "as a draft with its photo"), "saving keeps it as a draft, with its photo");
@@ -1462,8 +1465,13 @@ check(/SAMPLE ?SUPERMARKET/i.test(await page.inputValue("#f-payee")) && await pa
 check(await page.evaluate(() => { const sh = document.querySelector("#sheet .sheet"), d = document.querySelector("#sheet input[type=date]").getBoundingClientRect(), r = sh.getBoundingClientRect(); return sh.scrollWidth <= sh.clientWidth && d.left >= r.left && d.right <= r.right; }), "the window does not scroll sideways and its date box stays inside it");
 await shot(page, "42-scan-bank");
 await page.click('#sheet button:has-text("Cancel")');
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} } catch (e) { await blockFailed(e); }
 
-// ----- one receipt, two categories -----
+// ===== 5f3. one receipt, two categories =====
+try { blockName = "5f3. one receipt, two categories"; if (!TOOLS.pictureStore) skippedPictures(blockName); else {
+({ ctx, page, errors } = await fromSeed("5f3", { blockSw: true }));
+var receiptPng = await receiptPicture(page);
 await menuGo(page, "Scan");
 await page.setInputFiles("input[data-scan]:not([capture])", { name: "receipt.png", mimeType: "image/png", buffer: Buffer.from(receiptPng, "base64") });
 check(await seen(page, "#sheet", "Check what I read", 180000), "the receipt is read again, to split it");
@@ -1483,8 +1491,12 @@ check(spEntries.some((e) => e.category_id === "cat-food" && e.amount === 10000) 
 await page.click('#nav button:has-text("Verify")');
 check((await text(page, "#screen")).includes("Food ₱100.00") && (await text(page, "#screen")).includes("Essentials ₱50.00"), "Verify shows both parts and the photo");
 await page.click('button:has-text("Delete")'); await page.click('button:has-text("Tap again to delete")'); await page.waitForTimeout(400);
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} } catch (e) { await blockFailed(e); }
 
-// ----- money moved between your own accounts: last 4 digits, the scan window, Verify, a repeat -----
+// ===== 5f4. money moved between your own accounts: last 4 digits, the scan window, Verify, a repeat =====
+try { blockName = "5f4. money moved between your own accounts: last 4 digits, the scan window, Verify, a repeat"; if (!TOOLS.pictureStore) skippedPictures(blockName); else {
+({ ctx, page, errors } = await fromSeed("5f4", { blockSw: true }));
 {
   const led0 = JSON.parse((await stored(page)).local), mine = led0.state.accounts.filter((a) => a.class === "asset" && !a.reserve_for && !a.archived);
   const [a1, a2] = mine;
@@ -1556,8 +1568,12 @@ await page.click('button:has-text("Delete")'); await page.click('button:has-text
   const led4 = JSON.parse((await stored(page)).local);
   check(led4.state.transactions.find((t) => t.id === mv.id).status === "verified" && led4.state.transactions.find((t) => t.id === "fee:" + mv.id).status === "verified", "verifying the transfer verifies its fee with it");
 }
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} } catch (e) { await blockFailed(e); }
 
-// ----- Log: move money between accounts by hand, and Cards shows the last 4 -----
+// ===== 5f5. Log: move money between accounts by hand, and Cards shows the last 4 =====
+try { blockName = "5f5. Log: move money between accounts by hand, and Cards shows the last 4";
+({ ctx, page, errors } = await fromSeed("5f5", { blockSw: true }));
 {
   const led = JSON.parse((await stored(page)).local), mine = led.state.accounts.filter((a) => a.class === "asset" && !a.reserve_for && !a.archived && a.last4);
   const [a1, a2] = mine;
@@ -1579,8 +1595,12 @@ await page.click('button:has-text("Delete")'); await page.click('button:has-text
   await menuGo(page, "Cards");
   check((await text(page, "#screen")).includes("\u00b7\u00b74821") || (await text(page, "#screen")).includes("\u00b7\u00b77305"), "Cards shows each account's last 4 beside its name");
 }
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
 
-// ----- Scheduled payments: a repeating one, an installment plan, Verify, Due soon, the link offer and a payment request -----
+// ===== 5f6. Scheduled payments: a repeating one, an installment plan, Verify, Due soon, the link offer and a payment request =====
+try { blockName = "5f6. Scheduled payments: a repeating one, an installment plan, Verify, Due soon, the link offer and a payment request";
+({ ctx, page, errors } = await fromSeed("5f6", { blockSw: true }));
 {
   await menuGo(page, "Scheduled");
   check((await text(page, "#screen")).includes("Nothing scheduled yet") && await page.locator('#screen button.primary').count() === 1, "the Scheduled screen starts empty, with one button to add");
@@ -1667,8 +1687,13 @@ await page.click('button:has-text("Delete")'); await page.click('button:has-text
   const l3 = JSON.parse((await stored(page)).local);
   check(l3.state.scheduleChanges.some((c) => c.kind === "end") && JSON.stringify(l3.state.transactions.filter((t) => t.id === rentTx.id)) === pastBefore, "stopping adds a row and leaves the past month exactly as it was");
 }
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} catch (e) { await blockFailed(e); }
 
-// ----- quick capture from the scanner button on the Log screen -----
+// ===== 5f7. quick capture from the scanner button on the Log screen =====
+try { blockName = "5f7. quick capture from the scanner button on the Log screen"; if (!TOOLS.pictureStore) skippedPictures(blockName); else {
+({ ctx, page, errors } = await fromSeed("5f7", { blockSw: true }));
+var bankPng = await bankPicture(page);
 await page.click('#nav button:has-text("Log")');
 check(await page.locator('#nav button[data-action="open-scan-pick"]').count() === 1, "the Log screen has one scanner button (in the bottom bar)");
 await page.click('button[data-action="open-scan-pick"]');
@@ -1704,8 +1729,13 @@ await page.click('#nav button:has-text("Verify")');
 check(await page.waitForSelector("img.shot[data-photo]:not([hidden])", { timeout: 4000 }).then(() => true, () => false) && (await text(page, "#screen")).includes("Essentials"), "Verify shows the photo beside what was read");
 await shot(page, "43-quick-verify");
 await page.click('#nav button:has-text("Log")');
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} } catch (e) { await blockFailed(e); }
 
-// closing the app right after the photo: nothing is lost, it is read the next time the app opens
+// ===== 5f8. closing the app right after the photo: nothing is lost, it is read the next time the app opens =====
+try { blockName = "5f8. closing the app right after the photo: nothing is lost, it is read the next time the app opens"; if (!TOOLS.pictureStore) skippedPictures(blockName); else {
+({ ctx, page, errors } = await fromSeed("5f8", { blockSw: true }));
+var bankPng = await bankPicture(page);
 await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles('input[data-scan="quick"]:not([capture])', { name: "bank2.png", mimeType: "image/png", buffer: Buffer.from(bankPng, "base64") });
 var qlen = await page.evaluate(() => new Promise((resolve) => {   // watch the saved ledger from inside the page, so a quick reader cannot slip past
   const t0 = Date.now(), look = () => { let n = 0; try { for (const k of Object.keys(localStorage)) { const v = localStorage.getItem(k); if (v && v.includes('"scan_queue"')) n = Math.max(n, (JSON.parse(v).settings?.scan_queue ?? []).length); } } catch { /* not the ledger */ } if (n > 0 || Date.now() - t0 > 20000) resolve(n); else setTimeout(look, 5); };
@@ -1716,8 +1746,13 @@ await page.reload(); await page.waitForSelector("#nav button");
 var resumed = false;
 for (let i = 0; i < 1800 && !resumed; i++) { const l = JSON.parse((await stored(page)).local); resumed = l.state.transactions.filter((t) => t.source === "photo" && t.status === "draft").length === 2 && (l.settings.scan_queue ?? []).length === 0; if (!resumed) await page.waitForTimeout(100); }
 check(resumed, "after the app is closed and opened again, the waiting photo is read and saved as a draft");
+check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
+} } catch (e) { await blockFailed(e); }
 
-// when the paper does not name the account, the photo is kept and the app asks instead of guessing
+// ===== 5f9. when the paper does not name the account, the photo is kept and the app asks instead of guessing =====
+try { blockName = "5f9. when the paper does not name the account, the photo is kept and the app asks instead of guessing"; if (!TOOLS.pictureStore) skippedPictures(blockName); else {
+({ ctx, page, errors } = await fromSeed("5f9", { blockSw: true }));
+var receiptPng = await receiptPicture(page);
 await page.click('#nav button:has-text("Log")');
 await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles('input[data-scan="quick"]:not([capture])', { name: "receipt.png", mimeType: "image/png", buffer: Buffer.from(receiptPng, "base64") });
 check(await seen(page, "#sheet", "Check what I read", 180000), "a photo that cannot be saved safely opens the window to ask");
@@ -1750,7 +1785,7 @@ await addAccount(page, "MariBank \u00b7 Credit card", "liability", "0");
     const before = JSON.parse((await stored(page)).local).state;
     await breakStore(how);
     await menuGo(page, "Scan");
-    await page.setInputFiles("input[data-scan]:not([capture])", { name: "receipt.png", mimeType: "image/png", buffer: Buffer.from(receiptPng, "base64") });
+    await page.setInputFiles("input[data-scan]:not([capture])", { name: "receipt.png", mimeType: "image/png", buffer: Buffer.from(await receiptPicture(page), "base64") });
     await seen(page, "#sheet", "Check what I read", 180000);
     await page.fill("#f-date", "2026-10-03");
     const chip = page.locator(`#sheet .chip[data-id="${acct}"]`);
@@ -2141,7 +2176,7 @@ console.log("Read now");
   try {
   await page.route(HUNG, () => {});   // the request stays open for ever
   await page.reload(); await page.waitForSelector("#nav button");
-  await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles('input[data-scan="quick"]:not([capture])', { name: "bank.png", mimeType: "image/png", buffer: Buffer.from(bankPng, "base64") });
+  await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles('input[data-scan="quick"]:not([capture])', { name: "bank.png", mimeType: "image/png", buffer: Buffer.from(await bankPicture(page), "base64") });
   check(await page.waitForFunction(() => /Keeping the photo|Reading|Getting the/.test(document.querySelector("#screen")?.innerText ?? ""), null, { timeout: 20000, polling: 50 }).then(() => true, () => false), "a photo taken starts reading and says so");
   check(await seen(page, "#screen", "could not run", 30000) && (await text(page, "#screen")).includes("stopped responding"), "a reader that never answers is given up on and the screen says why");
   check((await text(page, "#screen")).includes("kept") || (await text(page, "#screen")).includes("waiting to be read") || (await text(page, "#screen")).includes("Read now"), "the photo is still kept");

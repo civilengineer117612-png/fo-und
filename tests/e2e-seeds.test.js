@@ -21,7 +21,7 @@ test("a seed section is its own block: it opens its own phone right after its ow
   const lines = run.split("\n");
   for (const name of asked) {
     const at = lines.findIndex((l) => l.includes('await fromSeed("' + name + '"'));
-    assert.match(lines[at - 1], /^try \{ blockName = ".+";$/, name + " starts its block");
+    assert.match(lines[at - 1], /^try \{ blockName = ".+";( if \(!TOOLS\.pictureStore\) skippedPictures\(blockName\); else \{)?$/, name + " starts its block (a block that keeps a picture skips on WebKit before it opens a phone)");
     assert.match(lines[at - 2], /^\/\/ ===== /, name + " is a marked block");
   }
   assert.match(run, /async function fromSeed\(name, opts = \{\}\) \{\n  const file = new URL\("\.\/fixtures\/seeds\/" \+ name \+ "\.json", import\.meta\.url\);/);
@@ -33,6 +33,16 @@ test("the helpers every block shares are defined before the first block, not ins
   for (const name of ["logPreset", "logOther", "verifyAll"]) {
     const at = run.indexOf("const " + name + " = async");
     assert.ok(at > 0 && at < first, name + " is defined before any block, so 5g and 5vd never need 5e to have run");
+    assert.ok(!run.includes("var " + name + " ="), name + " is not defined again inside a block");
+  }
+});
+
+test("5f is cut into its own blocks; the pictures it draws and the viewer's close live above the first block", () => {
+  const first = run.indexOf("\n// ===== ");
+  assert.equal([...run.matchAll(/^\/\/ ===== 5f[3-9]\. /gm)].length, 7, "5f3 to 5f9 are blocks of their own");
+  for (const name of ["receiptPicture", "bankPicture", "closeViewer"]) {
+    const at = run.search(new RegExp("^const " + name + " = ", "m"));
+    assert.ok(at > 0 && at < first, name + " is defined before any block, so 5f2, 5j and 5k never need 5f to have run");
     assert.ok(!run.includes("var " + name + " ="), name + " is not defined again inside a block");
   }
 });
@@ -56,5 +66,8 @@ for (const name of files) test("seed " + name + " is a current ledger the app op
   assert.deepEqual(selfCheck(parsed.ledger), [], "the self-check passes");
   const text = JSON.stringify(saved.ledger);
   assert.doesNotMatch(text, /https?:\/\//, "no outside address is kept (pictures are copies, data: only)");
-  assert.doesNotMatch(text, /\b\d{10,}\b/, "no long number that could be an account number");
+  // A long number could be an account number. The only ones allowed are those the test itself invents: written in run.mjs (the
+  // reference number on the drawn transfer picture) or the seed's own fixed clock in milliseconds (inside an id the app makes).
+  const invented = new Set([...run.matchAll(/\b\d{10,}\b/g)].map((m) => m[0]).concat(String(Date.parse(saved.now))));
+  assert.deepEqual([...text.matchAll(/\b\d{10,}\b/g)].map((m) => m[0]).filter((n) => !invented.has(n)), [], "no long number that could be an account number");
 });
