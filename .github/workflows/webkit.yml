@@ -22,10 +22,20 @@ jobs:
         with:
           node-version: 22
       # Playwright 1.64.1 was published on 2026-10-14; the same pin as the "e2e" job (tests/webkit-ci.test.js keeps them equal).
+      # The system packages come from apt, which hung for 28 and 41 minutes on Nov 20 (two runs in three) and left the tests no time
+      # before the job's limit. Each try now gets 5 minutes (a good install takes under one) and a fresh download; three tries, then the step fails and says so.
+      # This is the INSTALL only: a test is never run twice.
       - name: Install Playwright and WebKit
+        timeout-minutes: 16
         run: |
           npm install -g playwright@1.64.1
-          npx playwright install --with-deps webkit chromium   # chromium only draws the pictures the tests read (e2e/engine.mjs drawPicture)
+          for try in 1 2 3; do
+            if timeout 300 npx playwright install --with-deps webkit chromium; then exit 0; fi   # chromium only draws the pictures the tests read (e2e/engine.mjs drawPicture)
+            echo "install try $try did not finish in 5 minutes"
+            if ! sudo dpkg --configure -a; then echo "dpkg could not finish what the stopped try began"; fi
+          done
+          echo "Playwright and WebKit could not be installed in 3 tries; no test ran"
+          exit 1
       - name: Serve the repository
         run: |
           python3 -m http.server 8124 >/dev/null 2>&1 &
