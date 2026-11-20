@@ -217,6 +217,24 @@ async function fromSeed(name, opts = {}) {
   const saved = JSON.parse(readFileSync(file, "utf8"));
   return open({ ...opts, seed: saved.ledger, now: new Date(saved.now) });
 }
+// Invented accounts and ledgers the 6w blocks share (A11, Nov 20: they live here, so a 6w block never needs another one to have run first).
+const settingsOf = async () => JSON.parse((await stored(page)).local).settings;
+const waiting = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, welcome_pending: true } };
+const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 900000, opening_date: "2026-09-01" };
+const TSW = "2026-10-02T09:00:00.000+08:00";
+const seedW = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acct],
+  transactions: [{ id: "d1", date: "2026-10-02", payee: "Lunch", memo: "", status: "draft", source: "manual", created_at: TSW }],
+  entries: [{ transaction_id: "d1", category_id: "cat-food", amount: 9500 }, { transaction_id: "d1", account_id: "w", amount: -9500 }], attachments: [] } };
+const acc2 = (id, name, cls, extra = {}) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-09-01", ...extra });
+const seedC = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acc2("d", "Test Debit", "asset", { opening_balance: 1000000, reserve_for: "c" }), acc2("c", "Test Card", "liability"), acc2("w", "Test Wallet", "asset", { opening_balance: 250000 })],
+  transactions: [{ id: "t1", date: "2026-10-02", payee: "Sample Store", memo: "", status: "verified", source: "manual", created_at: TSW, verified_at: TSW }],
+  entries: [{ transaction_id: "t1", category_id: "cat-food", amount: 300000 }, { transaction_id: "t1", account_id: "c", amount: -300000 }], attachments: [] } };
+const FX = (n) => new URL("./fixtures/" + n, import.meta.url).pathname;
+const accS = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-10-02" };
+const importer = async (file) => { ({ ctx, page, errors } = await open({ blockSw: true, seed: { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [accS] } } })); await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles("input[data-import]", FX(file)); };
+const pkAcc = (id, name, last4) => ({ id, name, class: "asset", role: "pocket", hidden_by_default: false, archived: false, opening_balance: 450000, opening_date: "2026-10-02", bank: "gotyme", last4 });
+const mainG = { id: "gm", name: "GoTyme", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 120000, opening_date: "2026-10-02", bank: "gotyme" };
+const pocketSeed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [mainG, pkAcc("pe", "GoTyme \u00b7 Emergency", "3002"), pkAcc("pt", "GoTyme \u00b7 Travel", "4004")] } };
 // ===== 1. first run, setup =====
 try { blockName = "1. first run, setup";
 console.log("First run and setup");
@@ -3417,11 +3435,8 @@ await ctx.close();
 // ===== 6w. the welcome card, editing categories, required marks =====
 try { blockName = "6w. the welcome card, editing categories, required marks";
 console.log("Welcome card, category editing, required marks");
-{
-  const settingsOf = async () => JSON.parse((await stored(page)).local).settings;
   // A1 (Nov 15): a NEW install gets the first-run setup instead; the card stays for a ledger already waiting for it (welcome_pending). Before, these
   // two openings were brand-new phones that tapped I understand first; the checks on the card itself are unchanged.
-  const waiting = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, welcome_pending: true } };
   ({ ctx, page, errors } = await open({ blockSw: true, keepNotice: true, seed: waiting }));
   check(await seen(page, "#sheet", "Make it yours"), "a ledger still waiting for the welcome card gets it");
   const box = await page.locator("#sheet .sheet").boundingBox(), vh = page.viewportSize().height;
@@ -3446,16 +3461,21 @@ console.log("Welcome card, category editing, required marks");
   await page.reload(); await page.waitForSelector("#nav button"); await page.waitForTimeout(600);
   check(await page.locator("#sheet .sheet").count() === 0, "after Make it mine the card does not come back");
   await ctx.close();
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w2. an existing ledger is never greeted =====
+try { blockName = "6w2. an existing ledger is never greeted";
   // an existing ledger is never greeted
   ({ ctx, page, errors } = await open({ blockSw: true }));
   check(await page.locator("#sheet .sheet").count() === 0, "an existing ledger gets no welcome card");
   await ctx.close();
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w3. editing categories: remove, hide, show again =====
+try { blockName = "6w3. editing categories: remove, hide, show again";
   // editing categories: remove an unused one (asks twice), hide a used one, show it again
-  const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 900000, opening_date: "2026-09-01" };
-  const TSW = "2026-10-02T09:00:00.000+08:00";
-  const seedW = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acct],
-    transactions: [{ id: "d1", date: "2026-10-02", payee: "Lunch", memo: "", status: "draft", source: "manual", created_at: TSW }],
-    entries: [{ transaction_id: "d1", category_id: "cat-food", amount: 9500 }, { transaction_id: "d1", account_id: "w", amount: -9500 }], attachments: [] } };
   ({ ctx, page, errors } = await open({ blockSw: true, seed: seedW }));
   await menuGo(page, "Setup");
   check(await page.locator('.row:has-text("Food") button').count() === 0 && await page.locator('button[data-action="cat-edit"]').count() === 1, "the categories show no row links, only the pencil");
@@ -3481,6 +3501,11 @@ console.log("Welcome card, category editing, required marks");
   await page.waitForFunction(() => !(JSON.parse(localStorage.getItem("financialTracker.ledger")).settings.hidden_categories ?? []).includes("cat-food"), null, { timeout: 4000 });
   check(true, "Show again puts it back");
   await ctx.close();
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w4. Undo after a removal =====
+try { blockName = "6w4. Undo after a removal";
   // Undo after a removal puts the category back in its old place
   ({ ctx, page, errors } = await open({ blockSw: true, seed: seedW }));
   await menuGo(page, "Setup"); await page.click('button[data-action="cat-edit"]');
@@ -3491,6 +3516,11 @@ console.log("Welcome card, category editing, required marks");
   await page.waitForFunction((was) => JSON.parse(localStorage.getItem("financialTracker.ledger")).state.categories.map((c) => c.id).join() === was, orderBefore, { timeout: 4000 });
   check(true, "Undo puts it back where it was");
   await ctx.close();
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w5. the one-time card about editing categories =====
+try { blockName = "6w5. the one-time card about editing categories";
   // an old ledger gets the one-time card about editing categories; Not now also counts
   ({ ctx, page, errors } = await open({ blockSw: true, keepCatCard: true }));
   check(await seen(page, "#sheet", "New: edit your categories"), "a ledger already in use gets the one-time card about editing categories");
@@ -3503,11 +3533,12 @@ console.log("Welcome card, category editing, required marks");
   await page.click('#sheet button[data-action="cat-card-show"]');
   check(await page.locator('button[data-action="cat-done"]').count() === 1, "Show me opens the categories in edit mode");
   await ctx.close();
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w6. Cards: the net, swipe cards, the bar, a list twin =====
+try { blockName = "6w6. Cards: the net, swipe cards, the bar, a list twin";
   // Cards: the net, swipe cards with the backing account before its card, the bar, a list twin; the bar in Setup and under Paid from
-  const acc2 = (id, name, cls, extra = {}) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: 0, opening_date: "2026-09-01", ...extra });
-  const seedC = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [acc2("d", "Test Debit", "asset", { opening_balance: 1000000, reserve_for: "c" }), acc2("c", "Test Card", "liability"), acc2("w", "Test Wallet", "asset", { opening_balance: 250000 })],
-    transactions: [{ id: "t1", date: "2026-10-02", payee: "Sample Store", memo: "", status: "verified", source: "manual", created_at: TSW, verified_at: TSW }],
-    entries: [{ transaction_id: "t1", category_id: "cat-food", amount: 300000 }, { transaction_id: "t1", account_id: "c", amount: -300000 }], attachments: [] } };
   ({ ctx, page, errors } = await open({ blockSw: true, seed: seedC }));
   await menuGo(page, "Cards");
   check((await text(page, ".netcard")).replace(/\s+/g, " ").includes("\u20B19,500.00"), "Cards opens with what is free: what is in the accounts minus what the cards are owed");
@@ -3520,6 +3551,11 @@ console.log("Welcome card, category editing, required marks");
   await page.click('#nav button:has-text("Log")'); await page.click('button[data-action="open-other"]'); await page.waitForSelector("#sheet #f-amount");
   check(await page.locator("#sheet .coverrow .cover").count() === 1, "and under Paid from");
   await ctx.close();
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w7. Pay a card from Cards =====
+try { blockName = "6w7. Pay a card from Cards";
   // Tap a credit card on Cards: what you owe, Paid from already set to the account that backs it, one button that makes the payment (a draft transfer, not spending)
   ({ ctx, page, errors } = await open({ blockSw: true, seed: seedC }));
   await menuGo(page, "Cards", { keepHidden: true });
@@ -3561,6 +3597,11 @@ console.log("Welcome card, category editing, required marks");
   await page.click("#f-save");
   check(await seen(page, "#toast", "set as a transfer"), "Move money into a credit card saves (it used to say it could not)");
   await ctx.close();
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w8. Add expense: the Item box =====
+try { blockName = "6w8. Add expense: the Item box";
   // Add expense: an optional one-word Item box under Amount; left empty, Verify shows the category name
   { ({ ctx, page, errors } = await open({ blockSw: true, seed: seedC }));
     await page.click('#nav button:has-text("Log")'); await page.click('button[data-action="open-other"]'); await page.waitForSelector("#sheet #f-amount");
@@ -3578,6 +3619,11 @@ console.log("Welcome card, category editing, required marks");
     await page.click('#nav button:has-text("Verify")');
     check(await seen(page, "#screen .card", "Food") && (await text(page, "#screen .card")).trim().split("\n")[0].trim() === "Food", "with no Item typed, Verify's title is the category name");
     await ctx.close(); }
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w9. an income draft moves to another income category =====
+try { blockName = "6w9. an income draft moves to another income category";
   // An income draft in Verify can move to another income category; the amount and the account stay
   { const acc = (id, name) => ({ id, name, class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-09-01" });
     const st = { ...OWNER_STYLE.state, accounts: [acc("w", "Test Wallet")],
@@ -3592,6 +3638,11 @@ console.log("Welcome card, category editing, required marks");
     { const led = JSON.parse((await stored(page)).local).state, es = led.entries.filter((e) => e.transaction_id === "i1");
       check(es.some((e) => e.category_id === "cat-gift" && e.amount === -150000) && es.some((e) => e.account_id === "w" && e.amount === 150000) && led.transactions.find((t) => t.id === "i1").status === "draft", "it moved to Gift, the amount and the account unchanged, still a draft"); }
     await ctx.close(); }
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w10. Split receipt words =====
+try { blockName = "6w10. Split receipt words";
   // Split receipt (scan and voice forms): short words, one line saying when to use it, the second category and its amount
   { const st = { ...seedC.state, categories: [...seedC.state.categories, { id: "cat-essentials", name: "Essentials", kind: "expense", role: "essentials" }] };
     ({ ctx, page, errors } = await open({ blockSw: true, noSpeech: true, seed: { ...seedC, state: st } }));
@@ -3605,6 +3656,11 @@ console.log("Welcome card, category editing, required marks");
     await page.evaluate(() => document.querySelector('#sheet [data-action="pick-split"][data-id="cat-food"]')?.click()); await page.fill("#f-split", "300");
     check((await text(page, "#split-note")).includes("Essentials gets \u20B1900.00, Food gets \u20B1300.00"), "and says what each category gets");
     await ctx.close(); }
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w11. a card's due day makes one draft =====
+try { blockName = "6w11. a card's due day makes one draft";
   // Due day: on the due day a draft payment waits in Verify, once, and a thrown-away one does not come back that month
   { const seedD = { ...seedC, state: { ...seedC.state, accounts: seedC.state.accounts.map((a) => (a.id === "c" ? { ...a, due_day: 3, statement_balance: 250000, statement_date: "2026-09-20" } : a)) } };
     ({ ctx, page, errors } = await open({ blockSw: true, seed: seedD }));
@@ -3614,6 +3670,11 @@ console.log("Welcome card, category editing, required marks");
     await page.reload(); await page.waitForSelector("#nav button"); await page.waitForTimeout(600);
     check(JSON.parse((await stored(page)).local).state.transactions.filter((x) => x.payee.startsWith("Card payment (due")).length === 1, "opening the app again does not make a second one");
     await ctx.close(); }
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w12. a credit card against its statement =====
+try { blockName = "6w12. a credit card against its statement";
   // A credit card against its statement (invented amounts): the statement prints what is owed; a purchase the ledger lacks can be added as a draft, a payment is only named
   { const ln = (date, text, amount, direction, balance, meaning) => ({ date, text, payee: text, type: "", amount, direction, balance, meaning });
     const parsed = { ok: true, style: "x", period: { from: "2026-09-01", to: "2026-09-30" }, summary: { opening: 1000000 }, check: { ok: true },
@@ -3641,17 +3702,32 @@ console.log("Welcome card, category editing, required marks");
       check(t.status === "draft" && es.some((e) => e.account_id === "c" && e.amount === -80000), "the purchase became ONE draft expense on the card, not verified"); }
     check(await seen(page, "#sheet", "your ledger owes more") && (await text(page, "#sheet")).includes("\u20B170.00"), "after the draft only the entry the statement lacks is left: the ledger owes 70.00 more");
     await ctx.close(); }
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w13. the bottom bar stays pinned =====
+try { blockName = "6w13. the bottom bar stays pinned";
   // The bottom bar stays pinned to the bottom of the screen when a long page is scrolled (it drifted up the page on the iPhone)
   ({ ctx, page, errors } = await open({ blockSw: true }));
   await menuGo(page, "Help"); await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await page.waitForTimeout(300);
   { const nb = await page.locator("#nav").boundingBox(), vh = page.viewportSize().height; check(Math.abs(nb.y + nb.height - vh) <= 1, "the Log and Verify bar stays at the bottom of the screen when Help is scrolled"); }
   check(await page.evaluate(() => getComputedStyle(document.body).overflowX) === "visible" && await page.evaluate(() => getComputedStyle(document.documentElement).overflowX) === "hidden", "only the page hides sideways overflow, not the body too");
   await ctx.close();
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w14. Budget gives a hidden category no line =====
+try { blockName = "6w14. Budget gives a hidden category no line";
   // Budget gives a hidden category no line: it is only listed under Hidden
   ({ ctx, page, errors } = await open({ blockSw: true, seed: { ...seedC, settings: { ...seedC.settings, hidden_categories: ["cat-lakat"] } } }));
   await menuGo(page, "Budget");
   check(await page.locator('#screen button.catrow:has-text("Lakat/Date")').count() === 0 && await page.locator("#screen small.hiddennote").count() === 0, "Budget has no line for the hidden category (it is only listed under Hidden, when it has a budget)");
   await ctx.close();
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w15. Who: spending by payee =====
+try { blockName = "6w15. Who: spending by payee";
   // Who: spending by payee inside Trends; naming a number once moves its payments out of Unlogged (verified ones only in the reports, drafts for real)
   { const txW = (id, date, payee, status = "verified") => ({ id, date, payee, memo: "", status, source: "statement", created_at: TSW, ...(status === "verified" ? { verified_at: TSW } : {}) });
     const pay = (id, cat, amt) => [{ transaction_id: id, category_id: cat, amount: amt }, { transaction_id: id, account_id: "w", amount: -amt }];
@@ -3694,6 +3770,11 @@ console.log("Welcome card, category editing, required marks");
     check(catScreen.includes("Family") && !catScreen.includes("Unlogged"), "By category now counts those payments under Family, not Unlogged");
     check(errors.length === 0, "no errors on the Who list (" + errors.join(" | ") + ")");
     await ctx.close(); }
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w16. the spending line: zoom and measure =====
+try { blockName = "6w16. the spending line: zoom and measure";
   // The spending line: pinch and Ctrl-scroll zoom it, the step follows the zoom, it never goes past today or before the first spending
   { const spendTx = (id, date, amt) => [{ id, date, payee: "Sample Shop", memo: "", status: "verified", source: "manual", created_at: TSW, verified_at: TSW }, [{ transaction_id: id, category_id: "cat-food", amount: amt }, { transaction_id: id, account_id: "w", amount: -amt }]];
     const dates = ["2025-11-03", "2026-01-15", "2026-03-10", "2026-05-20", "2026-07-04", "2026-08-30", "2026-09-12", "2026-09-28", "2026-10-02"];
@@ -3724,10 +3805,12 @@ console.log("Welcome card, category editing, required marks");
     check(await page.locator("#tlsvg rect.tlband").count() === 0, "zooming clears a measured span");
     check(errors.length === 0, "no errors with the spending line (" + errors.join(" | ") + ")");
     await ctx.close(); }
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w17. a bank statement PDF read on the phone =====
+try { blockName = "6w17. a bank statement PDF read on the phone";
   // A bank statement (PDF) read on the phone: an open one, then a locked one (invented statements in e2e/fixtures)
-  const FX = (n) => new URL("./fixtures/" + n, import.meta.url).pathname;
-  const accS = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-10-02" };
-  const importer = async (file) => { ({ ctx, page, errors } = await open({ blockSw: true, seed: { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [accS] } } })); await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles("input[data-import]", FX(file)); };
   await importer("sample-open.pdf");
   check(await seen(page, "#sheet", "Balance check"), "a PDF statement is read and shown before anything is added");
   let st = await text(page, "#sheet");
@@ -3798,10 +3881,12 @@ console.log("Welcome card, category editing, required marks");
     await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles("input[data-import]", FX("sample-pocket.pdf"));
     check(await seen(page, "#sheet", "Go Save pocket ending 3002") && (await text(page, "#sheet")).includes("chosen for you") && !(await text(page, "#sheet")).includes("(new)") && await page.locator('#sheet [data-action="pick-acct"][data-id="gx"][aria-pressed="true"]').count() === 1, "a number that already has a pocket is filed there, no new one is offered");
     await ctx.close(); }
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w18. savings pockets =====
+try { blockName = "6w18. savings pockets";
   // savings pockets: never under Paid from; offered for Move money; a pocket statement goes to the pocket with its digits; on Cards each sits under its bank's main account, shown only when opened
-  const pkAcc = (id, name, last4) => ({ id, name, class: "asset", role: "pocket", hidden_by_default: false, archived: false, opening_balance: 450000, opening_date: "2026-10-02", bank: "gotyme", last4 });
-  const mainG = { id: "gm", name: "GoTyme", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 120000, opening_date: "2026-10-02", bank: "gotyme" };
-  const pocketSeed = { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [mainG, pkAcc("pe", "GoTyme \u00b7 Emergency", "3002"), pkAcc("pt", "GoTyme \u00b7 Travel", "4004")] } };
   ({ ctx, page, errors } = await open({ blockSw: true, seed: pocketSeed }));
   await page.click('#nav button:has-text("Log")'); await page.click('button[data-action="open-other"]'); await page.waitForSelector("#sheet #f-amount");
   const paidList = await page.locator("#sheet").textContent();
@@ -3820,6 +3905,11 @@ console.log("Welcome card, category editing, required marks");
   ({ ctx, page, errors } = await open({ blockSw: true, seed: pocketSeed })); await page.click('button[data-action="open-scan-pick"]'); await page.setInputFiles("input[data-import]", FX("sample-pocket.pdf"));
   check(await seen(page, "#sheet", "Go Save pocket ending 3002") && (await text(page, "#sheet")).includes("chosen for you") && (await page.locator('#sheet [data-action="pick-acct"][data-id="pe"][aria-pressed="true"]').count()) === 1, "a pocket statement is filed under the pocket whose last four digits it names, chosen for you");
   await ctx.close();
+  try { await ctx?.close(); } catch { /* already closed */ }
+} catch (e) { await blockFailed(e); }
+
+// ===== 6w19. Compare with your ledger: drafts in one tap =====
+try { blockName = "6w19. Compare with your ledger: drafts in one tap";
   // Compare with your ledger: money in and a line that does not say what it was can each be made a DRAFT in one tap (never verified by itself)
   { const accD = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2022-01-01" };
     ({ ctx, page, errors } = await open({ blockSw: true, seed: { ...OWNER_STYLE, state: { ...OWNER_STYLE.state, accounts: [accD] } } }));
@@ -3879,7 +3969,7 @@ console.log("Welcome card, category editing, required marks");
   await page.click('#sheet button[data-action="pdf-cancel"]');
   check(await page.locator("#sheet .sheet").count() === 0, "Cancel at the password closes the window");
   await ctx.close();
-}
+  try { await ctx?.close(); } catch { /* already closed */ }
 } catch (e) { await blockFailed(e); }
 
 // ===== 7. offline =====
