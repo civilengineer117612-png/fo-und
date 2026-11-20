@@ -63,7 +63,7 @@ export { KEEP_MONTHS, SHRINK_MAX_SIDE, SHRINK_BATCH, monthsBefore, shrinkDue, sh
 export { MAX_FORM_LINES, KIND_NAMES, newPlanForm, planTextFromForm, planFormStatus, formFromPlan, planFormLines, withListedLines, planFormSuggestion, planFormFill, payslipDayNotes, ordinal, amountText } from "./planform.js";
 export { HISTORY_MONTHS, suggestFromHistory, suggestFromPlan, scheduleHints } from "./schedulehints.js";
 export { accountRegister } from "./register.js";
-export { searchEntries } from "./search.js";
+export { searchEntries, warmSearch } from "./search.js";
 export { entriesCsv, CSV_COLUMNS } from "./csvexport.js";
 export { netWorthSeries } from "./networth.js";
 export { GOAL_SYMBOLS, goalSymbolSvg } from "./goalicons.js";

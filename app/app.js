@@ -153,8 +153,15 @@ function transferFields(t, d) {
 // One line about a transaction, whatever kind it is.
 // A payee that is only a phone or account number shows as its first and last four digits (Who and Trends already do).
 const shortPayee = (p) => /^\d{10,}$/.test(String(p ?? "").trim()) ? M.payeeLabel(p) : p;
+// Each transaction's entries, in ledger order, from one map per entries list (L10, Nov 20: describe scanned every entry for every row it drew,
+// so 200 search rows on a ledger of 4,000 entries cost a pass over all of them 200 times on each key typed). The state is never edited in place.
+let legsIndex = { en: null, n: -1, map: null };
+function legsOf(id) {
+  if (legsIndex.en !== S().entries || legsIndex.n !== S().entries.length) { const map = new Map(); for (const e of S().entries) { const l = map.get(e.transaction_id); if (l) l.push(e); else map.set(e.transaction_id, [e]); } legsIndex = { en: S().entries, n: S().entries.length, map }; }
+  return legsIndex.map.get(id) ?? [];
+}
 function describe(t) {
-  const es = S().entries.filter((e) => e.transaction_id === t.id);
+  const es = legsOf(t.id).slice();
   if (t.restores) return { kind: "other", editable: false, title: "Puts right a second cancellation: " + (t.payee || "an entry"), amount: es.filter((e) => e.amount > 0).reduce((n, e) => n + e.amount, 0), detail: "puts an extra cancellation right" };
   if (t.reverses) return { kind: "other", editable: false, title: "Cancels: " + (t.payee || "an entry"), amount: es.filter((e) => e.amount > 0).reduce((n, e) => n + e.amount, 0), detail: "cancels an earlier entry" };   // shown without a sign: it only takes back what was entered
   const cat = es.find((e) => e.category_id != null), acct = es.find((e) => e.account_id != null);
@@ -5411,7 +5418,7 @@ async function onClick(el) {
     case "restore-pics": await restorePictures(); break;
     case "open-backup-file": await openBackupFile(); break;
     case "restore-now": await restoreNow(); break;
-    case "open-entries": ui.sheet = { type: "entries" }; ui.form = { q: "", scope: "period" }; renderSheet(); break;
+    case "open-entries": ui.sheet = { type: "entries" }; ui.form = { q: "", scope: "period" }; renderSheet(); setTimeout(() => M.warmSearch(S()), 300); break;   // the search index is built once the window has slid up, so the first key does not wait for it (L10)
     case "open-networth": ui.sheet = { type: "networth" }; ui.form = { range: "12" }; renderSheet(); break;
     case "nw-range": ui.form.range = id; renderSheet(); break;
     case "nw-show": ui.cardsShown = true; renderScreen(); renderSheet(); break;

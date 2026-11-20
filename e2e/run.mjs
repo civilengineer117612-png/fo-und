@@ -215,7 +215,10 @@ async function fromSeed(name, opts = {}) {
   if (process.env.E2E_RECORD_SEEDS) { const now = await page.evaluate(() => Date.now()); writeFileSync(file, JSON.stringify({ now: new Date(now).toISOString(), ledger: JSON.parse((await stored(page)).local) }) + "\n"); }
   try { await ctx?.close(); } catch { /* the section before already closed it */ }
   const saved = JSON.parse(readFileSync(file, "utf8"));
-  return open({ ...opts, seed: saved.ledger, now: new Date(saved.now) });
+  // A seed was recorded with "What's new" already seen (open() marks it), so it stays seen when a later PR adds a line (L10, Nov 20: the new
+  // line opened its window over every seeded block and the first tap timed out).
+  const ledger = opts.whatsNew ? saved.ledger : { ...saved.ledger, settings: { ...saved.ledger.settings, whatsnew_seen: CHANGES[0].id } };
+  return open({ ...opts, seed: ledger, now: new Date(saved.now) });
 }
 // Invented accounts and ledgers the 6w blocks share (A11, Nov 20: they live here, so a 6w block never needs another one to have run first).
 const settingsOf = async () => JSON.parse((await stored(page)).local).settings;

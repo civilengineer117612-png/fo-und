@@ -19,7 +19,13 @@ const fail = (code, message) => ({ ok: false, violations: [{ code, severity: "er
 const dayOf = (iso) => String(iso ?? "").slice(0, 10);
 const addDays = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
 
-export const isReversed = (state, id) => state.transactions.some((t) => t.reverses === id);
+// The ids some entry cancels, worked out once per transactions list (L10, Nov 20: a list of 200 search rows asked this for every row, a pass
+// over all the transactions each time). The state is never edited in place, so the set is kept while the same array is in use (and dropped if it grows or shrinks).
+let reversedOf = { tx: null, n: -1, ids: null };
+export const isReversed = (state, id) => {
+  if (reversedOf.tx !== state.transactions || reversedOf.n !== state.transactions.length) reversedOf = { tx: state.transactions, n: state.transactions.length, ids: new Set(state.transactions.filter((t) => t.reverses).map((t) => t.reverses)) };
+  return reversedOf.ids.has(id);
+};
 
 // The verified entries that can still be corrected, newest entry date first (then the one verified last).
 export function correctable(state, today) {
