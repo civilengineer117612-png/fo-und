@@ -37,6 +37,15 @@ test("the helpers every block shares are defined before the first block, not ins
   }
 });
 
+test("6w is cut into its own blocks, and the invented ledgers they share live above the first block", () => {
+  const first = run.indexOf("\n// ===== ");
+  assert.ok([...run.matchAll(/^\/\/ ===== 6w\d*\. /gm)].length >= 19, "6w is 19 blocks");
+  for (const name of ["waiting", "acct", "TSW", "seedW", "acc2", "seedC", "FX", "accS", "importer", "pkAcc", "mainG", "pocketSeed", "settingsOf"]) {
+    const at = run.search(new RegExp("^const " + name + " = ", "m"));
+    assert.ok(at > 0 && at < first, name + " is defined before any block, so a 6w block never needs another one to have run");
+  }
+});
+
 for (const name of files) test("seed " + name + " is a current ledger the app opens, with no problem and only invented data", () => {
   const saved = JSON.parse(read("e2e/fixtures/seeds/" + name + ".json"));
   assert.ok(!Number.isNaN(Date.parse(saved.now)) && saved.now.startsWith("2026-"), "its clock is a fixed invented day");
