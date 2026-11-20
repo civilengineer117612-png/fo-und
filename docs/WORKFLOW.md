@@ -211,6 +211,8 @@ OVERHAUL (owner, Nov 12: Phase 1 report approved, rows A1 to A11; data loss firs
   e2e block its own ledger: 5e as 15 blocks from recorded seeds, `fromSeed`; 6w as 19 blocks, its shared invented ledgers above the first block; 5f as 8 blocks from seeds, its drawn pictures above the first block; 5g stays one payslip flow); the screens one at a time with less text, a picture first for each (Log and Verify, Spending, Budget and Goals, Cards
   and Setup, Weekly review and Checks); the Weekly review with less text (waits on the owner's answer: which text is read and which is skipped);
   then the final report with the owner's iPhone checks.
+- FINDING (S2, WebKit, Nov 20): the window jump came back once on main (sheet-scroll repeat 20 of 20: 212 to 151 the instant Paid from's list
+  opened; the re-run was green), about 1 in 100 repeats. sheet-scroll now prints a timeline for a repeat that moves; the next one names its moment.
 - Docs (PR 23, Nov 16): docs/UI.md, HANDOVER.md, README.md and this PART 6 and 7 brought up to date.
 
 P2 (wait for "next"): voice entry disclosure in Help and the first-run notice; library licence note; trim
