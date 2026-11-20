@@ -26,6 +26,19 @@ test("e2e-webkit runs every script the e2e job runs, on WebKit, and never hides 
   assert.doesNotMatch(code, /continue-on-error:|retries|flaky|\|\| true/i);
 });
 
+test("the WebKit install has its own time limit: a hung download fails fast, in a few tries, and never repeats a test", () => {
+  // Nov 20: apt hung for 28 and 41 minutes in two runs of three, so the 45-minute job ran out before (or soon after) the tests began.
+  const step = webkit.slice(webkit.indexOf("- name: Install Playwright and WebKit"), webkit.indexOf("- name: Serve the repository"));
+  const limit = Number(step.match(/timeout-minutes: (\d+)/)?.[1]);
+  const job = Number(webkit.match(/^    timeout-minutes: (\d+)$/m)?.[1]);
+  const each = Number(step.match(/timeout (\d+) npx playwright install --with-deps webkit/)?.[1]);
+  const tries = step.match(/for try in ([\d ]+); do/)?.[1].trim().split(/\s+/).length;
+  assert.ok(each > 0 && tries >= 2 && tries <= 3, "each try is stopped after a fixed time, and there are at most three");
+  assert.ok(limit >= (each / 60) * tries && limit <= job / 2, "the step's own limit covers its tries and leaves the tests most of the job (" + limit + " of " + job + " minutes)");
+  assert.match(step, /exit 1\n/, "after the last try the step fails; it is never skipped");
+  assert.doesNotMatch(webkit.slice(webkit.indexOf("- name: Run every e2e script on WebKit")), /for try in|timeout \d+ node/, "no test script is ever tried twice");
+});
+
 test("the deploy still waits for test and e2e only: WebKit is its own workflow, not part of the reusable checks", () => {
   assert.doesNotMatch(checks, /e2e-webkit|ENGINE/);
   assert.doesNotMatch(pages, /webkit/i);
