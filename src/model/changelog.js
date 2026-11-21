@@ -74,6 +74,10 @@ export function missedReleases(log, seen) {
   return log.releases.filter((r) => compareVersions(r.version, seen) > 0);
 }
 
+// The heading over what came after the last version (every merge is already on the phone, so it is never "not released"):
+// "Since version 1.1.0", or before any release "Before version 1.0.0".
+export const sinceLabel = (log) => currentVersion(log) ? `Since version ${currentVersion(log)}` : "Before version 1.0.0";
+
 // The line Setup, About this app shows: the version and the build it came in, so two builds between releases can be told apart.
 export function versionLine(log, { built, build, dev }) {
   const v = currentVersion(log);

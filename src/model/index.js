@@ -112,7 +112,7 @@ export { fixedMap, isFixed, withFixed, fixedWhy, FIXED_LABEL, FIXED_ROLES } from
 export { emergencyFund, emergencyFormula, formulaWords, EF_MONTHS } from "./emergency.js";
 export { guessType, typeOf, kindOf } from "./types.js";
 export { CHANGES, whatsNew } from "./whatsnew.js";   // the old per-merge list, kept as the record (P2-13: CHANGELOG.md replaces it)
-export { GROUPS as NOTE_GROUPS, isVersion, compareVersions, parseChangelog, noteCount, currentVersion, nextVersion, cutRelease, missedReleases, versionLine, changelogCheck } from "./changelog.js";
+export { GROUPS as NOTE_GROUPS, isVersion, compareVersions, parseChangelog, noteCount, currentVersion, nextVersion, cutRelease, missedReleases, versionLine, sinceLabel, changelogCheck } from "./changelog.js";
 import { parseChangelog as parseLog } from "./changelog.js";
 import { CHANGELOG_TEXT } from "./changelogtext.js";
 export const CHANGELOG = parseLog(CHANGELOG_TEXT);

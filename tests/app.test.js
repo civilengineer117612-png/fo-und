@@ -146,7 +146,7 @@ test("tidy-up: the menu has no one-row groups, the notice has one answer, an emp
   assert.ok(!js.includes('id="menu-backup"'), "the backup line is not repeated in the menu: Log says it when it is due, Setup has the button");
   assert.match(js, /<span>\$\{list\.length\} \$\{list\.length === 1 \? "entry" : "entries"\}<\/span>/, "the folded heading says only how many: the day's total is the big number above");
   assert.ok(js.includes('${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal"') && js.includes("<span>${esc(longDate(today()))}</span>"), "the date is written once: the top date hides when another day is picked");
-  assert.match(js, /<div class="vhead"><b>\$\{r\.version \? "Version " \+ esc\(r\.version\) : "Not released yet"\}<\/b>\$\{r\.date \? `<small>\$\{esc\(fullDate\(r\.date\)\)\}<\/small>` : ""\}<\/div>/, "a version's number and its date head its own card (P2-13; before: each change with its date on its own line)");
+  assert.match(js, /<div class="vhead"><b>\$\{r\.version \? "Version " \+ esc\(r\.version\) : esc\(r\.label\)\}<\/b>\$\{r\.date \? `<small>\$\{esc\(fullDate\(r\.date\)\)\}<\/small>` : ""\}<\/div>/, "a version's number and its date head its own card (P2-13; before: each change with its date on its own line)");
   assert.ok(js.includes("downloads the reader (about 30 MB)") && !js.includes("about 7 MB"), "the reader's size is stated once, correctly");
 });
 

@@ -2863,7 +2863,7 @@ const versionText = () => M.versionLine(M.CHANGELOG, M.isDevBuild() ? { dev: tru
 // Release notes as the owner asked (P2-13): one card per version, its number and date, then New, Improved and Fixed, each a plain list.
 // A version of null is what is not released yet (only in All versions).
 function versionNotes(list) {
-  return list.map((r) => `<div class="card vcard"><div class="vhead"><b>${r.version ? "Version " + esc(r.version) : "Not released yet"}</b>${r.date ? `<small>${esc(fullDate(r.date))}</small>` : ""}</div>${M.NOTE_GROUPS.filter(([k]) => r.notes[k].length).map(([k, title]) => `<p class="vgroup">${title}</p><ul class="vnotes">${r.notes[k].map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`).join("")}</div>`).join("");
+  return list.map((r) => `<div class="card vcard"><div class="vhead"><b>${r.version ? "Version " + esc(r.version) : esc(r.label)}</b>${r.date ? `<small>${esc(fullDate(r.date))}</small>` : ""}</div>${M.NOTE_GROUPS.filter(([k]) => r.notes[k].length).map(([k, title]) => `<p class="vgroup">${title}</p><ul class="vnotes">${r.notes[k].map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`).join("")}</div>`).join("");
 }
 // Ends the first-run preview: its scratch storage is wiped and the app opens again on the real ledger (the same address without ?preview).
 async function endPreview() { if (device.status !== "PREVIEW") return; await clearTrialStorage(); location.replace(location.pathname); }
@@ -3707,7 +3707,7 @@ function renderSheet() {
       ${vs.length ? `<p class="note">Every version is in Setup, About this app.</p>` : ""}
       <p><button class="primary" data-action="close-sheet">Got it</button></p>`;
   } else if (sh.type === "versions") {
-    const next = M.noteCount(M.CHANGELOG.unreleased) ? [{ version: null, notes: M.CHANGELOG.unreleased }] : [];
+    const next = M.noteCount(M.CHANGELOG.unreleased) ? [{ version: null, label: M.sinceLabel(M.CHANGELOG), notes: M.CHANGELOG.unreleased }] : [];
     body = `<h3>All versions</h3><p class="note">${esc(versionText())}</p>${versionNotes([...next, ...M.CHANGELOG.releases])}`;
   } else if (sh.type === "bucket-clash") {
     const c = S().categories.find((x) => x.id === sh.id);

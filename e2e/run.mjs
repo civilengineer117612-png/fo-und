@@ -2608,7 +2608,7 @@ console.log("What's new and how-tos");
   check((await page.locator("h2").allInnerTexts()).map((x) => x.toLowerCase()).join("|") === "start here|good to know|watch how it works|guides|what's new", "in that order");
   await page.click('#screen button[data-action="open-versions"]');
   t = await text(page, "#sheet");
-  check(t.includes("All versions") && (await page.locator("#sheet .vhead b").allInnerTexts()).join("|") === "Not released yet|Version 1.1.0|Version 1.0.0" && t.includes("An invented fix not out yet."), "See all versions lists every version, newest first, with what is not released yet on top");
+  check(t.includes("All versions") && (await page.locator("#sheet .vhead b").allInnerTexts()).join("|") === "Since version 1.1.0|Version 1.1.0|Version 1.0.0" && t.includes("An invented fix not out yet."), "See all versions lists every version, newest first, with what came since the last one on top");
   await page.click('#sheet button:has-text("Close")');
   await menuGo(page, "Setup");   // the tests open Setup flat: every block, About this app included, on one page
   check((await text(page, "#about-version")).startsWith("Version 1.1.0 · ") && await page.locator('#screen button[data-action="open-versions"]').count() === 1, "Setup, About this app shows the version and See all versions");

@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseChangelog, compareVersions, isVersion, nextVersion, cutRelease, missedReleases, currentVersion, versionLine, changelogCheck, noteCount, GROUPS } from "../src/model/changelog.js";
+import { sinceLabel, parseChangelog, compareVersions, isVersion, nextVersion, cutRelease, missedReleases, currentVersion, versionLine, changelogCheck, noteCount, GROUPS } from "../src/model/changelog.js";
 import { CHANGELOG_TEXT } from "../src/model/changelogtext.js";
 import { changelogModule } from "../tools/make-changelog.mjs";
 const read = (p) => readFileSync(new URL("../" + p, import.meta.url), "utf8");
@@ -91,4 +91,9 @@ test("a release never blocks the browser tests: every e2e ledger that marks What
     const text = readFileSync(new URL(f, dir), "utf8");
     for (const m of text.matchAll(/whatsnew_seen: [^,}]+([,}])([^\n]{0,60})/g)) assert.match(m[2], /version_seen/, f + ": " + m[0].slice(0, 80));
   }
+});
+
+test("the heading over changes after the last version says since when, never 'not released' (every merge is already on the phone)", () => {
+  assert.equal(sinceLabel(parseChangelog("## Unreleased\n\n### Fixed\n- A fix.\n")), "Before version 1.0.0");
+  assert.equal(sinceLabel(parseChangelog("## Unreleased\n\n## 1.2.0 (2026-12-01)\n\n### New\n- A thing.\n")), "Since version 1.2.0");
 });
