@@ -3433,7 +3433,7 @@ console.log("Multiple transactions at once");
 // ===== 6. wrong phone, wrong place =====
 try { blockName = "6. wrong phone, wrong place";
 console.log("Wrong device");
-({ ctx, page } = await open({ ua: ANDROID }));
+({ ctx, page } = await open({ ua: ANDROID, seed: null, keepNotice: true }));   // a NEW phone: nothing saved, the first window left open
 // ANDROID READY (owner, Nov 21; before: "This is not the finance phone", entry off): an Android phone holds a ledger like an iPhone; e2e/android.mjs walks it
 check(!(await text(page, "#banner")).includes("finance phone") && !(await text(page, "#screen")).includes("Entry is switched off") && (await text(page, "#sheet")).includes("Start fresh"), "a new Android phone is not switched off: it starts with the setup steps, like a new iPhone");
 await shot(page, "09-android");
