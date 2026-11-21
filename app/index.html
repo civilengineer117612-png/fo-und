@@ -454,7 +454,8 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   @keyframes scrimin { from { opacity: 0; } to { opacity: 1; } }
   #warn .wscrim { position: fixed; inset: 0; z-index: 20; background: var(--scrim); } #warn .sheet { z-index: 21; } #warn .warnsign { display: flex; justify-content: center; margin-bottom: 8px; }
   #warn .warnfig { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0; font-size: 15px; } #warn .warnfig dd { margin: 0; text-align: right; }
-  .sheet.enter { animation: sheetup .22s ease-out; } #scrim.enter { animation: scrimin .2s ease-out; }   /* kept as it was: a 200 ms ease-out curve here made taps in the browser tests land on a window still arriving */
+  .sheet.enter { animation: sheetup .22s ease-out; } #scrim.enter { animation: scrimin .2s ease-out; }
+  .sheet.dragging, #scrim.dragging { transition: none; } .sheet.settle { transition: transform var(--t-move) var(--ease-out); } #scrim.settle { transition: opacity var(--t-move) var(--ease-out); }   /* pull down to close (Nov 21): follows the finger, then settles */   /* kept as it was: a 200 ms ease-out curve here made taps in the browser tests land on a window still arriving */
   @media (prefers-reduced-motion: reduce) { .sheet.enter, #scrim.enter { animation: none; } button { transition: none; } }
   .sheet h3 { margin: 0 0 4px; font-size: 18px; }
   body.locked { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden; }   /* the page stays still while a window is open */
@@ -701,7 +702,7 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .group > .row:last-child, .group > .choice:last-child, .mlist > .mrow:last-child { border-bottom: 0; }
   .group > table.tbl { margin: 4px 0; } .group > table.tbl tr:last-child td { border-bottom: 0; }
   h2 { font-size: 12px; letter-spacing: .08em; margin: 22px 2px 6px; }
-  .setlist { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 14px; } .setlist .setrow:last-child { border-bottom: 0; }
+  .setlist { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 14px; } .setrow.stepdone { min-height: 56px; } .setrow.stepdone svg { color: var(--accent); } .setrow.stepdone .st b { font-weight: 500; color: var(--mid); } .setlist .setrow:last-child { border-bottom: 0; }
   .note { color: var(--muted); font-size: 14px; }
   @media (max-width: 340px) { .mlist { padding: 0 4px; } .mlist details.mrow .mpart { padding-left: 8px; } }   /* at 320 px the Help drawings must stay 11 px or more as shown */
   .flow { display: inline-flex; align-items: center; gap: 3px; margin-right: 8px; } .flow svg { color: var(--muted); }

@@ -1,6 +1,9 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-21-preview", date: "2026-11-21", text: "Help can show the first-run setup as a preview: nothing is kept and your ledger is not touched. In a browser tab, Log says how to install the app so your phone keeps your data." },
+  { id: "2026-11-21-window-feel", date: "2026-11-21", text: "Pull a window down from its top to close it, and the box you type in now stays above the keyboard." },
+  { id: "2026-11-21-android", date: "2026-11-21", text: "Works on any phone now: add it to your Home Screen from the browser. Back closes an open window instead of the app, and the lock says face or fingerprint." },
   { id: "2026-11-21-titles", date: "2026-11-21", text: "Plan & Save and Weekly review now show their name at the top; Weekly review's first tab is called This week." },
   { id: "2026-11-20-speed", date: "2026-11-20", text: "Faster on a big ledger: searching every entry answers as you type, and the Weekly review opens sooner." },
   { id: "2026-11-17-press-jump", date: "2026-11-17", text: "Fixed: on the iPhone a tall window could jump back up when you chose something near its bottom. A pressed button now shows its press at once." },

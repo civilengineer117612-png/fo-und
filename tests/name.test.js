@@ -19,10 +19,10 @@ test("the display name fo/und (with the slash) is in the manifest, the page titl
   assert.ok(FIRST_RUN_NOTICE.title.includes("fo/und"));
 });
 
-test("Help carries the one line about getting the new icon and name on iPhone, under Setup", async () => {
+test("Help carries the one line about getting the new icon and name, under Setup", async () => {
   const { TOPICS } = await import("../src/model/help.js");
   const setup = TOPICS.find((t) => t.tab === "setup");
-  assert.ok(setup.lines.includes("To get the new icon and name on iPhone: make a backup first, then add the app to your Home Screen again. Do not remove the old one until the backup is checked."));
+  assert.ok(setup.lines.includes("To get the new icon and name: make a backup first, then add the app to your Home Screen again. Do not remove the old one until the backup is checked."));
 });
 
 test("nothing technical carries the slash: no file or folder name, no element id, no storage name, no backup file name", () => {

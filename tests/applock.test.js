@@ -61,7 +61,7 @@ test("the lock is not part of the ledger, its settings, its backup or its data v
 test("the screen never draws while locked, never reads the lock in a trial copy, never erases, and covers the page when it is hidden", () => {
   const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
   for (const fn of ["renderAll", "renderMenu", "renderBanner", "renderNav", "renderScreen", "renderSheet", "showToast"]) assert.match(app, new RegExp(`function ${fn}\\([^)]*\\) \\{ ?(if \\(ui\\.locked\\) return;|\\n  if \\(ui\\.locked\\) return;)`), fn + " returns at once while locked");
-  assert.match(app, /if \(!trial\) \{[^]*?lockRec = await readLock\(\);[^]*?\}\s*renderAll\(\);/, "the lock is read before the first render, and never for a trial copy");
+  assert.match(app, /if \(!trial && !preview\) \{[^]*?lockRec = await readLock\(\);[^]*?\}\s*renderAll\(\);/, "the lock is read before the first render, and never for a trial copy or the first-run preview (Nov 21)");
   const wrong = app.slice(app.indexOf("async function lockKey(k) {"), app.indexOf("async function lockFace(quiet) {"));
   assert.match(wrong, /lockRec = M\.afterWrong\(lockRec, Date\.now\(\)\); await writeLock\(lockRec\)/);
   assert.ok(!/writeBoth|clearLock|clearTrialStorage|localStorage\.removeItem|indexedDB|commit\(|deleteDatabase/.test(wrong), "a wrong PIN touches nothing but the try count");

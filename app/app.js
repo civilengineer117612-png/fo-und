@@ -2,7 +2,7 @@
 // Plain and firm, never harsh: facts are stated once, nothing is red, nothing blocks logging.
 import * as M from "../src/model/index.js";
 import { requestStorageProtection, storageProtected } from "./protection.js";
-import { readBoth, writeBoth, setBase, watchOtherWindows, changedElsewhere, putPhoto, getPhoto, deletePhoto, useTrialStorage, clearTrialStorage, readCopies, writeCopies, readRestoreCopies, writeRestoreCopies, readLock, writeLock, clearLock } from "./store.js";
+import { readBoth, writeBoth, setBase, watchOtherWindows, changedElsewhere, putPhoto, getPhoto, deletePhoto, useTrialStorage, usePreviewStorage, clearTrialStorage, readCopies, writeCopies, readRestoreCopies, writeRestoreCopies, readLock, writeLock, clearLock } from "./store.js";
 import { createPasskey, verifyPasskey } from "./lock.js";
 import { preparePhoto, readPage, readPlain, evenedCopy } from "./ocr.js";
 import { speechSupported, listen, firstLanguage, other } from "./voice.js";
@@ -37,6 +37,12 @@ const peso = M.formatPesos;
 
 let ledger = M.emptyLedger();   // {rev, state, settings}
 let device = { status: "OK", message: "", allowEntry: true };
+// INSTALL LINE (owner, Nov 21): in a browser tab (not installed; never an iPhone's Safari tab, which is stopped anyway) whose storage the browser
+// does NOT protect, Log shows one line: install the app so the phone keeps the data, and how. It goes once the browser protects the storage.
+let installHint = false;
+// A trial copy and the first-run preview keep their ledger under scratch names, but the app lock has ONE key of its own: neither may offer the lock, or it would lock (or unlock) the real app.
+const scratchCopy = () => device.status === "TRIAL" || device.status === "PREVIEW";
+const INSTALL_LINE = "Install this app so your phone keeps your data: open your browser's menu, then Add to Home screen or Install app.";
 let boot = { status: "NONE", repairTo: null };
 const ui = {
   tab: "log", menu: false, sheet: null, form: {}, error: null, confirmDelete: null, confirmRemove: null, setupError: null,
@@ -241,7 +247,7 @@ async function commit(state, settings = ledger.settings, { quiet = false } = {})
   // (a rebuild behind a scrolled window threw it back up on WebKit, 138 to 46).
   if (!quiet) renderAll(); else { if (ui.sheet || document.activeElement?.matches("input, textarea, select")) ui.screenStale = true; else { renderBanner(); renderScreenQuiet(); } if (ui.sheet?.type === "banks") renderSheet(); }   // the screen behind a window may change; the window stays
   if (!ledger.settings.bankLogosTried && !logoRun && failed.length === 0) loadBankLogos();   // a new install: logos after the first save
-  if (out.ok && !quiet) void requestStorageProtection();
+  if (out.ok && !quiet) void requestStorageProtection().then((ok) => { if (ok && installHint) { installHint = false; if (ui.sheet) ui.screenStale = true; else renderScreenQuiet(); } });   // the install line goes once the browser protects the storage
   return failed.length === 0;
 }
 
@@ -349,6 +355,7 @@ function renderBanner() {
   if (ui.elsewhere) bars.push(`<div class="bar" role="alert">${esc(M.CHANGED_ELSEWHERE)}<p><button data-action="reload-latest">Load the latest</button></p></div>`);
   if (ui.error) bars.push(`<div class="bar" role="alert">${esc(ui.error)}</div>`);
   if (ui.upgrade?.failed) bars.push(`<div class="bar" role="alert">${esc(ui.upgrade.failed)}</div>`);
+  if (device.status === "PREVIEW") bars.push(`<div class="trialstrip" role="status"><span>${esc(device.message)}</span><button class="act" data-action="end-preview">End preview</button></div>`);
   if (device.status === "TRIAL") bars.push(`<div class="trialstrip" role="status"><span>Trial copy. Do not enter real data.</span><button class="act" data-action="reset-trial">${ui.confirmTrial ? "Tap again to erase" : "Start over"}</button></div>`);
   const showDevice = device.status !== "TRIAL" && device.status !== "OK" && device.status !== "EMPTY";   // an empty phone is explained on Log, next to its Restore button
   if (showDevice) {
@@ -497,7 +504,7 @@ function viewLog() {
   const photoNote = (ui.scan?.busy ? `<p class="note" id="scan-msg" role="status">${esc(ui.scan.msg)}</p>` : ui.scan?.error ? `<p class="note" role="alert">${esc(ui.scan.error)}</p>` : "")
     + (needLook ? `<p class="note"><button class="act" data-action="open-queue">${needLook} photo${needLook === 1 ? " needs" : "s need"} a look</button></p>` : "")
     + (waitingPhotos && !ui.scan?.busy ? `<p class="note">${waitingPhotos} photo${waitingPhotos === 1 ? " is" : "s are"} kept, waiting to be read. <button class="act" data-action="read-queue">Read now</button></p>` : "");
-  return `<h1>Log</h1><div class="logmeta">${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal" aria-label="${esc(longDate(today()))}. Tap to choose another day">${CAL}<span>${esc(longDate(today()))}</span></button>`}</div>${floatNote}${photoNote}${tripNote}
+  return `<h1>Log</h1><div class="logmeta">${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal" aria-label="${esc(longDate(today()))}. Tap to choose another day">${CAL}<span>${esc(longDate(today()))}</span></button>`}</div>${installHint ? `<p class="note" id="install-note">${esc(INSTALL_LINE)}</p>` : ""}${floatNote}${photoNote}${tripNote}
     ${dayCard()}
     ${tilesHtml()}
     <div class="logbtns"><button class="primary" data-action="open-other">Add expense</button><button class="act" data-action="open-move"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-4-4M20 16H6l4 4"/></svg>Move money</button></div>
@@ -1371,7 +1378,7 @@ async function processScanQueue({ interactive = false } = {}) {
         if (interactive) { ui.scan = null; await openQueuedScan(item.id); }
       }
     }
-  } finally { queueRun = false; queueTalk = false; ui.scan = failure ? { error: failure } : null; renderScreen(); }
+  } finally { queueRun = false; queueTalk = false; ui.scan = failure ? { error: failure } : null; if (interactive) renderScreen(); else renderScreenQuiet(); }   // F4: a read that started by itself is a background redraw (an empty queue at start wrote the screen a second time, under a finger)
 }
 
 async function openQueuedScan(id) {
@@ -1589,10 +1596,13 @@ function viewHelp() {
   const play = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
   return `<h1>Help</h1><p class="sub">Start here, then watch, read or look back.</p>
     <h2>Start here</h2>
-    <div class="mlist">${steps.map((st) => `<div class="mrow mline"><span class="mn">${st.done ? "\u2713" : "\u25CB"} ${esc(st.text)}</span><span class="mv">${st.done ? "Done" : `<button class="link" data-action="tab" data-tab="${st.tab}">${esc(st.button)}</button>`}</span></div>`).join("")}</div>
+    <div class="setlist" id="start-here">${steps.map((st) => {   // owner's mark (Nov 21): Setup's own rows, one line each; a step done shows its check, a step to do is the whole row with its chevron
+      const ring = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.25"/>${st.done ? '<path d="m8 12.5 2.8 2.8L16.2 9.6"/>' : ""}</svg>`;
+      return st.done ? `<div class="setrow stepdone">${ring}<span class="st"><b>${esc(st.text)}</b></span><span class="sronly">Done</span></div>`
+        : `<button class="setrow" data-action="tab" data-tab="${st.tab}">${ring}<span class="st"><b>${esc(st.text)}</b></span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>`; }).join("")}</div>
     <h2>Good to know</h2>
     <div class="card"><ol class="notes icons">${M.QUICK_NOTES.map((n, i) => `<li>${noteIcon(i)}<span>${esc(n)}</span></li>`).join("")}</ol></div>
-    <p><button class="link" data-action="open-notice">Read the first-run notice again</button></p>
+    <p><button class="link" data-action="open-notice">Read the first-run notice again</button></p>${device.status === "OK" || device.status === "EMPTY" ? `<p><button class="link" data-action="open-preview">Preview the first-run setup</button></p><p class="note small">Nothing is kept, and your ledger is not touched.</p>` : ""}
     <h2>Watch how it works</h2><p class="note">${esc(M.HOWTO_HINT)}</p>
     <div class="clips">${M.HOWTOS.map((h) => `<button class="clipbtn" data-action="open-howto" data-id="${h.id}">${play}<span>${esc(h.label)}</span></button>`).join("")}</div>
     <h2>Guides</h2><p class="note">What each screen is for, and what to do on it.</p>
@@ -1720,7 +1730,7 @@ function viewSetup() {
     ${why("The file is encrypted. Keep a second copy off this phone, like iCloud Drive or a computer.", "Where to keep it")}`;
   const looks = [["auto", "Match my phone"], ["light", "Light"], ["dark", "Dark"]], look = ["light", "dark"].includes(ledger.settings.appearance) ? ledger.settings.appearance : "auto";
   const appearanceHtml = `    <h2>Appearance</h2><div class="seg" role="group" aria-label="Appearance">${looks.map(([v, t]) => `<button data-action="set-appearance" data-id="${v}" aria-pressed="${look === v}">${t}</button>`).join("")}</div>
-    <p class="note">Match my phone follows your iPhone's Light or Dark setting. Light and Dark stay as chosen.</p>`;
+    <p class="note">Match my phone follows your phone's Light or Dark setting. Light and Dark stay as chosen.</p>`;
   const aboutHtml = `    <h2>This app</h2>
     <p class="note">${M.isDevBuild() ? "Version: a development copy." : "Version " + esc(M.APP_BUILD) + ", updated " + esc(fullDate(M.APP_BUILT_ON)) + "."} Your data format: ${ledger.v}.</p>
     ${ui.ledgerBytes ? `<p class="note" id="about-size">Your ledger: ${esc(M.formatBytes(ui.ledgerBytes))}. ${ui.mirror === false ? "The spare copy is full. The main copy is safe." : "Saved twice: a main copy and a spare."}</p>` : ""}
@@ -1749,7 +1759,7 @@ function viewSetup() {
     ["backup", "backup", "Backup and restore", (() => { const d = M.daysSinceBackup(ledger.settings, today()); return d === null ? "No backup yet" : d === 0 ? "Backed up today" : "Last backup " + d + (d === 1 ? " day ago" : " days ago"); })()],
     ["statements", "statements", "Statements", stmSub()],
     ["appearance", "appearance", "Appearance", look === "auto" ? "Match my phone" : look === "dark" ? "Dark" : "Light"],
-    ...(device.status === "TRIAL" ? [] : [["lock", "lock", "App lock", lockActive ? "Locks when opened and after 1 minute away" : "Off", lockActive ? "On" : "Off"]]),
+    ...(scratchCopy() ? [] : [["lock", "lock", "App lock", lockActive ? "Locks when opened and after 1 minute away" : "Off", lockActive ? "On" : "Off"]]),
     ["about", "info", "About this app", M.isDevBuild() ? "Development copy" : "Version " + M.APP_BUILD],
   ];
   if (flat) return `<h1>Setup</h1><p class="sub">Accounts. The ledger is on this phone only.</p>${blocks.accounts}${blocks.categories}${blocks.budget}${blocks.backup}${blocks.about}`;
@@ -2771,13 +2781,13 @@ const frSwitch = (action, on, label) => `<button class="chip frchip" data-action
 function frBody() {
   const fr = ui.fr, f = ui.form, n = fr.step, anim = fr.anim ? ` fr-${fr.anim}` : "";
   fr.anim = null;   // slides once, when the step changes; a redraw inside a step stays still
-  const head = `<div class="frbar" aria-hidden="true"><span style="width:${(n / M.FIRSTRUN_STEPS) * 100}%"></span></div><p class="frn">Step ${n} of ${M.FIRSTRUN_STEPS}</p>`;
+  const head = `<div class="frbar" aria-hidden="true"><span style="width:${(n / M.FIRSTRUN_STEPS) * 100}%"></span></div><p class="frn">Step ${n} of ${M.FIRSTRUN_STEPS}</p>${device.status === "PREVIEW" ? `<p class="note small" id="fr-preview" role="status">Preview: nothing is kept, and your ledger is not touched.</p><p><button class="act sm" data-action="end-preview">End preview</button></p>` : ""}`;   // the preview says so on every step (the full-screen steps cover the banner)
   const backNext = (next = "Next") => `<div class="frpair"><button data-action="fr-back">Back</button><button class="primary" data-action="fr-next">${next}</button></div>`;
   let page = "", acts = "";
   if (n === 1) {
     page = `<h3 class="frtitle">Welcome to fo/und</h3><p class="note">Log what you spend, then check it against what you really have.</p>
       <div class="card frlist">${M.FIRSTRUN_WELCOME.map((r) => `<div class="frrow"><span class="fric">${frIcon(r.icon)}</span><span class="st"><b>${esc(r.title)}</b><small>${esc(r.sub)}</small></span></div>`).join("")}</div>
-      <p class="note small">iPhone: add fo/und to the Home Screen and open it from the icon.</p>`;
+      <p class="note small">Add fo/und to your Home Screen and open it from the icon.</p>`;
     acts = `<p><button class="primary" data-action="fr-next">Start fresh</button></p><p><button data-action="fr-restore" style="width:100%">I have a backup</button></p>`;
   } else if (n === 2) {
     const accts = orderedAccts(activeAccounts()), open = fr.adding || accts.length === 0, card = f.akind === "liability";
@@ -2803,16 +2813,16 @@ function frBody() {
       <p class="note small">What reaches your account. Payslips can take over later.</p>${fr.err ? `<p id="fr-err" role="alert" class="note"><b>${esc(fr.err)}</b></p>` : ""}`;
     acts = `${backNext()}<p><button data-action="fr-later" style="width:100%">Later</button></p>`;
   } else if (n === 4) {
-    const lockRow = device.status === "TRIAL" ? "" : `<div class="frrow"><span class="st"><b>App lock</b><small>Face ID, with a 6-digit PIN as the spare.</small></span>${frSwitch("lock-toggle", lockActive, "App lock")}</div>`;
-    page = `<h3 class="frtitle">Keep it safe</h3><p class="note">Optional. Both can be changed in Setup.</p>
+    const lockRow = scratchCopy() ? "" : `<div class="frrow"><span class="st"><b>App lock</b><small>Face or fingerprint, with a 6-digit PIN as the spare.</small></span>${frSwitch("lock-toggle", lockActive, "App lock")}</div>`;
+    page = `<h3 class="frtitle">Keep it safe</h3><p class="note">${scratchCopy() ? "Optional. It can be changed in Setup." : "Optional. Both can be changed in Setup."}</p>
       <div class="card frlist">${lockRow}<div class="frrow"><span class="st"><b>Backup reminder</b><small>A line on Log when the last backup is a week old.</small></span>${frSwitch("toggle-backup-reminder", M.backupReminderOn(ledger.settings), "Backup reminder")}</div></div>
-      <p><button data-action="open-backup" data-all="1" style="width:100%">Make a backup now</button></p><p class="note small">${esc(backupAgeText())}</p>`;
+      ${device.status === "PREVIEW" ? "" : `<p><button data-action="open-backup" data-all="1" style="width:100%">Make a backup now</button></p><p class="note small">${esc(backupAgeText())}</p>`}`;   // the preview makes no backup: it would hold only the scratch ledger
     acts = `${backNext()}<p><button data-action="fr-later" style="width:100%">Later</button></p>`;
   } else {
     const r = M.firstRunSummary(S(), ledger.settings, { lockOn: lockActive }), row = (l, v, sub) => `<div class="frrow"><span class="st"><b>${l}</b>${sub ? `<small>${sub}</small>` : ""}</span><span class="amt">${v}</span></div>`;
     page = `<h3 class="frtitle">You are set</h3><p class="note">Everything here can be changed in Setup.</p>
       <div class="card frlist">${row("In your accounts", r.accounts ? peso(r.have) : "None yet", r.accounts ? r.accounts + (r.accounts === 1 ? " account" : " accounts") : "Add them in Setup, Accounts")}${r.cards ? row("Owed on cards", peso(r.owed), r.cards + (r.cards === 1 ? " card" : " cards")) : ""}
-        ${row("Pay each month", r.pay ? peso(r.pay) : r.paydays ? "Not typed" : "Not set", r.paydays ? esc(r.paydays) : "")}${device.status === "TRIAL" ? "" : row("App lock", r.lock ? "On" : "Off")}${row("Backup reminder", r.reminder ? "On" : "Off")}</div>
+        ${row("Pay each month", r.pay ? peso(r.pay) : r.paydays ? "Not typed" : "Not set", r.paydays ? esc(r.paydays) : "")}${scratchCopy() ? "" : row("App lock", r.lock ? "On" : "Off")}${row("Backup reminder", r.reminder ? "On" : "Off")}</div>
       <div class="card frlist"><div class="frrow"><span class="st"><b>Categories: ${r.categories} to start</b><small>Your categories, your names. Rename them, set each to Needs, Wants or Savings, add your own and remove what you do not use.</small></span></div>
         <p><button data-action="fr-cats" style="width:100%">Edit categories</button></p></div>`;
     acts = `<p><button class="primary" data-action="fr-finish">${r.accounts ? "Log your first expense" : "Start using fo/und"}</button></p><p><button data-action="fr-back" style="width:100%">Back</button></p>`;
@@ -2841,11 +2851,14 @@ async function frAddAccount() {
   renderSheet(); return true;
 }
 async function frFinish(then) {
+  if (device.status === "PREVIEW") { await endPreview(); return; }   // the preview ends with its last step: back to the real ledger, nothing kept
   const { firstrun_step, ...rest } = ledger.settings;
   ui.fr = null; ui.sheet = null; renderSheet();
   await commit(S(), { ...rest, firstrun_done: M.phTimestamp() }, { quiet: true });
   then?.();
 }
+// Ends the first-run preview: its scratch storage is wiped and the app opens again on the real ledger (the same address without ?preview).
+async function endPreview() { if (device.status !== "PREVIEW") return; await clearTrialStorage(); location.replace(location.pathname); }
 // The welcome card of a new install: shown after the first-run notice and again on later starts until you tap Make it mine, or tick "Don't show this again", or log something.
 function maybeWelcome() {
   if (!ledger.settings.welcome_pending || ledger.settings.welcome_off || S().transactions.length) return;
@@ -3764,7 +3777,7 @@ function renderSheet() {
       <p><button class="primary" data-action="verify-paper-gap">Verify anyway</button></p>
       <p><button data-action="close-sheet" style="width:100%">Not now</button></p>`;
   } else if (sh.type === "lock-on") {
-    body = `<h3>Turn on app lock</h3><p class="note">Step 1: this phone makes a passkey for Face ID. Nothing is sent anywhere.</p><p class="note">Step 2: choose a 6-digit PIN for when Face ID does not work.</p>
+    body = `<h3>Turn on app lock</h3><p class="note">Step 1: this phone makes a passkey for your face or fingerprint. Nothing is sent anywhere.</p><p class="note">Step 2: choose a 6-digit PIN for when face or fingerprint does not work.</p>
       <label for="l-pin">PIN${REQ}</label><input id="l-pin" data-field="lpin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" value="${esc(ui.form.lpin ?? "")}">
       <label for="l-pin2">PIN again${REQ}</label><input id="l-pin2" data-field="lpin2" type="password" inputmode="numeric" maxlength="6" autocomplete="off" value="${esc(ui.form.lpin2 ?? "")}">
       ${ui.form.lockError ? `<p class="note flag" role="alert">\u25B2 ${esc(ui.form.lockError)}</p>` : ""}
@@ -4248,6 +4261,8 @@ async function onClick(el) {
     case "warn-save": answerOverdraw(true, false); break;
     case "warn-cancel": answerOverdraw(false, false); break;
     case "warn-income": answerOverdraw(false, true); break;
+    case "end-preview": await endPreview(); break;
+    case "open-preview": location.assign(location.pathname + "?preview"); break;   // Help: the setup steps in scratch storage (the real ledger is not touched)
     case "reset-trial": {
       if (!ui.confirmTrial) { ui.confirmTrial = true; renderBanner(); break; }
       await clearTrialStorage(); location.reload(); break;
@@ -4471,6 +4486,7 @@ async function onClick(el) {
       break;
     }
     case "lock-toggle": {
+      if (scratchCopy()) break;   // the lock has one real key: never from a trial copy or the preview
       if (lockActive) { enterLocked("off"); break; }   // turning it off needs the PIN or Face ID first
       ui.sheet = { type: "lock-on" }; ui.form = { lpin: "", lpin2: "" }; renderSheet(); break;
     }
@@ -6135,7 +6151,7 @@ function applyAppearance() {
 const lockEl = () => document.getElementById("lockscreen");
 function lockHtml() {
   const wait = M.secondsLeft(lockRec, Date.now()), off = lockMode === "off", pin = ui.lockPin ?? "";
-  const line = wait > 0 ? "Try again in " + wait + " second" + (wait === 1 ? "" : "s") : ui.lockMsg || (lockRec?.cred ? "Swipe up for Face ID" : "");
+  const line = wait > 0 ? "Try again in " + wait + " second" + (wait === 1 ? "" : "s") : ui.lockMsg || (lockRec?.cred ? "Swipe up for face or fingerprint" : "");
   const dots = `<div class="pindots" role="img" aria-label="${pin.length} of 6 digits typed">${Array.from({ length: 6 }, (_, i) => `<span${i < pin.length ? ' class="on"' : ""}></span>`).join("")}</div>`;
   const dis = wait > 0 || lockBusy ? " disabled" : "";
   const keys = `<div class="keypad">${["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", ""].map((k) => k ? `<button data-lock="key" data-k="${k}" aria-label="${k}"${dis}>${k}</button>` : "<span></span>").join("")}</div>`;
@@ -6186,7 +6202,7 @@ async function lockFace(quiet) {
   const r = await verifyPasskey(lockRec.cred);
   lockBusy = false;
   if (r.ok) return lockSuccess();
-  if (!quiet) { ui.lockMsg = "Face ID did not work. Use your PIN."; }
+  if (!quiet) { ui.lockMsg = "Face or fingerprint did not work. Use your PIN."; }
   drawLock();
 }
 async function lockSuccess() {
@@ -6204,14 +6220,119 @@ function appShown() {
   lockHiddenAt = null; coverOff();
 }
 function appHidden() { if (!ui.locked && lockHiddenAt === null) lockHiddenAt = Date.now(); coverOn(); }
+// PULL DOWN TO CLOSE (owner approved the test page, Nov 21; was "not built yet" under F3): a window that rises from the bottom (not a centred
+// one, not the first-run steps) can be pulled down from its top to close. It starts only when the window is scrolled to its very top, on the
+// window itself and not in a box, and when the finger goes down more than across (8 px first, so a tap or a scroll is never taken for it).
+// The window follows the finger and the dark part fades; let go past 110 px, or flicked down (faster than 0.5 px a millisecond, past 30 px),
+// and it closes the same way as a tap on the dark part: with something typed it springs back and asks "Discard what you typed?" (F3). Else it
+// springs back. A pull never taps what the finger ends over (suppressClick). Under Reduce Motion nothing follows the finger: a long enough pull
+// closes at once. Touch and a mouse both work (the e2e uses a mouse).
+let pull = null;
+const pullSheet = () => document.querySelector("#sheet > .sheet:not(.center):not(.full)");
+function pullStart(x, y, target) {
+  const sh = pullSheet(), scrim = $("scrim");
+  if (!sh || !sh.contains(target) || target.closest("input, textarea, select, .picksearch") || !scrim?.dataset.action || ui.locked) { pull = null; return; }
+  pull = { sh, scrim, x0: x, y0: y, top: sh.scrollTop <= 0, on: false, dy: 0, last: [y, performance.now()], v: 0 };
+}
+function pullMove(x, y, e) {
+  if (!pull) return;
+  const dx = x - pull.x0, dy = y - pull.y0;
+  if (!pull.on) {
+    if (Math.hypot(dx, dy) < 8) return;
+    if (!pull.top || dy <= 0 || Math.abs(dx) > dy) { pull = null; return; }   // a scroll, or sideways: not a pull
+    pull.on = true; suppressClick = true; pull.sh.classList.add("dragging"); pull.scrim.classList.add("dragging");
+  }
+  if (e?.cancelable) e.preventDefault();
+  const now = performance.now(); pull.v = (y - pull.last[0]) / Math.max(1, now - pull.last[1]); pull.last = [y, now];
+  pull.dy = Math.max(0, dy);
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) { pull.sh.style.transform = `translateY(${pull.dy}px)`; pull.scrim.style.opacity = String(Math.max(0, 1 - pull.dy / (pull.sh.offsetHeight || 1))); }
+}
+function pullEnd() {
+  const p = pull; pull = null;
+  if (!p || !p.on) return;
+  const { sh, scrim } = p, reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  sh.classList.remove("dragging"); scrim.classList.remove("dragging");
+  const go = p.dy > 110 || (p.v > 0.5 && p.dy > 30);
+  const back = () => { sh.classList.add("settle"); scrim.classList.add("settle"); sh.style.transform = ""; scrim.style.opacity = ""; setTimeout(() => { sh.classList.remove("settle"); scrim.classList.remove("settle"); }, 240); };
+  if (go && !ui.sheetTyped && !reduced) {
+    sh.classList.add("settle"); scrim.classList.add("settle");
+    sh.style.transform = `translateY(${sh.offsetHeight + 40}px)`; scrim.style.opacity = "0";
+    setTimeout(() => { if ($("scrim") === scrim) scrim.click(); }, 200);   // the same close as a tap on the dark part
+  } else {
+    back();
+    if (go) setTimeout(() => { if ($("scrim") === scrim) scrim.click(); }, reduced ? 0 : 240);   // typed: springs back, then asks first (F3)
+  }
+  setTimeout(() => { suppressClick = false; }, 60);   // the finger's release is not a tap on what it ended over
+}
+document.addEventListener("touchstart", (e) => { if (e.touches.length === 1) pullStart(e.touches[0].clientX, e.touches[0].clientY, e.target); else pull = null; }, { passive: true });
+document.addEventListener("touchmove", (e) => { if (pull) pullMove(e.touches[0].clientX, e.touches[0].clientY, e); }, { passive: false });
+document.addEventListener("touchend", pullEnd); document.addEventListener("touchcancel", pullEnd);
+document.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") pullStart(e.clientX, e.clientY, e.target); });
+document.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse" && pull) pullMove(e.clientX, e.clientY, e); });
+document.addEventListener("pointerup", (e) => { if (e.pointerType === "mouse") pullEnd(); });
+// THE BOX YOU TYPE IN STAYS ABOVE THE KEYBOARD (F5, owner approved the test page, Nov 21): the phone's visible area (visualViewport) shrinks
+// when the keyboard opens; while it is open (more than 60 px hidden at the bottom) a window that rises from the bottom sits on top of the
+// keyboard, is no taller than what is visible, and scrolls the focused box into view inside itself. With the keyboard closed nothing is set,
+// so nothing moves (the WebKit window-jump checks see no change). To try on the iPhone itself: a box low in a window, opened from the Home Screen.
+function keepAboveKeyboard() {
+  const vv = window.visualViewport, sh = pullSheet();
+  if (!vv || !sh) return;
+  const below = Math.max(0, window.innerHeight - (vv.offsetTop + vv.height));
+  if (below <= 60) { if (sh.style.bottom) { sh.style.bottom = ""; sh.style.maxHeight = ""; } return; }
+  sh.style.bottom = below + "px"; sh.style.maxHeight = Math.max(200, vv.height - 24) + "px";
+  const f = document.activeElement;
+  if (f && sh.contains(f) && f.matches("input, textarea")) {
+    const r = f.getBoundingClientRect(), b = sh.getBoundingClientRect();
+    if (r.bottom > b.bottom - 16) sh.scrollTop += r.bottom - (b.bottom - 16);
+    else if (r.top < b.top + 16) sh.scrollTop -= (b.top + 16) - r.top;
+  }
+}
+window.visualViewport?.addEventListener("resize", keepAboveKeyboard);
+window.visualViewport?.addEventListener("scroll", keepAboveKeyboard);
+document.addEventListener("focusin", (e) => { if (e.target.closest?.("#sheet")) { setTimeout(keepAboveKeyboard, 50); setTimeout(keepAboveKeyboard, 350); } });
+// L13 BACK CLOSES THE OPEN WINDOW (owner, Nov 21, before any Android user): on Android the Back button or gesture goes back in the browser's
+// history, and an installed app with nothing behind it simply CLOSES, losing what was open. So while a layer is open (a window, the menu,
+// a warning or a full-screen photo) the app keeps ONE extra history step of its own (state {foLayer: 1}, same address); Back pops it and
+// the app closes the top layer the same way a tap outside does: the photo closes, a warning takes its quiet answer (Keep editing, Cancel),
+// a window goes through the scrim (so typed text still asks "Discard what you typed?"), the menu closes. When the last layer closes by any
+// other way (a button, a save), the app takes its own step back quietly, so the history never fills up. An iPhone has no Back button: the
+// step is there and unused. Nothing is stored. e2e/android.mjs presses Back on an Android-size phone.
+let backSkip = 0;
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";   // the app's own history steps must never move the page: the browser's restore threw a tapped button 2,000 px away on a quiet step back (run.mjs 5n, 1 run in 3)
+const layerOpen = () => !ui.locked && !!(document.querySelector("body > .lightbox") || $("warn")?.firstChild || ui.sheet || ui.menu);
+const ownStep = () => history.state?.foLayer === 1;
+function syncBack() {
+  if (backSkip > 0) return;   // a quiet step back is on its way: history.state changes only when it lands, so nothing more until then (else two steps go back and the app is left)
+  if (layerOpen() && !ownStep()) history.pushState({ foLayer: 1 }, "");
+  else if (!layerOpen() && ownStep()) { backSkip++; history.back(); }
+}
+let backQueued = false;
+const queueBack = () => { if (backQueued) return; backQueued = true; queueMicrotask(() => { backQueued = false; syncBack(); }); };
+function backPressed() {
+  const lb = document.querySelector("body > .lightbox");
+  if (lb) { lb.querySelector(".lbclose")?.click(); return; }
+  if ($("warn")?.firstChild) { $("warn").querySelector('.wscrim[data-action="warn-cancel"]')?.click(); return; }
+  if (ui.sheet) { $("scrim")?.click(); return; }   // the same as a tap outside (the first-run steps have no tap outside: Back stays in them)
+  if (ui.menu) { ui.menu = false; renderMenu(); $("menuBtn")?.setAttribute("aria-expanded", "false"); }
+}
+window.addEventListener("popstate", () => {
+  if (backSkip > 0) { backSkip--; queueBack(); return; }   // our own quiet step back
+  if (layerOpen()) backPressed();
+  setTimeout(queueBack, 0);   // a layer still open (one under another, a Discard question, the first-run steps) keeps its step
+});
+new MutationObserver(queueBack).observe(document.body, { childList: true });   // the photo viewer is added to the page itself
+for (const id of ["sheet", "warn", "menu"]) { const el = $(id); if (el) new MutationObserver(queueBack).observe(el, { childList: true }); }
 async function start() {
   const platform = M.detectPlatform(navigator.userAgent);
   const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
-  const trial = new URLSearchParams(location.search).has("trial") && M.trialAllowed({ platform, standalone });   // never on the iPhone Home Screen app
+  const preview = new URLSearchParams(location.search).has("preview");   // the first-run preview: its own scratch storage, wiped now and when it ends
+  const trial = !preview && new URLSearchParams(location.search).has("trial") && M.trialAllowed({ platform, standalone });   // never in an installed (Home Screen) app, on any phone
+  if (preview) { usePreviewStorage(); await clearTrialStorage(); }
   if (trial) useTrialStorage();
   const { local, idb } = await readBoth();
   const present = (v) => (v === undefined ? null : v !== null && v.length > 0);
-  device = M.assessDevice({ platform, standalone, stores: { local: present(local), idb: present(idb) }, trial });
+  device = M.assessDevice({ platform, standalone, stores: { local: present(local), idb: present(idb) }, trial, preview });
+  installHint = !standalone && platform !== "ios" && device.allowEntry && device.status !== "TRIAL" && device.status !== "PREVIEW" && !(await storageProtected());
   boot = M.chooseLedger(local ?? null, idb ?? null);
   { const main = idb ?? local; if (main) { ui.ledgerBytes = M.ledgerBytes(main); ui.mirror = !!local && local === idb; } }
   if (boot.status === "CORRUPT") {
@@ -6236,7 +6357,7 @@ async function start() {
   try { justReplaced = JSON.parse(sessionStorage.getItem(RESTORED_FLAG) ?? "null"); sessionStorage.removeItem(RESTORED_FLAG); } catch { justReplaced = null; }
   if (justReplaced && device.allowEntry && boot.status === "OK" && ui.restoreCopies[0] && !ui.sheet) ui.sheet = { type: "replaced", kind: justReplaced.kind, pictures: justReplaced.pictures ?? 0 };
   setBase(boot.status === "NONE" ? null : ledger); watchOtherWindows(noteElsewhere);   // from here on a save is refused when another window saved first (a brand-new phone starts from an empty store, and says so)
-  if (!trial) {   // the lock is read AFTER the data is checked but BEFORE anything is drawn; a trial copy never has one
+  if (!trial && !preview) {   // the lock is read AFTER the data is checked but BEFORE anything is drawn; a trial copy and the preview never have one
     lockRec = await readLock();
     if (M.lockOn(lockRec)) { lockActive = true; applyAppearance(); await new Promise((go) => { lockWaiter = go; enterLocked("open"); }); }
   }

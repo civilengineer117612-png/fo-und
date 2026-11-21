@@ -11,7 +11,7 @@ test("the five quick notes are there, in the owner's words", () => {
   assert.match(QUICK_NOTES[0], /still being built/);
   assert.match(QUICK_NOTES[1], /only on your phone/);
   assert.match(QUICK_NOTES[2], /Setup, then Backup/); assert.match(QUICK_NOTES[2], /passphrase/); assert.match(QUICK_NOTES[2], /can't be opened/); assert.match(QUICK_NOTES[2], /keep it in Passwords on your phone/);
-  assert.match(QUICK_NOTES[3], /Home Screen icon, not a Safari tab/);
+  assert.match(QUICK_NOTES[3], /Add it to your Home Screen and use it from the icon/);   // Android ready (Nov 21): was "iPhone: use it from the Home Screen icon, not a Safari tab."
   assert.match(QUICK_NOTES[4], /screenshot/); assert.match(QUICK_NOTES[4], /Never send your backup file/);
 });
 
@@ -38,15 +38,15 @@ test("the getting-started steps tick themselves from the data", () => {
   assert.deepEqual(checklist({ accounts: [{ id: "a" }], transactions: [] }, {}).map((s) => s.done), [true, false, false]);
 });
 
-test("the first-run notice says the six plain things: a verified entry is final, data stays here, nothing recovers a lost phone or passphrase, back up now, iPhone Home Screen, Android site data", () => {
+test("the first-run notice says the six plain things: a verified entry is final, data stays here, nothing recovers a lost phone or passphrase, back up now, the Home Screen, the browser's site data (any phone)", () => {
   const all = FIRST_RUN_NOTICE.lines.join(" ");
   assert.equal(FIRST_RUN_NOTICE.lines.length, 6);
   assert.match(FIRST_RUN_NOTICE.lines[0], /^Once you verify an entry it is final/); assert.match(FIRST_RUN_NOTICE.lines[0], /Weekly review/);
   assert.match(FIRST_RUN_NOTICE.lines[1], /stays on this phone/);
   assert.match(FIRST_RUN_NOTICE.lines[2], /lost phone/); assert.match(FIRST_RUN_NOTICE.lines[2], /forgotten backup passphrase/); assert.match(FIRST_RUN_NOTICE.lines[2], /cannot be recovered/);
   assert.match(FIRST_RUN_NOTICE.lines[3], /backup now/);
-  assert.match(FIRST_RUN_NOTICE.lines[4], /^iPhone: add this app to the Home Screen first/);
-  assert.match(FIRST_RUN_NOTICE.lines[5], /^Android: clearing the browser's site data erases the ledger/);
+  assert.match(FIRST_RUN_NOTICE.lines[4], /^Add this app to your Home Screen first/);   // Android ready (Nov 21): was "iPhone: add this app ..."
+  assert.match(FIRST_RUN_NOTICE.lines[5], /^Clearing the browser's data for this site erases the ledger/);   // was "Android: clearing ...": true on every phone
   assert.ok(all.length < 680, "short enough to read at a glance");
 });
 

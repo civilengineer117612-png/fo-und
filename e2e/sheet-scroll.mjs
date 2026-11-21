@@ -115,7 +115,8 @@ ok(r.after >= r.before - 2, "choosing something at the bottom does not throw the
 ok(r.same && r.opened >= r.before - 2, "opening Paid from shows its list in the same window, which stays where it was (" + r.before + " to " + r.opened + ")");
 // F4 (Nov 13): DRAW ONCE AT START. With nothing touched for 4 seconds (the bank logos tried, the start-up saves done), the header, the screen and the
 // bottom bar are each written once: a part rebuilt again under a finger loses the tap (Phase 1 counted 3 writes).
-{ const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+{ const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1" });   // Nov 21: without a phone's user agent this measured the "not the finance phone" page, not the app (found when Android was let in); it now measures the real app
   await ctx.addInitScript(() => { Object.defineProperty(navigator, "standalone", { get: () => true }); sessionStorage.setItem("logOpen", "1");
     window.__draws = { top: 0, screen: 0, nav: 0 };
     new MutationObserver(() => { for (const id of Object.keys(window.__draws)) { const el = document.getElementById(id); if (el && !el.__watched) { el.__watched = true;

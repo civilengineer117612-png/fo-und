@@ -50,3 +50,21 @@ test("in the trial copy it removes only financialTracker.trial.ledger and delete
   }
   for (const name of [...log.removed, ...log.deleted]) assert.ok(/trial/.test(name), name + " is a trial name");
 });
+
+// 3) The first-run PREVIEW (Nov 21) uses the same two erasing calls: it removes only financialTracker.preview.ledger and the database
+// financialTracker-preview, never a real name and never the trial's.
+test("ending the first-run preview erases only the preview's own names", async () => {
+  const log = fakeBrowser();
+  const { clearTrialStorage, usePreviewStorage } = await import("../app/store.js?preview");
+  usePreviewStorage();
+  await clearTrialStorage();
+  assert.deepEqual(log.removed, ["financialTracker.preview.ledger"]);
+  assert.deepEqual(log.deleted, ["financialTracker-preview"]);
+  for (const name of [...log.removed, ...log.deleted]) assert.ok(/preview/.test(name), name + " is a preview name");
+});
+test("the app lock (one real key) is never offered or turned on in a trial copy or the preview", () => {
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  assert.match(app, /const scratchCopy = \(\) => device\.status === "TRIAL" \|\| device\.status === "PREVIEW";/);
+  assert.match(app, /case "lock-toggle": \{\n\s+if \(scratchCopy\(\)\) break;/);
+  assert.ok(!/device\.status === "TRIAL" \? \[\] : \[\["lock"/.test(app) && /scratchCopy\(\) \? \[\] : \[\["lock"/.test(app), "Setup has no lock row in either");
+});

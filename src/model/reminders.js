@@ -81,11 +81,11 @@ export function defaultReminders({ morning = null, cutoff = "18:00", checkin } =
   const list = [];
   if (morning) {
     list.push({ id: "verify-morning", title: "Verify yesterday's drafts", time: morning, repeat: "daily", alarms: [0, 5, 10],
-      description: "Open the finance app on the iPhone and check each entry, one by one." });
+      description: "Open the finance app on your phone and check each entry, one by one." });
   }
   if (cutoff) {
     list.push({ id: "verify-cutoff", title: "Verify cutoff: finish yesterday's drafts", time: cutoff, repeat: "daily", alarms: [0],
-      description: "Yesterday's drafts must be verified now. Open the finance app on the iPhone." });
+      description: "Yesterday's drafts must be verified now. Open the finance app on your phone." });
   }
   if (checkin) {
     if (!DAYS.includes(checkin.day)) throw new Error("check-in day must be one of " + DAYS.join(","));
@@ -93,7 +93,7 @@ export function defaultReminders({ morning = null, cutoff = "18:00", checkin } =
       description: "Count each account and wallet in the finance app, answer the weekly questions, then back up (Setup, Back up now)." });
     if (checkin.cutoff) {
       list.push({ id: "weekly-cutoff", title: "Check-in cutoff: finish the weekly check-in", time: checkin.cutoff, repeat: "weekly:" + checkin.day, alarms: [0],
-        description: "The weekly check-in must be finished now. Open the finance app on the iPhone." });
+        description: "The weekly check-in must be finished now. Open the finance app on your phone." });
     }
   }
   return list;

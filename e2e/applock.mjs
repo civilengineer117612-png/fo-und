@@ -50,7 +50,7 @@ export async function appLockChecks({ browser, base, open, menuGo, check, seen, 
   await face.verified(false); await reload(page);
   check(await page.locator("#lockscreen").count() === 1 && await bare(page), "locked: every part of the page that holds ledger content is empty");
   const body = await text(page, "body");
-  check(!/Quagga|Zebra|1,234\.56|Test Bank/.test(body) && !/Log|Verify/.test(body.replace(/Enter PIN|Swipe up for Face ID/g, "")), "locked: no entry, account, figure or screen name is anywhere in the page");
+  check(!/Quagga|Zebra|1,234\.56|Test Bank/.test(body) && !/Log|Verify/.test(body.replace(/Enter PIN|Swipe up for face or fingerprint/g, "")), "locked: no entry, account, figure or screen name is anywhere in the page");
   check(await page.locator("#lockscreen [data-lock=key]").count() === 10 && (await text(page, "#lockscreen")).includes("Enter PIN"), "the lock shows the PIN pad");
 
   // 4. Face ID: success unlocks, failure stays locked and the PIN pad is there
@@ -60,7 +60,7 @@ export async function appLockChecks({ browser, base, open, menuGo, check, seen, 
   check(await page.locator("#lockscreen").count() === 0 && (await text(page, "#nav")).includes("Log"), "Face ID is tried when the app opens: with it working the app opens straight in");
   await face.verified(false); await reload(page);
   await page.click('#lockscreen [data-lock="face"]');
-  check(await seen(page, "#lockscreen", "Face ID did not work. Use your PIN.") && await page.locator("#lockscreen").count() === 1 && await bare(page), "Face ID failure stays locked and says to use the PIN");
+  check(await seen(page, "#lockscreen", "Face or fingerprint did not work. Use your PIN.") && await page.locator("#lockscreen").count() === 1 && await bare(page), "Face ID failure stays locked and says to use the PIN");
 
   // Delete is only the PIN's backspace; a swipe up and Face ID failing change nothing else either
   await tap(page, "123");
@@ -69,7 +69,7 @@ export async function appLockChecks({ browser, base, open, menuGo, check, seen, 
   check((await page.locator("#lockscreen .pindots span.on").count()) === 1 && (await ledgerTexts(page)) === led0 && (await record(page)).on === true, "Delete removes one typed digit at a time and changes nothing else");
   await page.click('#lockscreen [data-lock="del"]');
   await page.evaluate(() => { const el = document.getElementById("lockscreen"); const mk = (type, y) => new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === "touchend" ? [] : [new Touch({ identifier: 1, target: el, clientX: 200, clientY: y })], changedTouches: [new Touch({ identifier: 1, target: el, clientX: 200, clientY: y })] }); el.dispatchEvent(mk("touchstart", 700)); el.dispatchEvent(mk("touchend", 500)); });
-  check(await seen(page, "#lockscreen", "Face ID did not work. Use your PIN.") && (await ledgerTexts(page)) === led0, "a swipe up asks for Face ID again (it fails here) and changes nothing");
+  check(await seen(page, "#lockscreen", "Face or fingerprint did not work. Use your PIN.") && (await ledgerTexts(page)) === led0, "a swipe up asks for Face ID again (it fails here) and changes nothing");
   // 5. PIN: right opens; five wrong ones make the next try wait; nothing is ever erased
   await tap(page, WRONG);
   check(await seen(page, "#lockscreen", "That PIN was not right.") && await bare(page), "a wrong PIN says so and stays locked");
@@ -106,7 +106,7 @@ export async function appLockChecks({ browser, base, open, menuGo, check, seen, 
   await face.wipe(); await reload(page);
   check(await page.locator("#lockscreen [data-lock=face]").count() === 1, "the swipe line is still offered");
   await page.click('#lockscreen [data-lock="face"]');
-  check(await seen(page, "#lockscreen", "Face ID did not work. Use your PIN."), "with the passkey gone Face ID fails plainly");
+  check(await seen(page, "#lockscreen", "Face or fingerprint did not work. Use your PIN."), "with the passkey gone Face ID fails plainly");
   await tap(page, PIN);
   check(await seen(page, "#nav", "Log"), "and the PIN still unlocks");
 
