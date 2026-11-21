@@ -135,7 +135,7 @@ await ctx.close();
 // ---- 9. an existing ledger never sees the setup
 ctx = await context(); page = await ctx.newPage(); page.on("pageerror", (e) => errors.push(e.message));
 await page.goto(base);
-await page.evaluate((t) => localStorage.setItem("financialTracker.ledger", t), JSON.stringify({ ...M.emptyLedger(), settings: { notice_seen_at: "2026-10-01T08:00:00.000+08:00", whatsnew_seen: M.CHANGES[0].id, cat_card_seen: "2026-10-01T08:00:00.000+08:00", start_rule_seen: "2026-10-01T08:00:00.000+08:00" } }));
+await page.evaluate((t) => localStorage.setItem("financialTracker.ledger", t), JSON.stringify({ ...M.emptyLedger(), settings: { notice_seen_at: "2026-10-01T08:00:00.000+08:00", whatsnew_seen: M.CHANGES[0].id, version_seen: "999.0.0", cat_card_seen: "2026-10-01T08:00:00.000+08:00", start_rule_seen: "2026-10-01T08:00:00.000+08:00" } }));
 await page.reload(); await page.locator("#nav button").first().waitFor(); await page.waitForTimeout(800);
 ok(await page.locator("#sheet .fr").count() === 0, "a ledger already in use opens as before");
 await ctx.close();

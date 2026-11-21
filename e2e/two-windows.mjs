@@ -15,7 +15,7 @@ const seeded = () => {
   const l = emptyLedger(); l.rev = 1; l.saved_at = "2026-11-10T08:00:00.000+08:00";
   l.state.accounts.push({ id: "chk", name: "Sample Checking", class: "asset", role: "", opening_balance: 5000000, opening_date: "2026-01-01", hidden_by_default: false, archived: false });
   l.state.categories = [{ id: "food", name: "Food", kind: "expense", role: "food" }, { id: "fun", name: "Fun", kind: "expense" }, ...l.state.categories.filter((c) => c.kind === "income")];
-  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, bankLogosTried: {}, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])) };
+  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, bankLogosTried: {}, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])) };
   return l;
 };
 const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,

@@ -20,7 +20,7 @@ const v11 = () => {
   s.categories = [{ id: "cat-food", name: "Food", kind: "expense", role: "food" }, { id: "cat-fun", name: "Fun", kind: "expense" }, { id: M.UNLOGGED_CATEGORY_ID, name: "Uncategorized", kind: "expense" }, ...s.categories.filter((c) => c.kind === "income"), ...M.INCOME_CATEGORIES.filter((c) => !s.categories.some((x) => x.id === c.id))];
   s.transactions.push({ id: "old1", date: "2026-11-02", payee: "Sample Grocer", memo: "", status: "verified", source: "manual", created_at: CT, verified_at: CT });
   s.entries.push({ transaction_id: "old1", category_id: "cat-food", amount: 45000 }, { transaction_id: "old1", account_id: "chk", amount: -45000 });
-  l.settings = { notice_seen_at: TS, whatsnew_seen: M.CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, bankLogosTried: {}, last_backup_at: TS, intro_off: Object.fromEntries(Object.keys(M.SCREEN_NAMES).map((k) => [k, true])) };
+  l.settings = { notice_seen_at: TS, whatsnew_seen: M.CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, bankLogosTried: {}, last_backup_at: TS, intro_off: Object.fromEntries(Object.keys(M.SCREEN_NAMES).map((k) => [k, true])) };
   return l;
 };
 const original = v11();

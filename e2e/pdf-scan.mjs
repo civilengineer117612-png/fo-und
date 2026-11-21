@@ -53,7 +53,7 @@ try {
   await page.goto(base); await visible("#nav button");
   const seed = emptyLedger(); seed.rev = 1; seed.saved_at = "2026-10-22T03:00:00Z";
   seed.state.accounts.push({ id: "example-bank", name: "Example Bank", class: "asset", role: "bank", opening_balance: 0, opening_date: "2026-01-01", hidden_by_default: false, archived: false });
-  seed.settings = { notice_seen_at: seed.saved_at, whatsnew_seen: CHANGES[0].id, welcome_off: true,
+  seed.settings = { notice_seen_at: seed.saved_at, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true,
     start_rule_seen: seed.saved_at, cat_card_seen: seed.saved_at, intro_off: { scan: true, income: true, log: true, money: true } };
   await page.evaluate(async (seed) => {
     const text = JSON.stringify(seed); localStorage.setItem("financialTracker.ledger", text);

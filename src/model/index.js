@@ -111,7 +111,11 @@ export { splitSavings, parseShares, shareableGoals, monthlyNeed, proRata, placeS
 export { fixedMap, isFixed, withFixed, fixedWhy, FIXED_LABEL, FIXED_ROLES } from "./fixed.js";
 export { emergencyFund, emergencyFormula, formulaWords, EF_MONTHS } from "./emergency.js";
 export { guessType, typeOf, kindOf } from "./types.js";
-export { CHANGES, whatsNew } from "./whatsnew.js";
+export { CHANGES, whatsNew } from "./whatsnew.js";   // the old per-merge list, kept as the record (P2-13: CHANGELOG.md replaces it)
+export { GROUPS as NOTE_GROUPS, isVersion, compareVersions, parseChangelog, noteCount, currentVersion, nextVersion, cutRelease, missedReleases, versionLine, changelogCheck } from "./changelog.js";
+import { parseChangelog as parseLog } from "./changelog.js";
+import { CHANGELOG_TEXT } from "./changelogtext.js";
+export const CHANGELOG = parseLog(CHANGELOG_TEXT);
 export { HOWTOS, HOWTO_HINT, clipData, howtoClip } from "./howto.js";
 export { readDate, dateOrder, readAmount, parseNotes, linesByRow, parseTable, parseCsv, readXlsx, categoryFor, previewImport, planImport, loggedMatch, loggedMove, STATEMENT_MATCH_DAYS } from "./importer.js";
 export { SINKING_LABEL, SINKING_NOTE, SINKING_HELP, sinkingStart, sinkingBalance, sinkingFunds, setAsideForSpending, toggleSinking } from "./sinking.js";

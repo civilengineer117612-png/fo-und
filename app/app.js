@@ -1592,7 +1592,7 @@ const noteIcon = (i) => `<svg class="noteicon" width="24" height="24" viewBox="0
 // A topic's drawing (if it names one) goes at the top of its collapsible, with its caption under it: collapsing the topic hides both.
 const figure = (id) => { const d = id && M.drawing(id); return d ? `<figure class="hfig">${d.svg}<figcaption>${esc(d.caption)}</figcaption></figure>` : ""; };
 function viewHelp() {
-  const steps = M.checklist(S(), ledger.settings), all = ui.wnAll, news = all ? M.CHANGES : M.CHANGES.slice(0, 3);
+  const steps = M.checklist(S(), ledger.settings);
   const play = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
   return `<h1>Help</h1><p class="sub">Start here, then watch, read or look back.</p>
     <h2>Start here</h2>
@@ -1608,8 +1608,8 @@ function viewHelp() {
     <h2>Guides</h2><p class="note">What each screen is for, and what to do on it.</p>
     <div class="mlist">${M.HELP_TOPICS.map((t) => `<details class="mrow"><summary><span class="mn">${esc(t.label)}</span><span class="tchev" aria-hidden="true">\u203A</span></summary>${figure(t.drawing)}${t.lines.map((l) => `<div class="mpart"><span>${esc(l)}</span></div>`).join("")}<div class="mpart"><button class="link" data-action="tab" data-tab="${t.tab}">Open ${esc(t.label)}</button></div></details>`).join("")}</div>
     <h2>What's new</h2>
-    <div class="mlist">${news.map((c) => `<div class="mrow mline"><span class="mn wn"><small>${esc(longDate(c.date))}</small>${esc(c.text)}</span></div>`).join("")}</div>
-    <p><button class="link" data-action="wn-all">${all ? "Show fewer" : "Show all " + M.CHANGES.length}</button></p>`;
+    <p class="note">${esc(versionText())}.</p>
+    <p><button class="link" data-action="open-versions">See all versions</button></p>`;
 }
 
 // ---------- Statements (Setup): bank statements kept as read, each month proved ----------
@@ -1732,7 +1732,8 @@ function viewSetup() {
   const appearanceHtml = `    <h2>Appearance</h2><div class="seg" role="group" aria-label="Appearance">${looks.map(([v, t]) => `<button data-action="set-appearance" data-id="${v}" aria-pressed="${look === v}">${t}</button>`).join("")}</div>
     <p class="note">Match my phone follows your phone's Light or Dark setting. Light and Dark stay as chosen.</p>`;
   const aboutHtml = `    <h2>This app</h2>
-    <p class="note">${M.isDevBuild() ? "Version: a development copy." : "Version " + esc(M.APP_BUILD) + ", updated " + esc(fullDate(M.APP_BUILT_ON)) + "."} Your data format: ${ledger.v}.</p>
+    <p class="note" id="about-version">${esc(versionText())}. Your data format: ${ledger.v}.</p>
+    <p><button class="act sm" data-action="open-versions">See all versions</button></p>
     ${ui.ledgerBytes ? `<p class="note" id="about-size">Your ledger: ${esc(M.formatBytes(ui.ledgerBytes))}. ${ui.mirror === false ? "The spare copy is full. The main copy is safe." : "Saved twice: a main copy and a spare."}</p>` : ""}
     <p class="note" id="about-protection">Storage protected: no</p>
     <p class="note" id="about-repeats">${esc(M.repeatsLine(S()))}</p>
@@ -1760,7 +1761,7 @@ function viewSetup() {
     ["statements", "statements", "Statements", stmSub()],
     ["appearance", "appearance", "Appearance", look === "auto" ? "Match my phone" : look === "dark" ? "Dark" : "Light"],
     ...(scratchCopy() ? [] : [["lock", "lock", "App lock", lockActive ? "Locks when opened and after 1 minute away" : "Off", lockActive ? "On" : "Off"]]),
-    ["about", "info", "About this app", M.isDevBuild() ? "Development copy" : "Version " + M.APP_BUILD],
+    ["about", "info", "About this app", M.currentVersion(M.CHANGELOG) ? "Version " + M.currentVersion(M.CHANGELOG) : M.isDevBuild() ? "Development copy" : "Build of " + fullDate(M.APP_BUILT_ON)],
   ];
   if (flat) return `<h1>Setup</h1><p class="sub">Accounts. The ledger is on this phone only.</p>${blocks.accounts}${blocks.categories}${blocks.budget}${blocks.backup}${blocks.about}`;
   const page = ui.setupPage && Object.hasOwn(blocks, ui.setupPage) ? ui.setupPage : null;   // hasOwn does not build the block
@@ -2857,6 +2858,13 @@ async function frFinish(then) {
   await commit(S(), { ...rest, firstrun_done: M.phTimestamp() }, { quiet: true });
   then?.();
 }
+// The version line (P2-13): a development copy keeps the deploy's placeholders, so its date is never formatted (an invalid date throws).
+const versionText = () => M.versionLine(M.CHANGELOG, M.isDevBuild() ? { dev: true } : { built: fullDate(M.APP_BUILT_ON), build: M.APP_BUILD, dev: false });
+// Release notes as the owner asked (P2-13): one card per version, its number and date, then New, Improved and Fixed, each a plain list.
+// A version of null is what is not released yet (only in All versions).
+function versionNotes(list) {
+  return list.map((r) => `<div class="card vcard"><div class="vhead"><b>${r.version ? "Version " + esc(r.version) : "Not released yet"}</b>${r.date ? `<small>${esc(fullDate(r.date))}</small>` : ""}</div>${M.NOTE_GROUPS.filter(([k]) => r.notes[k].length).map(([k, title]) => `<p class="vgroup">${title}</p><ul class="vnotes">${r.notes[k].map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`).join("")}</div>`).join("");
+}
 // Ends the first-run preview: its scratch storage is wiped and the app opens again on the real ledger (the same address without ?preview).
 async function endPreview() { if (device.status !== "PREVIEW") return; await clearTrialStorage(); location.replace(location.pathname); }
 // The welcome card of a new install: shown after the first-run notice and again on later starts until you tap Make it mine, or tick "Don't show this again", or log something.
@@ -3694,9 +3702,13 @@ function renderSheet() {
       <div id="entries-list">${entriesListHtml()}</div>`;
   } else if (sh.type === "whatsnew") {
     const moved = sh.changes?.length ? `<p class="note" id="wn-balances"><b>Balances that changed:</b> ${sh.changes.map((x) => `${esc(x.name)} ${x.by > 0 ? "+" : "-"}${peso(Math.abs(x.by))}`).join(", ")}. Spending dated before the day you added these accounts was being taken off twice; it now stays as history only.</p>` : "";
-    body = `<h3>What's new</h3><div class="wnlist">${M.whatsNew({}, 3).map((c) => `<div class="wnitem"><small>${esc(longDate(c.date))}</small>${esc(c.text)}</div>`).join("")}</div>${moved}
-      <p class="note">Help has the full list and the how-to clips.</p>
+    const vs = sh.versions ?? [];
+    body = `<h3>${vs.length === 1 ? "What's new in " + esc(vs[0].version) : vs.length ? "What's new" : "Your balances"}</h3>${versionNotes(vs)}${moved}
+      ${vs.length ? `<p class="note">Every version is in Setup, About this app.</p>` : ""}
       <p><button class="primary" data-action="close-sheet">Got it</button></p>`;
+  } else if (sh.type === "versions") {
+    const next = M.noteCount(M.CHANGELOG.unreleased) ? [{ version: null, notes: M.CHANGELOG.unreleased }] : [];
+    body = `<h3>All versions</h3><p class="note">${esc(versionText())}</p>${versionNotes([...next, ...M.CHANGELOG.releases])}`;
   } else if (sh.type === "bucket-clash") {
     const c = S().categories.find((x) => x.id === sh.id);
     body = `<h3>${esc(c.name)}</h3><p class="note">You set this to ${M.BUCKET_LABELS[sh.mine]}. The new name reads as ${M.BUCKET_LABELS[sh.read]}.</p>
@@ -3854,7 +3866,7 @@ function renderSheet() {
       <p class="note">Anything entered since this backup was made will be gone.${sh.all ? "" : ` Pictures are not in a backup, so those entries will say "picture not on this phone".`}</p>
       <p><button class="primary" id="f-save" data-action="restore-now">${ui.form.confirmRestore ? "Tap again to replace" : "Replace this phone's data"}</button></p>`;
   }
-  const closer = sh.type === "notice" || sh.type === "firstrun" || sh.type === "setup-restored" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? "" : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "buffer-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
+  const closer = sh.type === "notice" || sh.type === "firstrun" || sh.type === "setup-restored" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? "" : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "buffer-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "versions" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
   $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""}${sh.type === "firstrun" ? "" : ' data-action="close-sheet"'}></div><div class="sheet${opening ? " enter" : ""}${sh.type === "firstrun" ? " full" : ""}${sh.type === "setup-restored" || sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
   const box = document.querySelector("#sheet .sheet"); if (box && keepAt) box.scrollTop = keepAt;
   // A rebuilt window that cannot yet hold its old place (its new content not laid out on Safari's engine) tries once more on the next frame.
@@ -4262,6 +4274,7 @@ async function onClick(el) {
     case "warn-cancel": answerOverdraw(false, false); break;
     case "warn-income": answerOverdraw(false, true); break;
     case "end-preview": await endPreview(); break;
+    case "open-versions": ui.sheet = { type: "versions" }; ui.form = {}; renderSheet(); break;   // Setup, About this app and Help: every version and what is not released yet
     case "open-preview": location.assign(location.pathname + "?preview"); break;   // Help: the setup steps in scratch storage (the real ledger is not touched)
     case "reset-trial": {
       if (!ui.confirmTrial) { ui.confirmTrial = true; renderBanner(); break; }
@@ -5444,7 +5457,6 @@ async function onClick(el) {
     case "make-csv": await makeCsv(); break;
     case "entries-scope": ui.form.scope = id; renderSheet(); break;
     case "toggle-cancelled": ui.showCancelled = !ui.showCancelled; renderSheet(); break;
-    case "wn-all": ui.wnAll = !ui.wnAll; renderScreen(); break;
     case "st-month": ui.sheet = { type: "stmonth", account_id: el.dataset.acct, month: el.dataset.month }; ui.form = {}; renderSheet(); break;
     case "st-fail": ui.form = { ...ui.form, stFailOpen: !ui.form?.stFailOpen }; renderSheet(); break;
     case "st-compare": ui.confirmStart = false; ui.sheet = { type: "stcompare", account_id: el.dataset.acct, month: el.dataset.month }; renderSheet(); break;
@@ -6344,7 +6356,7 @@ async function start() {
       ledger = u.ledger; ui.upgrade = u.ok ? { done: true } : { failed: u.failed }; boot = { ...boot, status: "OK" };   // both stores were just written
     }
     ledger.state = M.dropUnusedCardCategory(M.ensureIncomeCategories(ledger.state));   // older ledgers gain Interest, Refund and Other income (saved with the next save)
-    if (boot.status === "NONE") { ledger.state = { ...ledger.state, categories: M.defaultCategories(), presets: M.defaultPresets() }; ledger.settings = { ...ledger.settings, roles_notice_seen: M.phTimestamp(), whatsnew_seen: M.CHANGES[0].id, start_rule_seen: M.phTimestamp() }; }   // kept in memory until the first save
+    if (boot.status === "NONE") { ledger.state = { ...ledger.state, categories: M.defaultCategories(), presets: M.defaultPresets() }; ledger.settings = { ...ledger.settings, roles_notice_seen: M.phTimestamp(), whatsnew_seen: M.CHANGES[0].id, version_seen: M.currentVersion(M.CHANGELOG) ?? "0.0.0", start_rule_seen: M.phTimestamp() }; }   // a new phone starts with the setup steps, never What's new (P2-13)   // kept in memory until the first save
     // The two stores disagree on revision only (a save reached one and not the other): repair quietly from the newer.
     if (boot.status === "REPAIR" && device.allowEntry && ((local != null && idb != null) || (local == null && boot.repairTo === "local"))) {
       await writeBoth(JSON.stringify(ledger), { local: boot.repairTo === "local", idb: boot.repairTo === "idb" });
@@ -6385,9 +6397,11 @@ async function start() {
   // After an update: the latest changes, once. "Got it" (or closing the window) remembers it, saved at once so it is not shown again.
   // The start-date rule (balances skip spending dated before an account was added) is told once, with the accounts whose balance it changed.
   const early = !ledger.settings.start_rule_seen && boot.status === "OK" ? M.earlyEntryChanges(S()) : [];
-  if (device.allowEntry && boot.status === "OK" && !ui.sheet && !ui.upgrade?.failed && ledger.v === M.LEDGER_VERSION && (M.whatsNew(ledger.settings).length || early.length)) {
-    ui.sheet = { type: "whatsnew", changes: early }; renderSheet();
-    await commit(S(), { ...ledger.settings, whatsnew_seen: M.CHANGES[0].id, start_rule_seen: M.phTimestamp() }, { quiet: true });
+  // VERSIONS (P2-13): What's new opens once after an update to a NEW VERSION (not after every deploy), with every version missed, newest first.
+  const missed = M.missedReleases(M.CHANGELOG, ledger.settings.version_seen);
+  if (device.allowEntry && boot.status === "OK" && !ui.sheet && !ui.upgrade?.failed && ledger.v === M.LEDGER_VERSION && (missed.length || early.length)) {
+    ui.sheet = { type: "whatsnew", versions: missed, changes: early }; renderSheet();
+    await commit(S(), { ...ledger.settings, ...(missed.length ? { version_seen: M.currentVersion(M.CHANGELOG) } : {}), start_rule_seen: M.phTimestamp() }, { quiet: true });
   } else if (device.allowEntry && boot.status === "OK" && !ui.upgrade?.failed && !ledger.settings.start_rule_seen) ledger.settings = { ...ledger.settings, start_rule_seen: M.phTimestamp() };   // nothing changed: kept with the next save
   // A ledger that was already in use before categories could be edited gets one card about it, once (a new install has the welcome card instead).
   if (device.allowEntry && boot.status === "OK" && !ui.sheet && !ui.upgrade?.failed && ledger.v === M.LEDGER_VERSION && ledger.settings.notice_seen_at && !ledger.settings.cat_card_seen && !ledger.settings.welcome_pending) { ui.sheet = { type: "catcard" }; renderSheet(); }

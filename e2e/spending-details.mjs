@@ -28,7 +28,7 @@ try {
   add("draft", "2026-10-20", [{ category_id: "food", amount: 1000 }, { account_id: "chk", amount: -1000 }], { status: "draft", verified_at: undefined });
   state.categoryMaps = [{ from: "old-food", to: "food", effective_from: "2026-01-01" }];
   seed.state = { ...seed.state, ...state }; seed.rev = 1; seed.saved_at = "2026-10-22T03:00:00Z";
-  seed.settings = { notice_seen_at: seed.saved_at, whatsnew_seen: CHANGES[0].id, welcome_off: true, cat_card_seen: seed.saved_at, start_rule_seen: seed.saved_at,
+  seed.settings = { notice_seen_at: seed.saved_at, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, cat_card_seen: seed.saved_at, start_rule_seen: seed.saved_at,
     intro_off: { log: true, money: true, income: true }, tile_hint_done: true };
   await page.evaluate(async (seed) => {
     const text = JSON.stringify(seed); localStorage.setItem("financialTracker.ledger", text);

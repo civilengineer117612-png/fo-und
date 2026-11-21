@@ -31,7 +31,7 @@ const seeded = () => {
   l.state.categories.push({ id: "food", name: "Food", kind: "expense" });
   l.state.transactions.push({ id: "ok1", date: "2026-10-05", payee: "Shop", memo: "", status: "verified", source: "manual", created_at: AT, verified_at: AT });
   l.state.entries.push({ transaction_id: "ok1", category_id: "food", amount: 5000 }, { transaction_id: "ok1", account_id: "example-bank", amount: -5000 });
-  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, intro_off: { scan: true, income: true, log: true, money: true } };
+  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, intro_off: { scan: true, income: true, log: true, money: true } };
   return l;
 };
 const goRow = async (page, row) => { await page.click("#menuBtn"); await page.click('#menu .item[data-tab="setup"]'); await page.waitForFunction(() => !document.querySelector("#menu .drawer")); if (await page.locator('[data-action="intro-done"]').count()) { await page.click('[data-action="intro-done"]'); await page.waitForTimeout(200); } await page.click(`.setrow:has-text("${row}")`); await page.waitForTimeout(250); };

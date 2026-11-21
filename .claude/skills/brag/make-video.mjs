@@ -64,7 +64,7 @@ function ledger() {
   const budget = (name, amount) => s.rules.push({ id: "rule-" + name, kind: "budget", subject_id: cat(name), amount, effective_from: "2026-10-01", created_at: AT });
   budget("Food", 600000); budget("Essentials", 250000); budget("Transport", 150000); budget("Rent", 800000); budget("Subscription", 80000); budget("Shopping", 250000); budget("Health", 100000); budget("Fun", 150000);
   s.presets = [{ id: "pl", name: "Lunch", amount: 18000, category_id: cat("Food") }, { id: "pc", name: "Coffee", amount: 12000, category_id: cat("Food") }, { id: "pf", name: "Fare", amount: 4500, category_id: cat("Transport") }];
-  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, intro_off: { scan: true, income: true, log: true, money: true, cards: true, budget: true, goals: true, plan: true, scheduled: true, checks: true, trips: true, buffer: true, checkin: true },
+  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, intro_off: { scan: true, income: true, log: true, money: true, cards: true, budget: true, goals: true, plan: true, scheduled: true, checks: true, trips: true, buffer: true, checkin: true },
     income_base_pin: 3200000, pay_schedule: { kind: "twice", days: [15, "last"] } };
   return l;
 }

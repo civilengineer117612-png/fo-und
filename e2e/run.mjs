@@ -56,7 +56,7 @@ const dismissNotice = async (page) => { if (await page.locator("#sheet .fr").cou
   try { await page.waitForSelector('#sheet button:has-text("Skip for now")', { timeout: 700 }); await page.click('#sheet button:has-text("Skip for now")'); } catch { /* the welcome card only shows on a new install */ } };
 async function open({ storageMode = null, logOpen = true, setupFlat = true, ua = IPHONE, standalone = true, blockSw = !TOOLS.serviceWorkerNetwork, url = BASE, noSpeech = false, fakeSpeech = false, seed = undefined, routes = [], keepNotice = false, styled = true, whatsNew = false, keepCatCard = false, keepIntro = false, now = T0, keepWarn = false } = {}) {
   if (seed === undefined) seed = styled ? OWNER_STYLE : null;
-  if (seed && !whatsNew) seed = { ...seed, settings: { ...(seed.settings ?? {}), whatsnew_seen: seed.settings?.whatsnew_seen ?? CHANGES[0].id, start_rule_seen: seed.settings?.start_rule_seen ?? "2026-10-01T08:00:00.000+08:00" } };   // the What's new pop-up is tested on its own
+  if (seed && !whatsNew) seed = { ...seed, settings: { ...(seed.settings ?? {}), whatsnew_seen: seed.settings?.whatsnew_seen ?? CHANGES[0].id, version_seen: seed.settings?.version_seen ?? "999.0.0", start_rule_seen: seed.settings?.start_rule_seen ?? "2026-10-01T08:00:00.000+08:00" } };   // the What's new pop-up is tested on its own
   if (seed && !keepIntro) seed = { ...seed, settings: { ...(seed.settings ?? {}), intro_off: { ...Object.fromEntries(["plan", "money", "income", "cards", "budget", "goals", "scheduled", "checkin", "scan", "trips", "buffer", "setup"].map((id) => [id, true])), ...(seed.settings?.intro_off ?? {}) } } };   // the small "what is this screen" popup is tested on its own
   if (seed && !keepCatCard) seed = { ...seed, settings: { ...(seed.settings ?? {}), cat_card_seen: seed.settings?.cat_card_seen ?? "2026-10-01T08:00:00.000+08:00" } };   // the one-time card about editing categories is tested on its own
   const ctx = await browser.newContext({ ...(blockSw ? { serviceWorkers: "block" } : {}), userAgent: ua, viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -217,7 +217,7 @@ async function fromSeed(name, opts = {}) {
   const saved = JSON.parse(readFileSync(file, "utf8"));
   // A seed was recorded with "What's new" already seen (open() marks it), so it stays seen when a later PR adds a line (L10, Nov 20: the new
   // line opened its window over every seeded block and the first tap timed out).
-  const ledger = opts.whatsNew ? saved.ledger : { ...saved.ledger, settings: { ...saved.ledger.settings, whatsnew_seen: CHANGES[0].id } };
+  const ledger = opts.whatsNew ? saved.ledger : { ...saved.ledger, settings: { ...saved.ledger.settings, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0" } };
   return open({ ...opts, seed: ledger, now: new Date(saved.now) });
 }
 // Invented accounts and ledgers the 6w blocks share (A11, Nov 20: they live here, so a 6w block never needs another one to have run first).
@@ -2535,14 +2535,23 @@ try { blockName = "5s. What\"s new after an update, and the how-to clips";
 console.log("What's new and how-tos");
 { const acct = { id: "w", name: "Test Wallet", class: "asset", role: "", hidden_by_default: false, archived: false, opening_balance: 500000, opening_date: "2026-09-01" };
   const seed = { ...OWNER_STYLE, settings: { ...OWNER_STYLE.settings, income_base_pin: 2500000 }, state: { ...OWNER_STYLE.state, accounts: [acct], rules: [{ id: "r1", kind: "budget", subject_id: "cat-lakat", amount: 300000, effective_from: "2026-10-01", created_at: "2026-10-01T08:00:00.000+08:00" }], presets: [{ id: "p1", name: "Corner Cafe", amount: 18000, category_id: "cat-food" }, { id: "p2", name: "Train", amount: 3000, category_id: "cat-food" }, { id: "p3", name: "Lunch", amount: 9500, category_id: "cat-food" }] } };
-  ({ ctx, page, errors } = await open({ blockSw: true, seed, whatsNew: true }));
-  check(await seen(page, "#sheet", "What's new"), "after an update the What's new window opens");
+  // P2-13 (Nov 21): What's new opens once per VERSION. Nothing is released yet in CHANGELOG.md, so this block serves the app an invented one
+  // with two versions and a note not released yet (before: the latest three per-merge changes).
+  const LOG = "# Changelog\n\n## Unreleased\n\n### Fixed\n- An invented fix not out yet.\n\n## 1.1.0 (2026-12-20)\n\n### New\n- Invented: budgets by year.\n### Fixed\n- Invented: a date shown right.\n\n## 1.0.0 (2026-12-01)\n\n### New\n- Invented: the first version.\n";
+  const versions = [[/\/src\/model\/changelogtext\.js/, () => "export const CHANGELOG_TEXT = " + JSON.stringify(LOG) + ";\n"]];
+  ({ ctx, page, errors } = await open({ blockSw: true, seed, whatsNew: true, routes: versions }));
+  check(await seen(page, "#sheet", "What's new"), "after an update to a new version the What's new window opens");
   let t = await text(page, "#sheet");
-  check(t.includes(CHANGES[0].text) && t.includes(CHANGES[2].text) && !t.includes(CHANGES[3]?.text ?? "never"), "it lists the latest three changes, one sentence each");
-  check(t.includes("Help has the full list and the how-to clips."), "and says where the full list and the clips are");
+  check(t.indexOf("Version 1.1.0") >= 0 && t.indexOf("Version 1.1.0") < t.indexOf("Version 1.0.0") && t.includes("Invented: budgets by year.") && t.includes("Invented: the first version.") && !t.includes("not out yet"), "a phone that missed two versions sees both, newest first, and nothing not yet released");
+  check(/NEW[\s\S]*FIXED/i.test(t.slice(t.indexOf("Version 1.1.0"), t.indexOf("Version 1.0.0"))) && t.includes("Dec 20, 2026"), "each version shows its date and its notes under New, Improved and Fixed");
   await page.click('#sheet button:has-text("Got it")');
+  check(JSON.parse((await stored(page)).local).settings.version_seen === "1.1.0", "the version seen is kept");
   await page.reload(); await page.waitForSelector("#nav button"); await page.waitForTimeout(600);
   check(!(await text(page, "#sheet")).includes("What's new"), "it is not shown again");
+  await ctx.close();
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: { ...seed, settings: { ...seed.settings, version_seen: "1.0.0" } }, whatsNew: true, routes: versions }));
+  check(await seen(page, "#sheet", "What's new in 1.1.0") && !(await text(page, "#sheet")).includes("Version 1.0.0"), "a phone on 1.0.0 sees only 1.1.0");
+  await page.click('#sheet button:has-text("Got it")');
   await page.click('#nav button[data-tab="verify"]'); await page.click('#nav button[data-tab="log"]');
   check(!(await text(page, "#sheet")).includes("Log an expense"), "a normal tap on Log still just opens Log");
   const holdOn = async (sel) => { await page.locator(sel).first().scrollIntoViewIfNeeded(); const b = await page.locator(sel).first().boundingBox(); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2); await page.mouse.down(); await page.waitForTimeout(800); await page.mouse.up(); };
@@ -2595,11 +2604,14 @@ console.log("What's new and how-tos");
   await page.click('#sheet button:has-text("Close")');
   await menuGo(page, "Help");
   t = await text(page, "#screen");
-  check(/Start here/i.test(t) && /Watch how it works/i.test(t) && /Guides/i.test(t) && /What's new/i.test(t) && t.includes(CHANGES[0].text) && !t.includes(CHANGES[CHANGES.length - 1].text), "Help runs Start here, Good to know, Watch, Guides, What's new, and shows only the latest three changes");
+  check(/Start here/i.test(t) && /Watch how it works/i.test(t) && /Guides/i.test(t) && /What's new/i.test(t) && t.includes("Version 1.1.0"), "Help runs Start here, Good to know, Watch, Guides, What's new, which names the version");   // P2-13: was the latest three changes
   check((await page.locator("h2").allInnerTexts()).map((x) => x.toLowerCase()).join("|") === "start here|good to know|watch how it works|guides|what's new", "in that order");
-  await page.click('button[data-action="wn-all"]');
-  check((await text(page, "#screen")).includes(CHANGES[CHANGES.length - 1].text) && await page.locator("#screen button:has-text('Show fewer')").count() === 1, "Show all lists every change");
-  check(await page.locator(".mn.wn small").count() === CHANGES.length && parseFloat(await page.locator(".mn.wn").first().evaluate((e) => getComputedStyle(e).fontSize)) <= 14 && (await page.locator(".mn.wn small").first().boundingBox()).height < 24, "each change shows its date on one short line of its own");
+  await page.click('#screen button[data-action="open-versions"]');
+  t = await text(page, "#sheet");
+  check(t.includes("All versions") && (await page.locator("#sheet .vhead b").allInnerTexts()).join("|") === "Not released yet|Version 1.1.0|Version 1.0.0" && t.includes("An invented fix not out yet."), "See all versions lists every version, newest first, with what is not released yet on top");
+  await page.click('#sheet button:has-text("Close")');
+  await menuGo(page, "Setup");   // the tests open Setup flat: every block, About this app included, on one page
+  check((await text(page, "#about-version")).startsWith("Version 1.1.0 · ") && await page.locator('#screen button[data-action="open-versions"]').count() === 1, "Setup, About this app shows the version and See all versions");
   await page.click('#nav button[data-tab="log"]');
   check(/spent today/i.test(await text(page, "#screen")), "the big number on Log says what it is (SPENT TODAY, small, above it)");
   check((await text(page, "#glance")).includes("This month") && !(await text(page, "#glance")).includes("left of") && (await page.getAttribute("#glance", "aria-label")).includes("left of") && await page.locator("#glance .bar span").count() === 1, "Log shows this month as an amount and a bar; the words are only read aloud");

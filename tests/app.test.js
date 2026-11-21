@@ -146,7 +146,7 @@ test("tidy-up: the menu has no one-row groups, the notice has one answer, an emp
   assert.ok(!js.includes('id="menu-backup"'), "the backup line is not repeated in the menu: Log says it when it is due, Setup has the button");
   assert.match(js, /<span>\$\{list\.length\} \$\{list\.length === 1 \? "entry" : "entries"\}<\/span>/, "the folded heading says only how many: the day's total is the big number above");
   assert.ok(js.includes('${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal"') && js.includes("<span>${esc(longDate(today()))}</span>"), "the date is written once: the top date hides when another day is picked");
-  assert.match(js, /<span class="mn wn"><small>\$\{esc\(longDate\(c\.date\)\)\}<\/small>/, "a change's date sits on its own line");
+  assert.match(js, /<div class="vhead"><b>\$\{r\.version \? "Version " \+ esc\(r\.version\) : "Not released yet"\}<\/b>\$\{r\.date \? `<small>\$\{esc\(fullDate\(r\.date\)\)\}<\/small>` : ""\}<\/div>/, "a version's number and its date head its own card (P2-13; before: each change with its date on its own line)");
   assert.ok(js.includes("downloads the reader (about 30 MB)") && !js.includes("about 7 MB"), "the reader's size is stated once, correctly");
 });
 
@@ -259,7 +259,8 @@ test("Setup is a short list of pages and Help runs in a clear order with a small
   assert.ok(js.includes("const setupFlat = () =>") && js.includes('sessionStorage.getItem("setupFlat") === "1"'), "the one-long-page layout is only for the tests");
   const order = [...js.slice(js.indexOf("function viewHelp()")).matchAll(/<h2>([^<]+)<\/h2>/g)].slice(0, 5).map((m) => m[1]);
   assert.deepEqual(order, ["Start here", "Good to know", "Watch how it works", "Guides", "What's new"], "Help runs in one clear order");
-  assert.match(js, /news = all \? M\.CHANGES : M\.CHANGES\.slice\(0, 3\)/, "What's new shows three, and Show all shows the rest");
+  assert.match(js, /<h2>What's new<\/h2>\n\s+<p class="note">\$\{esc\(versionText\(\)\)\}/, "What's new in Help is the version line and See all versions (P2-13; before: the three latest changes and Show all)");
+  assert.match(js, /data-action="open-versions">See all versions/);
   assert.ok(!js.includes("<h2>Each screen</h2>") && !js.includes("<h2>How-tos</h2>"), "the vague headings are gone");
   assert.match(css, /\.mn\.wn \{ font-size: 14px; line-height: 1\.35; \}/, "What's new is set in small type");
   assert.match(css, /\.setrow \.st b \{ font-weight: 600; font-size: 16px; \}/);

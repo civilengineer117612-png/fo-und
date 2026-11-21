@@ -31,7 +31,7 @@ function makeLedger() {
   spend("2026-10-12", "Sample Grocer", "food", 310000); spend("2026-10-20", "Streaming", "subs", 50000); spend("2026-09-14", "Sample Grocer", "food", 280000);
   const s = M.addSchedule(l.state, { id: "s1", kind: "repeating", name: "Streaming", category_id: "subs", account_id: "chk", start: "2026-06-01", amount: 50000, day: 20 });
   if (s.ok) l.state = s.state;
-  l.settings = { notice_seen_at: TS, whatsnew_seen: M.CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, income_base_pin: 5000000, pay_schedule: { kind: "twice", days: [15, "last"] }, plan_moved: "2026-10", starter_rent: 2000000,
+  l.settings = { notice_seen_at: TS, whatsnew_seen: M.CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, income_base_pin: 5000000, pay_schedule: { kind: "twice", days: [15, "last"] }, plan_moved: "2026-10", starter_rent: 2000000,
     goal_monthly: { ef: 600000, trip: 400000 }, intro_off: Object.fromEntries(Object.keys(M.SCREEN_NAMES).map((k) => [k, true])) };
   const bad = M.validateState(l.state);
   if (bad.length) throw new Error("ledger invalid: " + JSON.stringify(bad.slice(0, 3)));

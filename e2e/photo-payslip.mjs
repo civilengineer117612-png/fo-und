@@ -20,7 +20,7 @@ async function open() {
   await page.goto(base); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 });
   const l = emptyLedger(); l.rev = 1; l.saved_at = TS;
   l.state.accounts.push({ id: "example-bank", name: "Example Bank", class: "asset", role: "bank", opening_balance: 100000, opening_date: "2026-01-01", hidden_by_default: false, archived: false });
-  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, intro_off: { scan: true, income: true, log: true, money: true } };
+  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, intro_off: { scan: true, income: true, log: true, money: true } };
   await page.evaluate(async (text) => {
     localStorage.setItem("financialTracker.ledger", text);
     await new Promise((res) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => { const tx = r.result.transaction("kv", "readwrite"); tx.objectStore("kv").put(text, "ledger"); tx.oncomplete = () => { r.result.close(); res(); }; }; r.onerror = () => res(); });
