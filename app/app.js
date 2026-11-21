@@ -6204,6 +6204,76 @@ function appShown() {
   lockHiddenAt = null; coverOff();
 }
 function appHidden() { if (!ui.locked && lockHiddenAt === null) lockHiddenAt = Date.now(); coverOn(); }
+// PULL DOWN TO CLOSE (owner approved the test page, Nov 21; was "not built yet" under F3): a window that rises from the bottom (not a centred
+// one, not the first-run steps) can be pulled down from its top to close. It starts only when the window is scrolled to its very top, on the
+// window itself and not in a box, and when the finger goes down more than across (8 px first, so a tap or a scroll is never taken for it).
+// The window follows the finger and the dark part fades; let go past 110 px, or flicked down (faster than 0.5 px a millisecond, past 30 px),
+// and it closes the same way as a tap on the dark part: with something typed it springs back and asks "Discard what you typed?" (F3). Else it
+// springs back. A pull never taps what the finger ends over (suppressClick). Under Reduce Motion nothing follows the finger: a long enough pull
+// closes at once. Touch and a mouse both work (the e2e uses a mouse).
+let pull = null;
+const pullSheet = () => document.querySelector("#sheet > .sheet:not(.center):not(.full)");
+function pullStart(x, y, target) {
+  const sh = pullSheet(), scrim = $("scrim");
+  if (!sh || !sh.contains(target) || target.closest("input, textarea, select, .picksearch") || !scrim?.dataset.action || ui.locked) { pull = null; return; }
+  pull = { sh, scrim, x0: x, y0: y, top: sh.scrollTop <= 0, on: false, dy: 0, last: [y, performance.now()], v: 0 };
+}
+function pullMove(x, y, e) {
+  if (!pull) return;
+  const dx = x - pull.x0, dy = y - pull.y0;
+  if (!pull.on) {
+    if (Math.hypot(dx, dy) < 8) return;
+    if (!pull.top || dy <= 0 || Math.abs(dx) > dy) { pull = null; return; }   // a scroll, or sideways: not a pull
+    pull.on = true; suppressClick = true; pull.sh.classList.add("dragging"); pull.scrim.classList.add("dragging");
+  }
+  if (e?.cancelable) e.preventDefault();
+  const now = performance.now(); pull.v = (y - pull.last[0]) / Math.max(1, now - pull.last[1]); pull.last = [y, now];
+  pull.dy = Math.max(0, dy);
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) { pull.sh.style.transform = `translateY(${pull.dy}px)`; pull.scrim.style.opacity = String(Math.max(0, 1 - pull.dy / (pull.sh.offsetHeight || 1))); }
+}
+function pullEnd() {
+  const p = pull; pull = null;
+  if (!p || !p.on) return;
+  const { sh, scrim } = p, reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  sh.classList.remove("dragging"); scrim.classList.remove("dragging");
+  const go = p.dy > 110 || (p.v > 0.5 && p.dy > 30);
+  const back = () => { sh.classList.add("settle"); scrim.classList.add("settle"); sh.style.transform = ""; scrim.style.opacity = ""; setTimeout(() => { sh.classList.remove("settle"); scrim.classList.remove("settle"); }, 240); };
+  if (go && !ui.sheetTyped && !reduced) {
+    sh.classList.add("settle"); scrim.classList.add("settle");
+    sh.style.transform = `translateY(${sh.offsetHeight + 40}px)`; scrim.style.opacity = "0";
+    setTimeout(() => { if ($("scrim") === scrim) scrim.click(); }, 200);   // the same close as a tap on the dark part
+  } else {
+    back();
+    if (go) setTimeout(() => { if ($("scrim") === scrim) scrim.click(); }, reduced ? 0 : 240);   // typed: springs back, then asks first (F3)
+  }
+  setTimeout(() => { suppressClick = false; }, 60);   // the finger's release is not a tap on what it ended over
+}
+document.addEventListener("touchstart", (e) => { if (e.touches.length === 1) pullStart(e.touches[0].clientX, e.touches[0].clientY, e.target); else pull = null; }, { passive: true });
+document.addEventListener("touchmove", (e) => { if (pull) pullMove(e.touches[0].clientX, e.touches[0].clientY, e); }, { passive: false });
+document.addEventListener("touchend", pullEnd); document.addEventListener("touchcancel", pullEnd);
+document.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") pullStart(e.clientX, e.clientY, e.target); });
+document.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse" && pull) pullMove(e.clientX, e.clientY, e); });
+document.addEventListener("pointerup", (e) => { if (e.pointerType === "mouse") pullEnd(); });
+// THE BOX YOU TYPE IN STAYS ABOVE THE KEYBOARD (F5, owner approved the test page, Nov 21): the phone's visible area (visualViewport) shrinks
+// when the keyboard opens; while it is open (more than 60 px hidden at the bottom) a window that rises from the bottom sits on top of the
+// keyboard, is no taller than what is visible, and scrolls the focused box into view inside itself. With the keyboard closed nothing is set,
+// so nothing moves (the WebKit window-jump checks see no change). To try on the iPhone itself: a box low in a window, opened from the Home Screen.
+function keepAboveKeyboard() {
+  const vv = window.visualViewport, sh = pullSheet();
+  if (!vv || !sh) return;
+  const below = Math.max(0, window.innerHeight - (vv.offsetTop + vv.height));
+  if (below <= 60) { if (sh.style.bottom) { sh.style.bottom = ""; sh.style.maxHeight = ""; } return; }
+  sh.style.bottom = below + "px"; sh.style.maxHeight = Math.max(200, vv.height - 24) + "px";
+  const f = document.activeElement;
+  if (f && sh.contains(f) && f.matches("input, textarea")) {
+    const r = f.getBoundingClientRect(), b = sh.getBoundingClientRect();
+    if (r.bottom > b.bottom - 16) sh.scrollTop += r.bottom - (b.bottom - 16);
+    else if (r.top < b.top + 16) sh.scrollTop -= (b.top + 16) - r.top;
+  }
+}
+window.visualViewport?.addEventListener("resize", keepAboveKeyboard);
+window.visualViewport?.addEventListener("scroll", keepAboveKeyboard);
+document.addEventListener("focusin", (e) => { if (e.target.closest?.("#sheet")) { setTimeout(keepAboveKeyboard, 50); setTimeout(keepAboveKeyboard, 350); } });
 // L13 BACK CLOSES THE OPEN WINDOW (owner, Nov 21, before any Android user): on Android the Back button or gesture goes back in the browser's
 // history, and an installed app with nothing behind it simply CLOSES, losing what was open. So while a layer is open (a window, the menu,
 // a warning or a full-screen photo) the app keeps ONE extra history step of its own (state {foLayer: 1}, same address); Back pops it and
