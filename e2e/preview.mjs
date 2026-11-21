@@ -72,7 +72,7 @@ const quiet = async (page) => { let last = null, same = 0; while (same < 4) { co
 
   // End preview from the first step, too
   await page.goto(base + "?preview"); await page.waitForFunction(() => document.querySelector("#sheet .frn")?.textContent === "Step 1 of 5", null, { timeout: 30000 });
-  await page.click('#fr-preview [data-action="end-preview"]');
+  await page.click('#sheet [data-action="end-preview"]');
   await page.waitForFunction(() => location.search === "" && document.querySelector("#nav button"), null, { timeout: 30000 });
   ok(await quiet(page) === before, "End preview from a step goes back to the untouched ledger");
   await ctx.close(); }
