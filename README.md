@@ -3,6 +3,8 @@
 The storage test (Oct 2 to Oct 10, 2026) passed: the data survived on the phone in both localStorage and IndexedDB, persistent
 storage was granted, and the app ran from the Home Screen. The site root now only forwards to `/app/`.
 
+The app: https://civilengineer117612-png.github.io/fo-und/app/ (open it in Safari, then Share, Add to Home Screen).
+
 ---
 
 # Finance app (`app/`)
