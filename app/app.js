@@ -2781,7 +2781,7 @@ const frSwitch = (action, on, label) => `<button class="chip frchip" data-action
 function frBody() {
   const fr = ui.fr, f = ui.form, n = fr.step, anim = fr.anim ? ` fr-${fr.anim}` : "";
   fr.anim = null;   // slides once, when the step changes; a redraw inside a step stays still
-  const head = `<div class="frbar" aria-hidden="true"><span style="width:${(n / M.FIRSTRUN_STEPS) * 100}%"></span></div><p class="frn">Step ${n} of ${M.FIRSTRUN_STEPS}</p>${device.status === "PREVIEW" ? `<p class="note small" id="fr-preview" role="status">Preview: nothing is kept, and your ledger is not touched. <button class="link" data-action="end-preview">End preview</button></p>` : ""}`;   // the preview says so on every step (the full-screen steps cover the banner)
+  const head = `<div class="frbar" aria-hidden="true"><span style="width:${(n / M.FIRSTRUN_STEPS) * 100}%"></span></div><p class="frn">Step ${n} of ${M.FIRSTRUN_STEPS}</p>${device.status === "PREVIEW" ? `<p class="note small" id="fr-preview" role="status">Preview: nothing is kept, and your ledger is not touched.</p><p><button class="act sm" data-action="end-preview">End preview</button></p>` : ""}`;   // the preview says so on every step (the full-screen steps cover the banner)
   const backNext = (next = "Next") => `<div class="frpair"><button data-action="fr-back">Back</button><button class="primary" data-action="fr-next">${next}</button></div>`;
   let page = "", acts = "";
   if (n === 1) {
@@ -6298,6 +6298,7 @@ document.addEventListener("focusin", (e) => { if (e.target.closest?.("#sheet")) 
 // other way (a button, a save), the app takes its own step back quietly, so the history never fills up. An iPhone has no Back button: the
 // step is there and unused. Nothing is stored. e2e/android.mjs presses Back on an Android-size phone.
 let backSkip = 0;
+if ("scrollRestoration" in history) history.scrollRestoration = "manual";   // the app's own history steps must never move the page: the browser's restore threw a tapped button 2,000 px away on a quiet step back (run.mjs 5n, 1 run in 3)
 const layerOpen = () => !ui.locked && !!(document.querySelector("body > .lightbox") || $("warn")?.firstChild || ui.sheet || ui.menu);
 const ownStep = () => history.state?.foLayer === 1;
 function syncBack() {

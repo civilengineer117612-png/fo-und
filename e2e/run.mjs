@@ -2303,9 +2303,9 @@ console.log("Help and upgrade safety");
   await page.click('#menu button[data-tab="help"]');
   const h = await text(page, "#screen");
   check(/Good to know/i.test(h) && h.includes("It's still being built, so don't rely on it fully yet.") && h.includes("Your data lives only on your phone. No one else can see it or recover it.") && h.includes("Setup, then Backup") && h.includes("If you forget it, the backup can't be opened.") && h.includes("Add it to your Home Screen and use it from the icon.") && h.includes("Never send your backup file."), "Help starts with the five quick notes, in full");
-  check(h.includes("Add the accounts you pay from") && h.includes("Make a backup") && (await page.locator('#screen .mline button[data-tab="setup"]').count()) >= 1, "then three getting-started steps, with a button to each");
+  check(h.includes("Add the accounts you pay from") && h.includes("Make a backup") && (await page.locator('#start-here button.setrow[data-tab="setup"]').count()) >= 1, "then three getting-started steps, each step to do a row that opens its place");   // owner's mark, Nov 21: was a small Open Setup link (.mline)
   await addAccount(page, "Wallet", "asset", "100"); await page.click("#menuBtn"); await page.click('#menu button[data-tab="help"]');
-  check(/✓ Add the accounts you pay from\s*Done/.test(await text(page, "#screen")) && /○ Log your first expense/.test(await text(page, "#screen")), "a finished step shows a tick and Done; an unfinished one shows an empty circle");
+  check(await page.locator('#start-here .setrow.stepdone:has-text("Add the accounts you pay from")').count() === 1 && await page.locator('#start-here button.setrow:has-text("Log your first expense")').count() === 1, "a finished step shows its check, muted; an unfinished one is a row to tap, with its empty circle");   // owner's mark, Nov 21: was a typed tick and circle with the word Done
   await page.locator("#screen details.mrow summary", { hasText: "Verify" }).click();
   check((await text(page, "#screen")).includes("You see one entry at a time"), "tapping a screen's name opens its short guide");
   await page.locator("#screen details.mrow[open] button", { hasText: "Open Verify" }).click();
