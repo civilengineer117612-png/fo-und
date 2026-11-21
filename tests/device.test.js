@@ -16,18 +16,25 @@ test("platform is read from the user agent", () => {
   assert.equal(detectPlatform(DESKTOP), "other");
 });
 
-test("Android: empty is normal, no data entry, whatever the stores hold", () => {
-  for (const stores of [both(false), both(true), { local: true, idb: false }]) {
-    const r = assessDevice({ platform: "android", standalone: true, stores });
-    assert.equal(r.status, "ANDROID_NO_LEDGER");
-    assert.equal(r.allowEntry, false);
-    assert.match(r.message, /not lost data/);
+// ANDROID READY (owner, Nov 21; before: Android said "not the finance phone" and a computer "not the finance phone", entry off): any phone or
+// computer may hold a ledger now; only an iPhone's Safari tab is stopped, because there the storage is separate from the Home Screen app.
+test("Android and computers hold a ledger like an iPhone's Home Screen app: installed or in a browser tab, entry is on", () => {
+  for (const platform of ["android", "other"]) for (const standalone of [true, false]) {
+    assert.deepEqual(assessDevice({ platform, standalone, stores: both(true) }), { status: "OK", message: "", allowEntry: true }, platform + " " + standalone);
+    const e = assessDevice({ platform, standalone, stores: both(false) });
+    assert.equal(e.status, "EMPTY"); assert.equal(e.allowEntry, true); assert.match(e.message, /restore/);
   }
 });
-test("other devices are told they are not the finance phone", () => {
-  assert.equal(assessDevice({ ...ok, platform: "other" }).status, "NOT_THE_FINANCE_PHONE");
+test("no device is called the wrong phone any more, and no message names a brand of phone", () => {
+  const messages = [];
+  for (const platform of ["ios", "android", "other"]) for (const standalone of [true, false]) for (const stores of [both(true), both(false), { local: true, idb: false }, { local: null, idb: true }]) for (const trial of [false, true]) {
+    const r = assessDevice({ platform, standalone, stores, trial });
+    assert.ok(!["ANDROID_NO_LEDGER", "NOT_THE_FINANCE_PHONE"].includes(r.status), r.status);
+    messages.push(r.message);
+  }
+  for (const m of messages) assert.doesNotMatch(m, /iPhone|Android|Safari|iOS|finance phone/, m);
 });
-test("iPhone in a Safari tab: wrong storage, open the Home Screen icon", () => {
+test("iPhone in a Safari tab: wrong storage, open the Home Screen icon (still stopped: Safari keeps a tab's storage apart)", () => {
   const r = assessDevice({ ...ok, standalone: false });
   assert.equal(r.status, "BROWSER_TAB");
   assert.equal(r.allowEntry, false);
@@ -58,8 +65,8 @@ test("a store that cannot be read stops saving", () => {
     assert.equal(r.allowEntry, false);
   }
 });
-test("platform is checked before storage: an Android never reports data loss", () => {
-  assert.notEqual(assessDevice({ platform: "android", standalone: true, stores: { local: true, idb: false } }).status, "PARTIAL_LOSS");
+test("an Android that holds a ledger is guarded like an iPhone: one store emptied is flagged as partial loss", () => {   // before: Android never reported it (it held no ledger)
+  assert.equal(assessDevice({ platform: "android", standalone: true, stores: { local: true, idb: false } }).status, "PARTIAL_LOSS");
 });
 
 test("a trial copy turns entry on for an Android phone, a desktop or an iPhone browser tab, and says plainly that it is not the real ledger", () => {
@@ -71,14 +78,15 @@ test("a trial copy turns entry on for an Android phone, a desktop or an iPhone b
     assert.match(r.message, /Do not enter real financial data/);
   }
 });
-test("a trial can never be switched on in the iPhone Home Screen app, which holds the real ledger", () => {
-  assert.equal(trialAllowed({ platform: "ios", standalone: true }), false);
+test("a trial can never be switched on in an installed (Home Screen) app, which holds the real ledger, on any phone", () => {
+  for (const platform of ["ios", "android", "other"]) { assert.equal(trialAllowed({ platform, standalone: true }), false, platform); assert.equal(trialAllowed({ platform, standalone: false }), true, platform); }
+  assert.equal(assessDevice({ platform: "android", standalone: true, stores: both(true), trial: true }).status, "OK", "an installed Android app ignores ?trial too");
   const r = assessDevice({ platform: "ios", standalone: true, stores: both(true), trial: true });
   assert.equal(r.status, "OK", "the ?trial is ignored and the real ledger is shown as usual");
   assert.equal(assessDevice({ platform: "ios", standalone: true, stores: both(false), trial: true }).status, "EMPTY");
 });
-test("without ?trial nothing changes: Android stays switched off; a trial still refuses unreadable storage", () => {
-  assert.equal(assessDevice({ platform: "android", standalone: false, stores: both(false) }).status, "ANDROID_NO_LEDGER");
+test("without ?trial an Android tab is the real ledger (empty on first run); a trial still refuses unreadable storage", () => {
+  assert.equal(assessDevice({ platform: "android", standalone: false, stores: both(false) }).status, "EMPTY");
   const r = assessDevice({ platform: "android", standalone: false, stores: { local: null, idb: false }, trial: true });
   assert.equal(r.status, "STORAGE_UNAVAILABLE");
   assert.equal(r.allowEntry, false);

@@ -134,6 +134,6 @@ test("the app wires it: Back up now makes one file (parts share ONE share action
 });
 test("Help carries the one-line folder tip and says a backup is one file", () => {
   const all = M.HELP_TOPICS?.flatMap((t) => t.lines).join("\n") ?? readFileSync(new URL("../src/model/help.js", import.meta.url), "utf8");
-  assert.ok(all.includes("Make a folder 'fo-und backups' in the Files app once and save every backup there."));
+  assert.ok(all.includes("Make a folder 'fo-und backups' in your phone's files app once and save every backup there."));
   assert.ok(/One backup is one file/.test(all));
 });

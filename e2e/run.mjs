@@ -2302,7 +2302,7 @@ console.log("Help and upgrade safety");
   check(menuText.includes("Help") && menuText.indexOf("Help") < menuText.indexOf("Setup"), "the menu has Help, just above Setup");
   await page.click('#menu button[data-tab="help"]');
   const h = await text(page, "#screen");
-  check(/Good to know/i.test(h) && h.includes("It's still being built, so don't rely on it fully yet.") && h.includes("Your data lives only on your phone. No one else can see it or recover it.") && h.includes("Setup, then Backup") && h.includes("If you forget it, the backup can't be opened.") && h.includes("use it from the Home Screen icon, not a Safari tab") && h.includes("Never send your backup file."), "Help starts with the five quick notes, in full");
+  check(/Good to know/i.test(h) && h.includes("It's still being built, so don't rely on it fully yet.") && h.includes("Your data lives only on your phone. No one else can see it or recover it.") && h.includes("Setup, then Backup") && h.includes("If you forget it, the backup can't be opened.") && h.includes("Add it to your Home Screen and use it from the icon.") && h.includes("Never send your backup file."), "Help starts with the five quick notes, in full");
   check(h.includes("Add the accounts you pay from") && h.includes("Make a backup") && (await page.locator('#screen .mline button[data-tab="setup"]').count()) >= 1, "then three getting-started steps, with a button to each");
   await addAccount(page, "Wallet", "asset", "100"); await page.click("#menuBtn"); await page.click('#menu button[data-tab="help"]');
   check(/✓ Add the accounts you pay from\s*Done/.test(await text(page, "#screen")) && /○ Log your first expense/.test(await text(page, "#screen")), "a finished step shows a tick and Done; an unfinished one shows an empty circle");
@@ -3434,12 +3434,12 @@ console.log("Multiple transactions at once");
 try { blockName = "6. wrong phone, wrong place";
 console.log("Wrong device");
 ({ ctx, page } = await open({ ua: ANDROID }));
-check((await text(page, "#banner")).includes("not the finance phone") && (await text(page, "#banner")).includes("not lost data"), "Android says empty is normal, not lost data");
-check((await text(page, "#screen")).includes("Entry is switched off") && (await page.locator("button.tile").count()) === 0, "nothing can be logged on the Android");
+// ANDROID READY (owner, Nov 21; before: "This is not the finance phone", entry off): an Android phone holds a ledger like an iPhone; e2e/android.mjs walks it
+check(!(await text(page, "#banner")).includes("finance phone") && !(await text(page, "#screen")).includes("Entry is switched off") && (await text(page, "#sheet")).includes("Start fresh"), "a new Android phone is not switched off: it starts with the setup steps, like a new iPhone");
 await shot(page, "09-android");
 await ctx.close();
 ({ ctx, page } = await open({ standalone: false }));
-check((await text(page, "#banner")).includes("Safari tab"), "a Safari tab is told to open the Home Screen icon");
+check((await text(page, "#banner")).includes("browser tab") && (await text(page, "#banner")).includes("Home Screen icon"), "an iPhone's Safari tab is told to open the Home Screen icon (its storage is separate)");
 check((await page.locator("button.tile").count()) === 0, "nothing can be logged in a Safari tab");
 await ctx.close();
 } catch (e) { await blockFailed(e); }
@@ -3462,7 +3462,7 @@ var erased = await page.waitForFunction(() => localStorage.getItem("financialTra
 check(erased, "starting over erases the trial copy and leaves a fresh, empty one");
 await ctx.close();
 ({ ctx, page, errors } = await open({ ua: ANDROID, standalone: false, blockSw: true }));
-check((await text(page, "#banner")).includes("not the finance phone") && (await text(page, "#screen")).includes("Entry is switched off"), "the same Android phone without ?trial is still switched off");
+check(!(await text(page, "#banner")).includes("Trial copy") && !(await text(page, "#screen")).includes("Entry is switched off"), "the same Android phone without ?trial opens its own real ledger, not the trial");   // before Nov 21: switched off
 await ctx.close();
 ({ ctx, page, errors } = await open({ blockSw: true, styled: false, url: BASE + "?trial" }));
 check(!(await text(page, "#banner")).includes("Trial copy"), "the iPhone Home Screen app ignores ?trial, so the real ledger cannot be swapped for a trial");
