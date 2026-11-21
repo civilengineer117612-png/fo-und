@@ -623,6 +623,10 @@ button.qmark{background:none;border:0;color:var(--muted);font:inherit;font-size:
   .wnlist { display: grid; margin: 4px 0 10px; } .wnitem { font-size: 14px; line-height: 1.35; padding: 10px 0; border-bottom: 1px solid var(--line); } .wnitem small { display: block; font-size: 12px; color: var(--mid); margin-bottom: 1px; } .wnitem:last-child { border-bottom: 0; }
   /* Release notes (P2-13): one card per version, its number and date, then New, Improved and Fixed as plain lists */
   .vcard { margin: 10px 0; padding: 14px 16px; } .vhead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; } .vhead b { font-size: 17px; font-weight: 600; } .vhead small { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .vlist { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 14px; margin: 8px 0 14px; }
+  .vrow > summary { display: flex; align-items: center; gap: 10px; min-height: 48px; cursor: pointer; list-style: none; } .vrow > summary::-webkit-details-marker { display: none; }
+  .vrow > summary b { flex: 1; font-size: 15px; font-weight: 600; } .vrow > summary small { color: var(--muted); font-size: 13px; white-space: nowrap; } .vrow .tchev { width: 18px; text-align: center; }
+  .vrow + .vrow { border-top: 1px solid var(--line); } .vbody { padding: 0 0 12px; } .vbody .vgroup { margin: 4px 0 2px; font-size: 12px; } .vbody .vgroup ~ .vgroup { margin-top: 10px; } .vbody .vnotes { font-size: 14px; gap: 4px; }
   .vgroup { margin: 14px 0 4px; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); } .vnotes { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 15px; line-height: 1.4; }
 
   /* ================= Ledger Paper: fonts, buttons, cards, header, bars. Later rules win. ================= */

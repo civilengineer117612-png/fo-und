@@ -2862,6 +2862,10 @@ async function frFinish(then) {
 const versionText = () => M.versionLine(M.CHANGELOG, M.isDevBuild() ? { dev: true } : { built: fullDate(M.APP_BUILT_ON), build: M.APP_BUILD, dev: false });
 // Release notes as the owner asked (P2-13): one card per version, its number and date, then New, Improved and Fixed, each a plain list.
 // A version of null is what is not released yet (only in All versions).
+// All versions (owner, Nov 21: smaller, since the list grows): ONE white card, a row per version (its number, its date), opened by a tap; only the
+// top one starts open. The notes inside are a size smaller than in the update window.
+const versionGroups = (notes) => M.NOTE_GROUPS.filter(([k]) => notes[k].length).map(([k, title]) => `<p class="vgroup">${title}</p><ul class="vnotes">${notes[k].map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`).join("");
+const versionList = (list) => list.length ? `<div class="vlist">${list.map((r, i) => `<details class="vrow"${i === 0 ? " open" : ""}><summary><b>${r.version ? "Version " + esc(r.version) : esc(r.label)}</b>${r.date ? `<small>${esc(fullDate(r.date))}</small>` : ""}<span class="tchev" aria-hidden="true">\u203A</span></summary><div class="vbody">${versionGroups(r.notes)}</div></details>`).join("")}</div>` : "";
 function versionNotes(list) {
   return list.map((r) => `<div class="card vcard"><div class="vhead"><b>${r.version ? "Version " + esc(r.version) : esc(r.label)}</b>${r.date ? `<small>${esc(fullDate(r.date))}</small>` : ""}</div>${M.NOTE_GROUPS.filter(([k]) => r.notes[k].length).map(([k, title]) => `<p class="vgroup">${title}</p><ul class="vnotes">${r.notes[k].map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`).join("")}</div>`).join("");
 }
@@ -3708,7 +3712,7 @@ function renderSheet() {
       <p><button class="primary" data-action="close-sheet">Got it</button></p>`;
   } else if (sh.type === "versions") {
     const next = M.noteCount(M.CHANGELOG.unreleased) ? [{ version: null, label: M.sinceLabel(M.CHANGELOG), notes: M.CHANGELOG.unreleased }] : [];
-    body = `<h3>All versions</h3><p class="note">${esc(versionText())}</p>${versionNotes([...next, ...M.CHANGELOG.releases])}`;
+    body = `<h3>All versions</h3><p class="note">${esc(versionText())}</p>${versionList([...next, ...M.CHANGELOG.releases])}`;
   } else if (sh.type === "bucket-clash") {
     const c = S().categories.find((x) => x.id === sh.id);
     body = `<h3>${esc(c.name)}</h3><p class="note">You set this to ${M.BUCKET_LABELS[sh.mine]}. The new name reads as ${M.BUCKET_LABELS[sh.read]}.</p>

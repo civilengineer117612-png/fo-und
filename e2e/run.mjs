@@ -2608,7 +2608,9 @@ console.log("What's new and how-tos");
   check((await page.locator("h2").allInnerTexts()).map((x) => x.toLowerCase()).join("|") === "start here|good to know|watch how it works|guides|what's new", "in that order");
   await page.click('#screen button[data-action="open-versions"]');
   t = await text(page, "#sheet");
-  check(t.includes("All versions") && (await page.locator("#sheet .vhead b").allInnerTexts()).join("|") === "Since version 1.1.0|Version 1.1.0|Version 1.0.0" && t.includes("An invented fix not out yet."), "See all versions lists every version, newest first, with what came since the last one on top");
+  check(t.includes("All versions") && (await page.locator("#sheet .vrow > summary b").allInnerTexts()).join("|") === "Since version 1.1.0|Version 1.1.0|Version 1.0.0" && (await page.locator("#sheet details.vrow[open]").count()) === 1 && t.includes("An invented fix not out yet."), "See all versions lists every version, newest first, with what came since the last one on top");
+  await page.click('#sheet details.vrow:last-child > summary'); await page.waitForTimeout(200);
+  check(await page.locator("#sheet details.vrow:last-child").getAttribute("open") !== null && await page.locator("#sheet details.vrow:last-child .vnotes li").first().isVisible(), "an older version opens by a tap on its row (owner, Nov 21: one row each, only the top one open)");
   await page.click('#sheet button:has-text("Close")');
   await menuGo(page, "Setup");   // the tests open Setup flat: every block, About this app included, on one page
   check((await text(page, "#about-version")).startsWith("Version 1.1.0 · ") && await page.locator('#screen button[data-action="open-versions"]').count() === 1, "Setup, About this app shows the version and See all versions");

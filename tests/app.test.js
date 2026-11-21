@@ -147,6 +147,8 @@ test("tidy-up: the menu has no one-row groups, the notice has one answer, an emp
   assert.match(js, /<span>\$\{list\.length\} \$\{list\.length === 1 \? "entry" : "entries"\}<\/span>/, "the folded heading says only how many: the day's total is the big number above");
   assert.ok(js.includes('${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal"') && js.includes("<span>${esc(longDate(today()))}</span>"), "the date is written once: the top date hides when another day is picked");
   assert.match(js, /<div class="vhead"><b>\$\{r\.version \? "Version " \+ esc\(r\.version\) : esc\(r\.label\)\}<\/b>\$\{r\.date \? `<small>\$\{esc\(fullDate\(r\.date\)\)\}<\/small>` : ""\}<\/div>/, "a version's number and its date head its own card (P2-13; before: each change with its date on its own line)");
+  assert.match(js, /<h3>All versions<\/h3>.*\$\{versionList\(\[\.\.\.next, \.\.\.M\.CHANGELOG\.releases\]\)\}/, "All versions is one compact list (owner, Nov 21: smaller, since it grows), not a card per version");
+  assert.match(js, /<details class="vrow"\$\{i === 0 \? " open" : ""\}>/, "only the top version starts open");
   assert.ok(js.includes("downloads the reader (about 30 MB)") && !js.includes("about 7 MB"), "the reader's size is stated once, correctly");
 });
 
