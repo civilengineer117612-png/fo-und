@@ -169,6 +169,11 @@ How the owner wants to be talked to
 - The overhaul (rows A1 to A11, L1 to L16, F1 to F8) is mostly built; what is left is listed in PART 7 under OVERHAUL.
 - Older state (Oct 29 and before) is in git history.
 
+## RELEASES (owner, Nov 21, P2-13)
+Every merge deploys at once, as before. A release only NAMES what has merged: the owner says "release" in the project chat; the build agent opens ONE
+PR that runs `cutRelease` on CHANGELOG.md (the number by the rule in CLAUDE.md, today's date), regenerates `src/model/changelogtext.js`, and merges it like
+any PR. Phones then show What's new once for that version. Each PR adds its own line under "Unreleased" (or says "no user-facing change").
+
 ## PART 7: Backlog (the owner sets the order)
 
 P0 (loses data, blocks logging or blocks a backup)
