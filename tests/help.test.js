@@ -89,3 +89,12 @@ test("the old Pay plan is not typed in any more: no By payday section on Budget,
   assert.ok(!app.includes("<h2>Pay plan</h2>\n    <p class=\"note\">A plan is in effect."), "Setup has no Pay plan section any more");
   assert.match(app, /3 \\u00d7 \(Fixed \+ Needs\) of your budgets/, "the emergency fund hint points at the budgets, not at loading a plan");
 });
+
+test("A8 (owner, Nov 21): a screen with tabs shows its own name at the top, and Weekly review's first tab is This week", async () => {
+  const { readFileSync } = await import("node:fs");
+  const app = readFileSync(new URL("../app/app.js", import.meta.url), "utf8");
+  assert.match(app, /\(hub \? `<h1>\$\{esc\(M\.SCREEN_NAMES\[M\.hubOf\(ui\.tab\)\]\)\}<\/h1>` : titleOf\(title\)\)/, "the hub's name is a visible title, never the hidden tab name");
+  assert.ok(!app.includes('<h1 class="sr">'), "no hidden title is left");
+  assert.equal(SCREEN_NAMES.checkin, "Weekly review"); assert.equal(STRIP_NAMES.checkin, "This week", "the tab does not repeat the title");
+  assert.equal(SCREEN_NAMES.budget, "Plan & Save"); assert.equal(STRIP_NAMES.budget, "Budget");
+});

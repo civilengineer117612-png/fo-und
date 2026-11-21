@@ -83,7 +83,7 @@ ok(spentOf(await stored(page)) === "150," + START + ",125050", "it is saved as 1
 // ---- 3. Weekly review lists the old entries that look like a dropped comma, and KEEPS the card until each is resolved (owner, Nov 12)
 const toReview = async () => {
   await page.click("#menuBtn"); await page.click('#menu .item:has-text("Weekly review")'); await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
-  if (await page.locator('#screen .hub button:has-text("Weekly review")').count()) await page.click('#screen .hub button:has-text("Weekly review")');
+  if (await page.locator('#screen .hub button[data-tab="checkin"]').count()) await page.click('#screen .hub button[data-tab="checkin"]');   // A8: the tab is called This week
   await page.waitForFunction(() => document.querySelector("#screen").innerText.includes("Week of"));
 };
 const reload = async () => { await page.reload(); await page.locator("#nav button").first().waitFor({ state: "visible", timeout: 60000 }); await toReview(); };

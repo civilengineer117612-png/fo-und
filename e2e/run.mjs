@@ -798,7 +798,7 @@ await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
 check((await page.locator("#menu .drawer").count()) === 0, "tapping outside closes it");
 await page.click("#menuBtn"); await page.click('#menu .item:has-text("Plan & Save")');
 await page.waitForFunction(() => !document.querySelector("#menu .drawer"));
-check((await page.locator("#menu .drawer").count()) === 0 && (await text(page, "#top")).includes("Budget"), "choosing an item closes the menu and opens the screen");
+check((await page.locator("#menu .drawer").count()) === 0 && (await text(page, "#top")).includes("Plan & Save") && await page.getAttribute('#screen .hub button[data-tab="budget"]', "aria-current") === "page", "choosing an item closes the menu and opens the screen: Plan & Save at the top, on its Budget tab");   // A8: was the hidden title "Budget"
 check((await page.locator("#nav [aria-current]").count()) === 0, "no bottom button is marked while a menu screen is open");
 
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
@@ -2564,7 +2564,7 @@ console.log("What's new and how-tos");
   await page.click("#menuBtn"); await page.waitForSelector("#menu .item"); await page.waitForTimeout(500);   // the menu slides in first
   await holdOn('#menu .item[data-tab="budget"]');
   check(await seen(page, "#sheet", "Set a budget") && (await text(page, "#sheet")).includes("Lakat/Date") && (await text(page, "#sheet")).includes("₱3,500.00") && !/example/i.test(await text(page, "#sheet")) && (await text(page, "#sheet")).includes("Tap a category, type its monthly limit, Save"), "holding Budget in the menu plays the budget how-to, drawn from the owner's categories");
-  check(!(await text(page, "#top")).includes("Budget") && await page.locator("#menu .drawer").count() === 0, "holding does not open the Budget screen, and the menu steps aside for the clip");
+  check(!(await text(page, "#top")).includes("Plan & Save") && await page.locator("#menu .drawer").count() === 0,   /* A8: the screen's title is Plan & Save, no longer a hidden "Budget" */ "holding does not open the Budget screen, and the menu steps aside for the clip");
   await page.click('#sheet button:has-text("Close")');
   await page.click("#menuBtn"); await page.waitForSelector("#menu .item"); await page.waitForTimeout(500);
   await holdOn('#menu .item[data-tab="trips"]');
@@ -2606,7 +2606,7 @@ console.log("What's new and how-tos");
   await page.click("#glance"); await page.waitForTimeout(400);
   check(await page.locator('#screen button[data-view="category"][aria-pressed="true"]').count() === 1 && await page.locator("#screen .hub").count() === 0, "tapping it opens what was spent this month, by category (not the budget)");
   await menuGo(page, "Goals"); await page.waitForTimeout(400);
-  check((await text(page, "#top")).includes("Goals") && await page.getAttribute('#screen .hub button[data-tab="goals"]', "aria-current") === "page", "one tap on the strip moves to Goals");
+  check((await text(page, "#top")).includes("Plan & Save") && await page.getAttribute('#screen .hub button[data-tab="goals"]', "aria-current") === "page", "one tap on the strip moves to Goals; the title stays Plan & Save");   // A8: the title was the hidden tab name
   await page.click("#menuBtn"); await page.waitForSelector("#menu .item"); await page.waitForTimeout(500);
   check((await page.locator("#menu .glabel").allInnerTexts()).join("|") === "Your money|Tools", "the menu has two groups");
   check(await page.locator("#menu-backup").count() === 0, "the menu does not repeat the backup line");
@@ -3235,7 +3235,7 @@ console.log("Popups on every screen");
     ["Trips", "Spend on the road, count it once.", "Add dates and it fills itself."], ["Setup", "Make the app yours.", "Tap anything to change it."]];
   const seenAll = [];
   for (const [name, one, two] of screens) {
-    const menuName = name === "Budget" ? "Plan & Save" : name, title = name === "Budget" ? "Budget" : name;
+    const menuName = name === "Budget" ? "Plan & Save" : name, title = name === "Budget" ? "Budget" : name === "Weekly review" ? "This week" : name;   // A8: a popup is named like its tab
     await page.click("#menuBtn"); await page.click(`#menu .item:has-text("${menuName}")`);
     await page.waitForSelector(".in-draw", { timeout: 4000 });
     const t = await text(page, "#sheet");
