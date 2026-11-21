@@ -198,12 +198,15 @@ test("simple wording: the long notes were cut, and none of the old long sentence
   assert.deepEqual(long, [], "no plain note is longer than 150 characters");
 });
 
-test("one thing, said once: the donut has no second total, Verify states its count once, a strip screen has one visible title", () => {
+test("one thing, said once: the donut has no second total, Verify states its count once, a strip screen has one visible title", async () => {
   const js = read("app/app.js"), css = read("app/index.html");
   assert.ok(!js.includes('class="dtotal"') && !js.includes('class="dsub"'), "the donut's centre does not repeat the headline total");
   assert.match(js, /`\$\{list\.length\} to check`, due \? `\$\{due\} from before today` : "ready whenever you are"/, "Verify says how many once, in the line under the title");
   assert.ok(!js.includes('<p class="note">1 of ${list.length}</p>'), "no second 'n of m'");
-  assert.match(js, /\(hub \? `<h1 class="sr">\$\{esc\(title\)\}<\/h1>` : titleOf\(title\)\)/, "on a strip screen the strip names the screen; the title is only read aloud");
+  // A8 (owner, Nov 21; before: the title was hidden and only read aloud): the screen's own name is the title, and no tab repeats it
+  assert.match(js, /\(hub \? `<h1>\$\{esc\(M\.SCREEN_NAMES\[M\.hubOf\(ui\.tab\)\]\)\}<\/h1>` : titleOf\(title\)\)/, "on a strip screen the title names the screen");
+  { const { HUBS, SCREEN_NAMES, STRIP_NAMES } = await import("../src/model/names.js");
+    for (const [h, ids] of Object.entries(HUBS)) for (const id of ids) assert.notEqual(STRIP_NAMES[id], SCREEN_NAMES[h], h + ": the tab " + id + " does not repeat the title"); }
   assert.match(css, /\.sr \{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect\(0 0 0 0\); white-space: nowrap; \}/);
 });
 

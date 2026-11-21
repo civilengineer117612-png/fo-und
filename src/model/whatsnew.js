@@ -1,6 +1,7 @@
 // "What's new": one plain sentence per update, newest first. The app shows the latest three once after an update (until "Got it"), and Help keeps
 // the whole list. Every PR that changes what a user sees or does adds its sentence at the TOP of this list (owner's rule: even small fixes).
 export const CHANGES = [
+  { id: "2026-11-21-titles", date: "2026-11-21", text: "Plan & Save and Weekly review now show their name at the top; Weekly review's first tab is called This week." },
   { id: "2026-11-20-speed", date: "2026-11-20", text: "Faster on a big ledger: searching every entry answers as you type, and the Weekly review opens sooner." },
   { id: "2026-11-17-press-jump", date: "2026-11-17", text: "Fixed: on the iPhone a tall window could jump back up when you chose something near its bottom. A pressed button now shows its press at once." },
   { id: "2026-11-16-row-dots", date: "2026-11-16", text: "Fixed: a Log row with no account line no longer starts with a stray dot." },

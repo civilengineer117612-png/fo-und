@@ -14,7 +14,7 @@ export const HUBS = { budget: ["budget", "goals"], checkin: ["checkin", "checks"
 export const hubOf = (id) => Object.keys(HUBS).find((h) => HUBS[h].includes(id)) ?? null;
 export const menuRows = (ids) => ids.filter((id) => !Object.values(HUBS).some((m) => m.slice(1).includes(id)));   // the menu shows the first screen of each hub
 // Short names for the strip (the long one stays in the menu and Help).
-export const STRIP_NAMES = { money: "Cash flow", cards: "Cards", budget: "Budget", goals: "Goals", checkin: "Weekly review", checks: "Checks" };
+export const STRIP_NAMES = { money: "Cash flow", cards: "Cards", budget: "Budget", goals: "Goals", checkin: "This week", checks: "Checks" };   // A8 (owner, Nov 21): the screen's title says Weekly review, so its first tab is "This week"
 
 // Nothing is hidden from the menu any more. Plan & Save has two tabs: Budget (by month, payday or week) and Goals; the old Pay plan moved into Budget.
 export const menuHidden = () => new Set();

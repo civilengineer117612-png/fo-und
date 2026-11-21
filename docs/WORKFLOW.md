@@ -206,8 +206,8 @@ OVERHAUL (owner, Nov 12: Phase 1 report approved, rows A1 to A11; data loss firs
   up, "Scheduled" on Log); A4 Split and Owed to me (data version 12; not built: money that is all someone else's, a remove button per person, a
   pay-back matched from a statement); A3 Correct this entry; A1 first-run setup and the backup reminder switch; A2 swipe between periods; A7 the
   Buffer in Budget's Buffer row; A10 the unreachable Pay plan screens removed; WHAT THE SCREEN SAYS IS WHAT IS SAVED (no draft says "verified",
-  tests/verifiedwords.test.js); A6 is L1; A9 kept as merged; L15 a Log row joins only the parts it has (no stray dots); F8 the scan ring: already clear since the Cards rework (43 px at 320 wide), now guarded by e2e/ui-audit.mjs on every screen; L10, L11 speed (Nov 20: search 35 to 65 ms a key on 4,000 entries at a phone's speed, was 2 to 4.6 s; the Weekly review opens in about 0.9 s, was 2.3 s).
-- STILL TO DO: L13, F5 (keeping a box above the keyboard: needs the owner's iPhone) and drag down to close a window; A8 real titles on Plan & Save and Weekly review; A11 DONE Nov 20 (each long
+  tests/verifiedwords.test.js); A6 is L1; A9 kept as merged; L15 a Log row joins only the parts it has (no stray dots); F8 the scan ring: already clear since the Cards rework (43 px at 320 wide), now guarded by e2e/ui-audit.mjs on every screen; A8 titles (Nov 21: Plan & Save and Weekly review show their name at the top; Weekly review's first tab is This week); L10, L11 speed (Nov 20: search 35 to 65 ms a key on 4,000 entries at a phone's speed, was 2 to 4.6 s; the Weekly review opens in about 0.9 s, was 2.3 s).
+- STILL TO DO: L13, F5 (keeping a box above the keyboard: needs the owner's iPhone) and drag down to close a window; A11 DONE Nov 20 (each long
   e2e block its own ledger: 5e as 15 blocks from recorded seeds, `fromSeed`; 6w as 19 blocks, its shared invented ledgers above the first block; 5f as 8 blocks from seeds, its drawn pictures above the first block; 5g stays one payslip flow); the screens one at a time with less text, a picture first for each (Log and Verify, Spending, Budget and Goals, Cards
   and Setup, Weekly review and Checks); the Weekly review with less text (waits on the owner's answer: which text is read and which is skipped);
   then the final report with the owner's iPhone checks.
@@ -218,7 +218,6 @@ OVERHAUL (owner, Nov 12: Phase 1 report approved, rows A1 to A11; data loss firs
 P2 (wait for "next"): voice entry disclosure in Help and the first-run notice; library licence note; trim
 contradictions in CLAUDE.md; Android block decision; custom domain plan; Trips year grouping and period picker; ratchet screen;
 splitting `app/app.js`.
-P2 (Nov 11) isolate the long shared-ledger e2e blocks: blocks of `e2e/run.mjs` that run one after another on the SAME ledger (5, 5e, 5f, 5g, 5m ...) make one early failure or timeout (a click that waits 30 seconds) knock out the blocks after it, and a block's result then depends on what an earlier block left behind. Give each long block its own seeded invented ledger and its own page, so a block can be run alone, fails alone and is read alone; keep the `// =====` try/catch rule and the WebKit rules.
 
 Open decisions (do not assume): 1 Income Trends by payment date; 2 a cash advance as borrowed money; 3 payroll loan repayments shown
 as already deducted; 4 zero and negative net pay; 5 phone-local mappings in backups; 6 budget order of funding and the wants cap;
