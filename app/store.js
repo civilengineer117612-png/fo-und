@@ -9,8 +9,11 @@ let RESTORE_KEY = "financialTracker.restorecopy";   // the copies kept from befo
 
 // A trial copy keeps everything under other names, so it can never touch (or be mistaken for) a real ledger.
 export function useTrialStorage() { LS_KEY = "financialTracker.trial.ledger"; COPIES_KEY = "financialTracker.trial.preupgrade"; DB_NAME = "financialTracker-trial"; RESTORE_KEY = "financialTracker.trial.restorecopy"; }
+// The first-run PREVIEW (owner, Nov 21) is scratch storage of its own, wiped when the preview starts and when it ends: the owner can walk the setup
+// on the phone that holds the real ledger without touching it. Same erasing calls as the trial, same guard: never a real name.
+export function usePreviewStorage() { LS_KEY = "financialTracker.preview.ledger"; COPIES_KEY = "financialTracker.preview.preupgrade"; DB_NAME = "financialTracker-preview"; RESTORE_KEY = "financialTracker.preview.restorecopy"; }
 export async function clearTrialStorage() {
-  if (!DB_NAME.endsWith("-trial")) return;   // only ever the trial copy
+  if (!DB_NAME.endsWith("-trial") && !DB_NAME.endsWith("-preview")) return;   // only ever the trial copy or the preview
   try { localStorage.removeItem(LS_KEY); } catch { /* nothing to remove */ }
   await new Promise((resolve) => { const r = indexedDB.deleteDatabase(DB_NAME); r.onsuccess = r.onerror = r.onblocked = () => resolve(); });
 }

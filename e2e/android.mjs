@@ -56,6 +56,7 @@ const back = async (page) => { await page.goBack({ waitUntil: "commit" }).catch(
   ok(await page.locator("#sheet .frstep, #sheet [data-action='fr-start']").count() > 0 || (await text(page, "#sheet")).includes("Start fresh"), "a brand-new Android phone starts with the setup steps, like a new iPhone");
   await seed(page);
   ok(await page.locator('#nav [data-action="open-scan-pick"]').count() === 1 && await page.locator('[data-action="open-other"]').count() === 1, "with a ledger, logging is on: Scan and Add expense are there");
+  ok(!(await page.evaluate(() => navigator.storage.persisted())) && (await text(page, "#install-note")) === "Install this app so your phone keeps your data: open your browser's menu, then Add to Home screen or Install app.", "in a Chrome tab whose storage is not protected, Log has the one line: install the app, and how");
   await page.click('[data-action="open-other"]'); await page.waitForSelector("#sheet #f-amount");
   await page.fill("#f-amount", "120");
   await page.evaluate(() => document.querySelector('#sheet [data-action="pick-cat"][data-id="food"]').click());
@@ -71,12 +72,14 @@ const back = async (page) => { await page.goBack({ waitUntil: "commit" }).catch(
 { const ctx = await phone({ installed: true });
   const page = await open(ctx); await seed(page);
   ok(!(await text(page, "#banner")).includes("finance phone") && await page.locator('[data-action="open-other"]').count() === 1, "the installed app on Android holds the ledger and logs");
+  ok(await page.locator("#install-note").count() === 0, "the installed app has no install line");
   const t = await open(ctx, base + "?trial");
   ok(!(await text(t, "#banner")).includes("Trial copy") && await t.locator('[data-action="open-other"]').count() === 1, "?trial is ignored inside the installed app (it holds the real ledger), as on an iPhone's Home Screen app");
   await ctx.close(); }
 { const ctx = await phone({ installed: false });
   const t = await open(ctx, base + "?trial");
   ok((await text(t, "#banner")).includes("Trial copy"), "in a Chrome tab ?trial still opens the separate trial copy");
+  ok(await t.locator("#install-note").count() === 0, "a trial copy has no install line");
   await ctx.close(); }
 
 // ---- 3. what Chrome needs before it offers to install the app

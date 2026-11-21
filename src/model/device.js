@@ -21,7 +21,13 @@ const result = (status, message, allowEntry) => ({ status, message, allowEntry }
 export const trialAllowed = ({ standalone }) => !standalone;
 
 // stores.local / stores.idb: true = holds data, false = empty, null = could not be read.
-export function assessDevice({ platform, standalone, stores, trial = false }) {
+export function assessDevice({ platform, standalone, stores, trial = false, preview = false }) {
+  // The first-run PREVIEW (owner, Nov 21): scratch storage of its own, wiped at its start and end, on any device (an iPhone's Safari tab and the
+  // installed app too): it shows the setup steps on the phone that holds the real ledger and never touches that ledger.
+  if (preview) {
+    if (stores.local === null || stores.idb === null) return result("STORAGE_UNAVAILABLE", "This device's storage cannot be read, so even the preview cannot run.", false);
+    return result("PREVIEW", "Preview of the first-run setup. Nothing is kept, and your ledger is not touched.", true);
+  }
   if (trial && trialAllowed({ platform, standalone })) {
     if (stores.local === null || stores.idb === null) return result("STORAGE_UNAVAILABLE", "This device's storage cannot be read, so even the trial cannot save.", false);
     return result("TRIAL", "Trial copy, not your real ledger. Do not enter real financial data.", true);

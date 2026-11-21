@@ -2,7 +2,7 @@
 // Plain and firm, never harsh: facts are stated once, nothing is red, nothing blocks logging.
 import * as M from "../src/model/index.js";
 import { requestStorageProtection, storageProtected } from "./protection.js";
-import { readBoth, writeBoth, setBase, watchOtherWindows, changedElsewhere, putPhoto, getPhoto, deletePhoto, useTrialStorage, clearTrialStorage, readCopies, writeCopies, readRestoreCopies, writeRestoreCopies, readLock, writeLock, clearLock } from "./store.js";
+import { readBoth, writeBoth, setBase, watchOtherWindows, changedElsewhere, putPhoto, getPhoto, deletePhoto, useTrialStorage, usePreviewStorage, clearTrialStorage, readCopies, writeCopies, readRestoreCopies, writeRestoreCopies, readLock, writeLock, clearLock } from "./store.js";
 import { createPasskey, verifyPasskey } from "./lock.js";
 import { preparePhoto, readPage, readPlain, evenedCopy } from "./ocr.js";
 import { speechSupported, listen, firstLanguage, other } from "./voice.js";
@@ -37,6 +37,12 @@ const peso = M.formatPesos;
 
 let ledger = M.emptyLedger();   // {rev, state, settings}
 let device = { status: "OK", message: "", allowEntry: true };
+// INSTALL LINE (owner, Nov 21): in a browser tab (not installed; never an iPhone's Safari tab, which is stopped anyway) whose storage the browser
+// does NOT protect, Log shows one line: install the app so the phone keeps the data, and how. It goes once the browser protects the storage.
+let installHint = false;
+// A trial copy and the first-run preview keep their ledger under scratch names, but the app lock has ONE key of its own: neither may offer the lock, or it would lock (or unlock) the real app.
+const scratchCopy = () => device.status === "TRIAL" || device.status === "PREVIEW";
+const INSTALL_LINE = "Install this app so your phone keeps your data: open your browser's menu, then Add to Home screen or Install app.";
 let boot = { status: "NONE", repairTo: null };
 const ui = {
   tab: "log", menu: false, sheet: null, form: {}, error: null, confirmDelete: null, confirmRemove: null, setupError: null,
@@ -241,7 +247,7 @@ async function commit(state, settings = ledger.settings, { quiet = false } = {})
   // (a rebuild behind a scrolled window threw it back up on WebKit, 138 to 46).
   if (!quiet) renderAll(); else { if (ui.sheet || document.activeElement?.matches("input, textarea, select")) ui.screenStale = true; else { renderBanner(); renderScreenQuiet(); } if (ui.sheet?.type === "banks") renderSheet(); }   // the screen behind a window may change; the window stays
   if (!ledger.settings.bankLogosTried && !logoRun && failed.length === 0) loadBankLogos();   // a new install: logos after the first save
-  if (out.ok && !quiet) void requestStorageProtection();
+  if (out.ok && !quiet) void requestStorageProtection().then((ok) => { if (ok && installHint) { installHint = false; if (ui.sheet) ui.screenStale = true; else renderScreenQuiet(); } });   // the install line goes once the browser protects the storage
   return failed.length === 0;
 }
 
@@ -349,6 +355,7 @@ function renderBanner() {
   if (ui.elsewhere) bars.push(`<div class="bar" role="alert">${esc(M.CHANGED_ELSEWHERE)}<p><button data-action="reload-latest">Load the latest</button></p></div>`);
   if (ui.error) bars.push(`<div class="bar" role="alert">${esc(ui.error)}</div>`);
   if (ui.upgrade?.failed) bars.push(`<div class="bar" role="alert">${esc(ui.upgrade.failed)}</div>`);
+  if (device.status === "PREVIEW") bars.push(`<div class="trialstrip" role="status"><span>${esc(device.message)}</span><button class="act" data-action="end-preview">End preview</button></div>`);
   if (device.status === "TRIAL") bars.push(`<div class="trialstrip" role="status"><span>Trial copy. Do not enter real data.</span><button class="act" data-action="reset-trial">${ui.confirmTrial ? "Tap again to erase" : "Start over"}</button></div>`);
   const showDevice = device.status !== "TRIAL" && device.status !== "OK" && device.status !== "EMPTY";   // an empty phone is explained on Log, next to its Restore button
   if (showDevice) {
@@ -497,7 +504,7 @@ function viewLog() {
   const photoNote = (ui.scan?.busy ? `<p class="note" id="scan-msg" role="status">${esc(ui.scan.msg)}</p>` : ui.scan?.error ? `<p class="note" role="alert">${esc(ui.scan.error)}</p>` : "")
     + (needLook ? `<p class="note"><button class="act" data-action="open-queue">${needLook} photo${needLook === 1 ? " needs" : "s need"} a look</button></p>` : "")
     + (waitingPhotos && !ui.scan?.busy ? `<p class="note">${waitingPhotos} photo${waitingPhotos === 1 ? " is" : "s are"} kept, waiting to be read. <button class="act" data-action="read-queue">Read now</button></p>` : "");
-  return `<h1>Log</h1><div class="logmeta">${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal" aria-label="${esc(longDate(today()))}. Tap to choose another day">${CAL}<span>${esc(longDate(today()))}</span></button>`}</div>${floatNote}${photoNote}${tripNote}
+  return `<h1>Log</h1><div class="logmeta">${ui.dayPick && ui.dayPick !== today() ? "" : `<button class="datebtn" data-action="open-cal" aria-label="${esc(longDate(today()))}. Tap to choose another day">${CAL}<span>${esc(longDate(today()))}</span></button>`}</div>${installHint ? `<p class="note" id="install-note">${esc(INSTALL_LINE)}</p>` : ""}${floatNote}${photoNote}${tripNote}
     ${dayCard()}
     ${tilesHtml()}
     <div class="logbtns"><button class="primary" data-action="open-other">Add expense</button><button class="act" data-action="open-move"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h14l-4-4M20 16H6l4 4"/></svg>Move money</button></div>
@@ -1589,10 +1596,13 @@ function viewHelp() {
   const play = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
   return `<h1>Help</h1><p class="sub">Start here, then watch, read or look back.</p>
     <h2>Start here</h2>
-    <div class="mlist">${steps.map((st) => `<div class="mrow mline"><span class="mn">${st.done ? "\u2713" : "\u25CB"} ${esc(st.text)}</span><span class="mv">${st.done ? "Done" : `<button class="link" data-action="tab" data-tab="${st.tab}">${esc(st.button)}</button>`}</span></div>`).join("")}</div>
+    <div class="setlist" id="start-here">${steps.map((st) => {   // owner's mark (Nov 21): Setup's own rows, one line each; a step done shows its check, a step to do is the whole row with its chevron
+      const ring = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.25"/>${st.done ? '<path d="m8 12.5 2.8 2.8L16.2 9.6"/>' : ""}</svg>`;
+      return st.done ? `<div class="setrow stepdone">${ring}<span class="st"><b>${esc(st.text)}</b></span><span class="sronly">Done</span></div>`
+        : `<button class="setrow" data-action="tab" data-tab="${st.tab}">${ring}<span class="st"><b>${esc(st.text)}</b></span><svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>`; }).join("")}</div>
     <h2>Good to know</h2>
     <div class="card"><ol class="notes icons">${M.QUICK_NOTES.map((n, i) => `<li>${noteIcon(i)}<span>${esc(n)}</span></li>`).join("")}</ol></div>
-    <p><button class="link" data-action="open-notice">Read the first-run notice again</button></p>
+    <p><button class="link" data-action="open-notice">Read the first-run notice again</button></p>${device.status === "OK" || device.status === "EMPTY" ? `<p><button class="link" data-action="open-preview">Preview the first-run setup</button></p><p class="note small">Nothing is kept, and your ledger is not touched.</p>` : ""}
     <h2>Watch how it works</h2><p class="note">${esc(M.HOWTO_HINT)}</p>
     <div class="clips">${M.HOWTOS.map((h) => `<button class="clipbtn" data-action="open-howto" data-id="${h.id}">${play}<span>${esc(h.label)}</span></button>`).join("")}</div>
     <h2>Guides</h2><p class="note">What each screen is for, and what to do on it.</p>
@@ -1749,7 +1759,7 @@ function viewSetup() {
     ["backup", "backup", "Backup and restore", (() => { const d = M.daysSinceBackup(ledger.settings, today()); return d === null ? "No backup yet" : d === 0 ? "Backed up today" : "Last backup " + d + (d === 1 ? " day ago" : " days ago"); })()],
     ["statements", "statements", "Statements", stmSub()],
     ["appearance", "appearance", "Appearance", look === "auto" ? "Match my phone" : look === "dark" ? "Dark" : "Light"],
-    ...(device.status === "TRIAL" ? [] : [["lock", "lock", "App lock", lockActive ? "Locks when opened and after 1 minute away" : "Off", lockActive ? "On" : "Off"]]),
+    ...(scratchCopy() ? [] : [["lock", "lock", "App lock", lockActive ? "Locks when opened and after 1 minute away" : "Off", lockActive ? "On" : "Off"]]),
     ["about", "info", "About this app", M.isDevBuild() ? "Development copy" : "Version " + M.APP_BUILD],
   ];
   if (flat) return `<h1>Setup</h1><p class="sub">Accounts. The ledger is on this phone only.</p>${blocks.accounts}${blocks.categories}${blocks.budget}${blocks.backup}${blocks.about}`;
@@ -2771,7 +2781,7 @@ const frSwitch = (action, on, label) => `<button class="chip frchip" data-action
 function frBody() {
   const fr = ui.fr, f = ui.form, n = fr.step, anim = fr.anim ? ` fr-${fr.anim}` : "";
   fr.anim = null;   // slides once, when the step changes; a redraw inside a step stays still
-  const head = `<div class="frbar" aria-hidden="true"><span style="width:${(n / M.FIRSTRUN_STEPS) * 100}%"></span></div><p class="frn">Step ${n} of ${M.FIRSTRUN_STEPS}</p>`;
+  const head = `<div class="frbar" aria-hidden="true"><span style="width:${(n / M.FIRSTRUN_STEPS) * 100}%"></span></div><p class="frn">Step ${n} of ${M.FIRSTRUN_STEPS}</p>${device.status === "PREVIEW" ? `<p class="note small" id="fr-preview" role="status">Preview: nothing is kept, and your ledger is not touched. <button class="link" data-action="end-preview">End preview</button></p>` : ""}`;   // the preview says so on every step (the full-screen steps cover the banner)
   const backNext = (next = "Next") => `<div class="frpair"><button data-action="fr-back">Back</button><button class="primary" data-action="fr-next">${next}</button></div>`;
   let page = "", acts = "";
   if (n === 1) {
@@ -2803,16 +2813,16 @@ function frBody() {
       <p class="note small">What reaches your account. Payslips can take over later.</p>${fr.err ? `<p id="fr-err" role="alert" class="note"><b>${esc(fr.err)}</b></p>` : ""}`;
     acts = `${backNext()}<p><button data-action="fr-later" style="width:100%">Later</button></p>`;
   } else if (n === 4) {
-    const lockRow = device.status === "TRIAL" ? "" : `<div class="frrow"><span class="st"><b>App lock</b><small>Face or fingerprint, with a 6-digit PIN as the spare.</small></span>${frSwitch("lock-toggle", lockActive, "App lock")}</div>`;
-    page = `<h3 class="frtitle">Keep it safe</h3><p class="note">Optional. Both can be changed in Setup.</p>
+    const lockRow = scratchCopy() ? "" : `<div class="frrow"><span class="st"><b>App lock</b><small>Face or fingerprint, with a 6-digit PIN as the spare.</small></span>${frSwitch("lock-toggle", lockActive, "App lock")}</div>`;
+    page = `<h3 class="frtitle">Keep it safe</h3><p class="note">${scratchCopy() ? "Optional. It can be changed in Setup." : "Optional. Both can be changed in Setup."}</p>
       <div class="card frlist">${lockRow}<div class="frrow"><span class="st"><b>Backup reminder</b><small>A line on Log when the last backup is a week old.</small></span>${frSwitch("toggle-backup-reminder", M.backupReminderOn(ledger.settings), "Backup reminder")}</div></div>
-      <p><button data-action="open-backup" data-all="1" style="width:100%">Make a backup now</button></p><p class="note small">${esc(backupAgeText())}</p>`;
+      ${device.status === "PREVIEW" ? "" : `<p><button data-action="open-backup" data-all="1" style="width:100%">Make a backup now</button></p><p class="note small">${esc(backupAgeText())}</p>`}`;   // the preview makes no backup: it would hold only the scratch ledger
     acts = `${backNext()}<p><button data-action="fr-later" style="width:100%">Later</button></p>`;
   } else {
     const r = M.firstRunSummary(S(), ledger.settings, { lockOn: lockActive }), row = (l, v, sub) => `<div class="frrow"><span class="st"><b>${l}</b>${sub ? `<small>${sub}</small>` : ""}</span><span class="amt">${v}</span></div>`;
     page = `<h3 class="frtitle">You are set</h3><p class="note">Everything here can be changed in Setup.</p>
       <div class="card frlist">${row("In your accounts", r.accounts ? peso(r.have) : "None yet", r.accounts ? r.accounts + (r.accounts === 1 ? " account" : " accounts") : "Add them in Setup, Accounts")}${r.cards ? row("Owed on cards", peso(r.owed), r.cards + (r.cards === 1 ? " card" : " cards")) : ""}
-        ${row("Pay each month", r.pay ? peso(r.pay) : r.paydays ? "Not typed" : "Not set", r.paydays ? esc(r.paydays) : "")}${device.status === "TRIAL" ? "" : row("App lock", r.lock ? "On" : "Off")}${row("Backup reminder", r.reminder ? "On" : "Off")}</div>
+        ${row("Pay each month", r.pay ? peso(r.pay) : r.paydays ? "Not typed" : "Not set", r.paydays ? esc(r.paydays) : "")}${scratchCopy() ? "" : row("App lock", r.lock ? "On" : "Off")}${row("Backup reminder", r.reminder ? "On" : "Off")}</div>
       <div class="card frlist"><div class="frrow"><span class="st"><b>Categories: ${r.categories} to start</b><small>Your categories, your names. Rename them, set each to Needs, Wants or Savings, add your own and remove what you do not use.</small></span></div>
         <p><button data-action="fr-cats" style="width:100%">Edit categories</button></p></div>`;
     acts = `<p><button class="primary" data-action="fr-finish">${r.accounts ? "Log your first expense" : "Start using fo/und"}</button></p><p><button data-action="fr-back" style="width:100%">Back</button></p>`;
@@ -2841,11 +2851,14 @@ async function frAddAccount() {
   renderSheet(); return true;
 }
 async function frFinish(then) {
+  if (device.status === "PREVIEW") { await endPreview(); return; }   // the preview ends with its last step: back to the real ledger, nothing kept
   const { firstrun_step, ...rest } = ledger.settings;
   ui.fr = null; ui.sheet = null; renderSheet();
   await commit(S(), { ...rest, firstrun_done: M.phTimestamp() }, { quiet: true });
   then?.();
 }
+// Ends the first-run preview: its scratch storage is wiped and the app opens again on the real ledger (the same address without ?preview).
+async function endPreview() { if (device.status !== "PREVIEW") return; await clearTrialStorage(); location.replace(location.pathname); }
 // The welcome card of a new install: shown after the first-run notice and again on later starts until you tap Make it mine, or tick "Don't show this again", or log something.
 function maybeWelcome() {
   if (!ledger.settings.welcome_pending || ledger.settings.welcome_off || S().transactions.length) return;
@@ -4248,6 +4261,8 @@ async function onClick(el) {
     case "warn-save": answerOverdraw(true, false); break;
     case "warn-cancel": answerOverdraw(false, false); break;
     case "warn-income": answerOverdraw(false, true); break;
+    case "end-preview": await endPreview(); break;
+    case "open-preview": location.assign(location.pathname + "?preview"); break;   // Help: the setup steps in scratch storage (the real ledger is not touched)
     case "reset-trial": {
       if (!ui.confirmTrial) { ui.confirmTrial = true; renderBanner(); break; }
       await clearTrialStorage(); location.reload(); break;
@@ -4471,6 +4486,7 @@ async function onClick(el) {
       break;
     }
     case "lock-toggle": {
+      if (scratchCopy()) break;   // the lock has one real key: never from a trial copy or the preview
       if (lockActive) { enterLocked("off"); break; }   // turning it off needs the PIN or Face ID first
       ui.sheet = { type: "lock-on" }; ui.form = { lpin: "", lpin2: "" }; renderSheet(); break;
     }
@@ -6308,11 +6324,14 @@ for (const id of ["sheet", "warn", "menu"]) { const el = $(id); if (el) new Muta
 async function start() {
   const platform = M.detectPlatform(navigator.userAgent);
   const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
-  const trial = new URLSearchParams(location.search).has("trial") && M.trialAllowed({ platform, standalone });   // never in an installed (Home Screen) app, on any phone
+  const preview = new URLSearchParams(location.search).has("preview");   // the first-run preview: its own scratch storage, wiped now and when it ends
+  const trial = !preview && new URLSearchParams(location.search).has("trial") && M.trialAllowed({ platform, standalone });   // never in an installed (Home Screen) app, on any phone
+  if (preview) { usePreviewStorage(); await clearTrialStorage(); }
   if (trial) useTrialStorage();
   const { local, idb } = await readBoth();
   const present = (v) => (v === undefined ? null : v !== null && v.length > 0);
-  device = M.assessDevice({ platform, standalone, stores: { local: present(local), idb: present(idb) }, trial });
+  device = M.assessDevice({ platform, standalone, stores: { local: present(local), idb: present(idb) }, trial, preview });
+  installHint = !standalone && platform !== "ios" && device.allowEntry && device.status !== "TRIAL" && device.status !== "PREVIEW" && !(await storageProtected());
   boot = M.chooseLedger(local ?? null, idb ?? null);
   { const main = idb ?? local; if (main) { ui.ledgerBytes = M.ledgerBytes(main); ui.mirror = !!local && local === idb; } }
   if (boot.status === "CORRUPT") {
@@ -6337,7 +6356,7 @@ async function start() {
   try { justReplaced = JSON.parse(sessionStorage.getItem(RESTORED_FLAG) ?? "null"); sessionStorage.removeItem(RESTORED_FLAG); } catch { justReplaced = null; }
   if (justReplaced && device.allowEntry && boot.status === "OK" && ui.restoreCopies[0] && !ui.sheet) ui.sheet = { type: "replaced", kind: justReplaced.kind, pictures: justReplaced.pictures ?? 0 };
   setBase(boot.status === "NONE" ? null : ledger); watchOtherWindows(noteElsewhere);   // from here on a save is refused when another window saved first (a brand-new phone starts from an empty store, and says so)
-  if (!trial) {   // the lock is read AFTER the data is checked but BEFORE anything is drawn; a trial copy never has one
+  if (!trial && !preview) {   // the lock is read AFTER the data is checked but BEFORE anything is drawn; a trial copy and the preview never have one
     lockRec = await readLock();
     if (M.lockOn(lockRec)) { lockActive = true; applyAppearance(); await new Promise((go) => { lockWaiter = go; enterLocked("open"); }); }
   }

@@ -91,3 +91,13 @@ test("without ?trial an Android tab is the real ledger (empty on first run); a t
   assert.equal(r.status, "STORAGE_UNAVAILABLE");
   assert.equal(r.allowEntry, false);
 });
+
+test("the first-run preview (Nov 21) runs on any device, an iPhone's Safari tab and the installed app too, and says nothing is kept", () => {
+  for (const platform of ["ios", "android", "other"]) for (const standalone of [true, false]) {
+    const r = assessDevice({ platform, standalone, stores: both(false), preview: true });
+    assert.equal(r.status, "PREVIEW", platform + " " + standalone); assert.equal(r.allowEntry, true);
+    assert.match(r.message, /Nothing is kept/); assert.match(r.message, /your ledger is not touched/);
+  }
+  assert.equal(assessDevice({ platform: "ios", standalone: true, stores: both(true), preview: true, trial: true }).status, "PREVIEW", "the preview wins over ?trial");
+  assert.equal(assessDevice({ platform: "ios", standalone: true, stores: { local: null, idb: false }, preview: true }).status, "STORAGE_UNAVAILABLE");
+});
