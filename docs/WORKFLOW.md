@@ -223,5 +223,7 @@ Open decisions (do not assume): 1 Income Trends by payment date; 2 a cash advanc
 as already deducted; 4 zero and negative net pay; 5 phone-local mappings in backups; 6 budget order of funding and the wants cap;
 7 the restore safety copy; 8 scheduled payments link automatically or ask first; 9 rename "Buffer".
 
+App link (use this one in every report): https://civilengineer117612-png.github.io/fo-und/app/ (the site root forwards there; tests/app.test.js).
+
 Owner-only actions: add "e2e" as a required check in the ruleset; remove the Vercel project and its GitHub
 access; edit the six old PR descriptions; scan your own payslip and compare every line with paper; decide on git history.
