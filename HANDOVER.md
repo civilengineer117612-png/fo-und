@@ -12,9 +12,8 @@
 - The Ledger Paper look, light and dark. The standard is `docs/UI.md`; accounting rules are `docs/ACCOUNTING.md`; every rule is in `CLAUDE.md`.
 
 ## What is not built yet
-The open list with its order is `docs/WORKFLOW.md`, PART 7. In short (Nov 16): the rest of the overhaul's small fixes (L10, L11 speed;
-L13, F5 windows and the keyboard; A8 titles; the rest of A11 test isolation; drag down to close a
-window), the screens one at a time with less text, and the Weekly review with less text (waits on the owner's answer).
+The open list with its order is `docs/WORKFLOW.md`, PART 7. In short (Nov 22): the overhaul is done; the owner declares 1.0.0 after his
+iPhone checks. After 1.0.0: the screens one at a time with less text, and the Weekly review with less text (waits on the owner's answer).
 
 ## Back up and restore
 Setup, Back up now makes ONE encrypted file with the ledger and every picture (parts only past 50 MB). Keep the passphrase: it cannot be
