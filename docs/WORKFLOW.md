@@ -214,21 +214,20 @@ OVERHAUL (owner, Nov 12: Phase 1 report approved, rows A1 to A11; data loss firs
   tests/verifiedwords.test.js); A6 is L1; A9 kept as merged; L15 a Log row joins only the parts it has (no stray dots); F8 the scan ring: already clear since the Cards rework (43 px at 320 wide), now guarded by e2e/ui-audit.mjs on every screen; A8 titles (Nov 21: Plan & Save and Weekly review show their name at the top; Weekly review's first tab is This week); L10, L11 speed (Nov 20: search 35 to 65 ms a key on 4,000 entries at a phone's speed, was 2 to 4.6 s; the Weekly review opens in about 0.9 s, was 2.3 s).
 - DONE Nov 22: A11 (each long e2e block its own ledger: 5e as 15 blocks from recorded seeds, `fromSeed`; 6w as 19 blocks; 5f as 8 blocks;
   5g stays one payslip flow); Android ready and L13, F5, pull to close (#372); versions and release notes (#373); the final report.
-- AFTER 1.0.0 (owner, Nov 22): the screens one at a time with less text, a picture first for each (Log and Verify, Spending, Budget and Goals,
-  Cards and Setup, Weekly review and Checks); the Weekly review with less text (waits on the owner's answer: which text is read and which is
-  skipped). The owner declares 1.0.0 once the final report and his iPhone checks are done (among them: in fo/und opened from the Home Screen,
-  a box low in a window stays above the keyboard; on an Android phone: install from Chrome, Back closes a window, fingerprint unlock).
-- FINDING (S2, WebKit, Nov 20): the window jump came back once on main (sheet-scroll repeat 20 of 20: 212 to 151 the instant Paid from's list
-  opened; the re-run was green), about 1 in 100 repeats. sheet-scroll now prints a timeline for a repeat that moves; the next one names its moment.
+- 1.0.0 RELEASED (Nov 22, unattended task): backups hold everything (#375); decisions 1, 2, 3, 8, the split leftovers and "other money in"
+  (#376); less text on every screen, Trips as rows with a window and a picture (#377); the release (CHANGELOG: Unreleased became 1.0.0).
+  NOT BUILT, after 1.0.0: lowering a loan's balance from payroll repayments (needs a loan account kind: a data-shape change).
+  The owner's iPhone checks are in the final report (among them: in fo/und opened from the Home Screen, a box low in a window stays above
+  the keyboard; on an Android phone: install from Chrome, Back closes a window, fingerprint unlock).
+- FINDING CLOSED (Nov 22): the sheet-scroll jump (212 to 151) was the script scrolling while the window was still sliding up; it now waits
+  for the slide to end (160 repeats clean under load, 3 of 4 runs moved without it). What is checked is unchanged.
 - Docs (PR 23, Nov 16): docs/UI.md, HANDOVER.md, README.md and this PART 6 and 7 brought up to date.
 
 P2 (wait for "next"): voice entry disclosure in Help and the first-run notice; library licence note; trim
 contradictions in CLAUDE.md; Android block decision; custom domain plan; Trips year grouping and period picker; ratchet screen;
 splitting `app/app.js`.
 
-Open decisions (do not assume): 1 Income Trends by payment date; 2 a cash advance as borrowed money; 3 payroll loan repayments shown
-as already deducted; 4 zero and negative net pay; 5 phone-local mappings in backups; 6 budget order of funding and the wants cap;
-7 the restore safety copy; 8 scheduled payments link automatically or ask first; 9 rename "Buffer".
+Open decisions: none. Decisions 1 to 9 were made on Nov 22 (CLAUDE.md, DECISIONS OF NOV 22).
 
 App link (use this one in every report): https://civilengineer117612-png.github.io/fo-und/app/ (the site root forwards there; tests/app.test.js).
 

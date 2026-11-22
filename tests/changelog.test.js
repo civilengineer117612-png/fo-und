@@ -47,8 +47,11 @@ test("a release moves Unreleased under the new number, dated, leaves Unreleased 
   assert.deepEqual(log.releases.map((x) => [x.version, x.date]), [["1.2.0", "2027-01-05"], ["1.1.0", "2026-12-20"], ["1.0.0", "2026-12-01"]]);
   assert.deepEqual(log.releases[0].notes, { new: ["Budget by year."], improved: [], fixed: ["A fix."] });
   assert.equal(cutRelease(sample(""), { date: "2027-01-05" }).ok, false);
-  const first = cutRelease(LOG, { date: "2027-01-05" });
-  assert.equal(first.version, "1.0.0", "today's notes become 1.0.0, the end of the overhaul");
+  // RELEASED (owner, Nov 22): the overhaul's notes became 1.0.0, the first version; nothing waits under Unreleased, so a release now refuses.
+  const live = parseChangelog(LOG);
+  assert.deepEqual(live.releases.map((x) => x.version), ["1.0.0"], "1.0.0 is the first and only version");
+  assert.ok(noteCount(live.releases[0].notes) > 0, "1.0.0 carries the overhaul's notes");
+  assert.equal(cutRelease(LOG, { date: "2027-01-05" }).ok, false, "nothing under Unreleased: no release");
 });
 test("What's new: every version missed, newest first; once seen, nothing; an older phone sees them all once; nothing while no version exists", () => {
   const log = parseChangelog(sample());
@@ -56,7 +59,8 @@ test("What's new: every version missed, newest first; once seen, nothing; an old
   assert.deepEqual(missedReleases(log, "0.0.0").map((r) => r.version), ["1.1.0", "1.0.0"], "several missed: all of them, newest first");
   assert.deepEqual(missedReleases(log, undefined).map((r) => r.version), ["1.1.0", "1.0.0"], "a phone in use before versions began");
   assert.deepEqual(missedReleases(log, "1.1.0"), [], "shown once: the version seen is the newest");
-  assert.deepEqual(missedReleases(parseChangelog(LOG), undefined), [], "no version released yet: no pop-up");
+  assert.deepEqual(missedReleases(parseChangelog(LOG), undefined).map((r) => r.version), ["1.0.0"], "the owner's phone, in use before versions began, sees 1.0.0 once");
+  assert.deepEqual(missedReleases(parseChangelog("# Changelog\n\n## Unreleased\n\n### New\n- A thing.\n"), undefined), [], "no version released yet: no pop-up");
 });
 test("a new phone gets the first-run setup, never What's new: it starts having seen the current version", () => {
   const app = read("app/app.js");
@@ -69,7 +73,8 @@ test("a new phone gets the first-run setup, never What's new: it starts having s
 test("About this app tells builds apart: the version and the build date between releases", () => {
   const log = parseChangelog(sample());
   assert.equal(versionLine(log, { built: "Nov 21, 2026", build: "abc1234", dev: false }), "Version 1.1.0 · build of Nov 21, 2026 (abc1234)");
-  assert.equal(versionLine(parseChangelog(LOG), { built: "Nov 21, 2026", build: "abc1234", dev: false }), "Not released yet (the first version is 1.0.0) · build of Nov 21, 2026 (abc1234)");
+  assert.equal(versionLine(parseChangelog(LOG), { built: "Nov 22, 2026", build: "abc1234", dev: false }), "Version 1.0.0 · build of Nov 22, 2026 (abc1234)");
+  assert.equal(versionLine(parseChangelog("# Changelog\n\n## Unreleased\n\n### New\n- A thing.\n"), { built: "Nov 21, 2026", build: "abc1234", dev: false }), "Not released yet (the first version is 1.0.0) · build of Nov 21, 2026 (abc1234)");
   assert.match(versionLine(log, { dev: true }), /development copy/);
 });
 test("CI: an app change needs a new line under Unreleased, unless the description says no user-facing change", () => {
@@ -79,7 +84,8 @@ test("CI: an app change needs a new line under Unreleased, unless the descriptio
   assert.equal(changelogCheck({ files: ["app/app.js", "CHANGELOG.md"], before, after: withLine, body: "" }).ok, true);
   assert.equal(changelogCheck({ files: ["app/app.js"], before, after: before, body: "Tests only.\nNo user-facing change." }).ok, true);
   assert.equal(changelogCheck({ files: ["tests/x.test.js", "docs/WORKFLOW.md"], before, after: before, body: "" }).ok, true);
-  assert.equal(changelogCheck({ files: ["app/app.js"], before: null, after: LOG, body: "" }).ok, true, "the first changelog counts");
+  assert.equal(changelogCheck({ files: ["app/app.js"], before: null, after: withLine, body: "" }).ok, true, "the first changelog counts");
+  assert.equal(changelogCheck({ files: ["CHANGELOG.md", "src/model/changelogtext.js"], before: withLine, after: LOG, body: "" }).ok, true, "a release changes no app file, so it needs no new line");
   assert.equal(changelogCheck({ files: ["app/app.js"], before, after: "## 1.x (2026-01-01)\n", body: "" }).ok, false, "an unreadable changelog fails");
   const yml = read(".github/workflows/test.yml");
   assert.match(yml, /- name: A changelog line for a change users see\n\s+if: github\.event_name == 'pull_request'\n\s+env:\n\s+BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}\n\s+PR_BODY: \$\{\{ github\.event\.pull_request\.body \}\}\n\s+run: node tools\/changelog-check\.mjs/, "the description reaches the script only as an environment value");
