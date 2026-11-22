@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  addSchedule, setDueDay, setDetail, removeSchedule, statusOf, detailsAt, pastPayments, madeAfterAnswers, markAlreadyPaid, makeDueDrafts, setNewAmount, skipPayment, endSchedule, markPaidOff, markNextDue, payNext, skipOnDelete, viewOf, dueSoon, daysText, planLine,
+  addSchedule, suggestedLink, confirmLink, setDueDay, setDetail, removeSchedule, statusOf, detailsAt, pastPayments, madeAfterAnswers, markAlreadyPaid, makeDueDrafts, setNewAmount, skipPayment, endSchedule, markPaidOff, markNextDue, payNext, skipOnDelete, viewOf, dueSoon, daysText, planLine,
   committedIn, matchDueDraft, nextOpenPayment, reserveForPlan, reserveIdFor, payKey, skippedOf, linkToDue, planInText, paymentState, paymentsOf, monthsAfter, verifyDraft, discardDraft, editDraftFields, validateShape, validateState,
   encryptLedgerBackup, decryptLedgerBackup, upgradeLedger, parseLedger, selfCheck, LEDGER_VERSION, INTEREST_ROLE, COLLECTION_NAMES,
 } from "../src/model/index.js";
@@ -297,27 +297,38 @@ const logged = (s, id, date, amount, payee = "Landlord", status = "verified") =>
   s.entries.push({ transaction_id: id, category_id: cat, amount }, { transaction_id: id, account_id: "bank", amount: -amount });
   return s;
 };
-test("a rent you logged yourself near its due day is linked, not doubled", () => {
+test("DECISION 8: a rent you logged yourself near its due day is SUGGESTED, never linked by the app; the owner's tap links it and nothing is doubled", () => {
   const s = logged(rentIn(base()), "mine", "2026-10-04", 500000);
   const r = makeDueDrafts(s, "2026-10-05", {});
-  assert.deepEqual(r.made, ["linked:sch:r1:2026-10"]);
-  assert.equal(r.state.transactions.filter((t) => t.schedule_id).length, 0, "no second entry was made");
-  assert.equal(paymentState(r.state, r.state.schedules[0], "2026-10"), "verified");
-  assert.equal(statusOf(r.state, r.state.schedules[0], "2026-10-05").state, "paid");
-  assert.equal(statusOf(r.state, r.state.schedules[0], "2026-10-05").paidOn, "2026-10-04");
-  assert.equal(makeDueDrafts(r.state, "2026-10-05", {}).made.length, 0, "and it is not made again");
+  assert.deepEqual(r.made, ["sch:r1:2026-10"], "the draft is made: the app links nothing by itself");
+  assert.equal(r.state.scheduleChanges.filter((c) => c.kind === "linked").length, 0, "no link row is written without a tap");
+  assert.deepEqual(suggestedLink(r.state, "sch:r1:2026-10"), { id: "mine", gap: 1 }, "Verify suggests the entry you logged");
+  const c = confirmLink(r.state, "sch:r1:2026-10", "mine", NOW);
+  assert.equal(c.ok, true);
+  assert.equal(c.state.transactions.filter((t) => t.schedule_id).length, 0, "after the tap the waiting draft is gone: no second entry");
+  assert.deepEqual(c.state.transactions.find((t) => t.id === "mine"), r.state.transactions.find((t) => t.id === "mine"), "the entry you logged is not edited");
+  assert.equal(paymentState(c.state, c.state.schedules[0], "2026-10"), "verified");
+  assert.equal(statusOf(c.state, c.state.schedules[0], "2026-10-05").state, "paid");
+  assert.equal(statusOf(c.state, c.state.schedules[0], "2026-10-05").paidOn, "2026-10-04");
+  assert.equal(makeDueDrafts(c.state, "2026-10-05", {}).made.length, 0, "and it is not made again");
+  assert.equal(confirmLink(r.state, "sch:r1:2026-10", "other", NOW).ok, false, "a tap can link only the suggested entry");
 });
-test("an entry of a different amount, a different category or far away is not taken for the payment", () => {
+test("an entry of a different amount, a different category or far away is not suggested for the payment", () => {
   const far = makeDueDrafts(logged(rentIn(base()), "x", "2026-09-20", 500000), "2026-10-05", {});
   const odd = makeDueDrafts(logged(rentIn(base()), "y", "2026-10-04", 90000), "2026-10-05", {});
   assert.deepEqual([far.made, odd.made], [["sch:r1:2026-10"], ["sch:r1:2026-10"]]);
+  assert.deepEqual([suggestedLink(far.state, "sch:r1:2026-10"), suggestedLink(odd.state, "sch:r1:2026-10")], [null, null]);
 });
 test("one entry stands for one payment only", () => {
   let s = logged(rentIn(base(), { start: "2026-09-05" }), "mine", "2026-09-30", 500000);   // between Sep 5 and Oct 5, but nearer Oct 5
   s = makeDueDrafts(s, "2026-10-05", {}).state;
-  const linked = s.scheduleChanges.filter((c) => c.kind === "linked");
-  assert.equal(linked.length, 1);
-  assert.equal(s.transactions.filter((t) => t.schedule_id).length, 1, "the other month still gets its own draft");
+  const sug = ["sch:r1:2026-09", "sch:r1:2026-10"].map((id) => suggestedLink(s, id)?.id ?? null);
+  assert.equal(sug.filter(Boolean).length >= 1, true);
+  const pick = ["sch:r1:2026-09", "sch:r1:2026-10"].find((id) => suggestedLink(s, id));
+  s = confirmLink(s, pick, "mine", NOW).state;
+  assert.equal(s.scheduleChanges.filter((c) => c.kind === "linked").length, 1);
+  assert.equal(["sch:r1:2026-09", "sch:r1:2026-10"].filter((id) => id !== pick).map((id) => suggestedLink(s, id)).every((x) => x === null), true, "once linked, the entry is suggested for no other payment");
+  assert.equal(s.transactions.filter((t) => t.schedule_id).length, 1, "the other month keeps its own draft");
 });
 test("the due day, name, account and category can change from a date, and earlier months keep theirs", () => {
   let s = rentIn(base(), { start: "2026-09-05" });
@@ -374,8 +385,11 @@ test("an entry is claimed by one plan only", () => {
   let s = logged(rentIn(base()), "mine", "2026-10-04", 500000);
   s = add(s, { ...rent({ start: "2026-10-05" }), id: "r2", name: "Rent too" });
   const r = makeDueDrafts(s, "2026-10-05", {});
-  assert.equal(r.state.scheduleChanges.filter((c) => c.kind === "linked").length, 1, "only one plan took it");
-  assert.equal(r.state.transactions.filter((t) => t.schedule_id).length, 1, "the other made its own draft");
+  const first = ["sch:r1:2026-10", "sch:r2:2026-10"].find((id) => suggestedLink(r.state, id));
+  const c = confirmLink(r.state, first, "mine", NOW);
+  assert.equal(c.state.scheduleChanges.filter((x) => x.kind === "linked").length, 1, "only one plan took it");
+  assert.equal(["sch:r1:2026-10", "sch:r2:2026-10"].filter((id) => id !== first).every((id) => suggestedLink(c.state, id) === null), true, "the other plan is not offered it any more");
+  assert.equal(c.state.transactions.filter((t) => t.schedule_id).length, 1, "the other keeps its own draft");
 });
 test("moving the due day inside a month still leaves one payment that month", () => {
   let s = rentIn(base());

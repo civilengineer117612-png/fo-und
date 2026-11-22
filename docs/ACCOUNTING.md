@@ -16,6 +16,12 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 - **Paying for others** (a split): the whole amount leaves the account you paid from; only your share is spending. The rest is owed to you and is not spending.
 - **Being paid back** is a transfer from what you are owed into the account that received it. It is never income and never a refund.
 - **A share that will not be paid** becomes your spending on the day you say so, in the category the purchase was in.
+- **Money lent** (owner, Nov 22: a payment that is ALL someone else's) is owed to you in full and is not spending; given up, it is spending in Uncategorized.
+- **A cash advance** (owner, Nov 22) is borrowed money: a move from the card (what is owed goes up) to where the cash went. Never income, never spending; its fee is.
+- **A payroll loan repayment** (owner, Nov 22) is already deducted from the pay: only the deposit is money in, and the repayment is never spending. Lowering
+  a loan's balance needs a loan account, which the ledger does not have yet (after 1.0.0).
+- **Income counts by its deposit date** everywhere, Trends included (owner, Nov 22, confirming the rule above).
+- **Money in that is not pay** (interest, cashback, other income) is shown on its own line in Budget, never added to Received (principle 10).
 
 ## The principles
 

@@ -82,8 +82,8 @@ await page.fill('#sheet [data-field="sh:1:name"]', "Ben");
 ok((await amountOf(0)) === "1,000.00" && (await amountOf(1)) === "1,000.00" && (await text("#share-yours")) === "₱1,000.00", "three people: 1,000.00 each and your share ₱1,000.00");
 await page.fill('#sheet [data-field="sh:0:amt"]', "500");
 ok((await amountOf(1)) === "1,250.00" && (await text("#share-yours")) === "₱1,250.00", "typing Ana's part as 500 shares the rest equally: Ben 1,250.00, you ₱1,250.00");
-await page.fill('#sheet [data-field="sh:0:amt"]', "3,000");
-ok(await page.isDisabled("#f-save") && (await text("#share-why")) === "Your own share must be more than zero.", "the others cannot owe all of it: Save waits and says so");
+await page.fill('#sheet [data-field="sh:0:amt"]', "3,000.01");   // owner, Nov 22: all of it may be lent (your share zero), never more than was paid
+ok(await page.isDisabled("#f-save") && (await text("#share-why")) === "The others cannot owe more than you paid.", "the others cannot owe more than was paid: Save waits and says so");
 await page.fill('#sheet [data-field="sh:0:amt"]', "");
 ok((await amountOf(1)) === "1,000.00" && (await text("#share-yours")) === "₱1,000.00" && !(await page.isDisabled("#f-save")), "emptying Ana's part goes back to equal parts");
 await page.locator('#sheet [data-field="sh:1:amt"]').focus();   // Save is tapped straight after the last box, as a finger does

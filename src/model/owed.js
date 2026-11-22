@@ -27,7 +27,7 @@ const sum = (xs) => xs.reduce((n, x) => n + x, 0);
 
 // Who owes what of ONE payment. input: {total (centavos paid), shares: [{name, amount}], ids: {account, people: [..]}}: fresh ids, used only when the "Owed to me"
 // account or a person does not exist yet (the model makes no ids). Returns {ok, state (with the account and the new people, nothing else), owed_account_id,
-// shares: [{person_id, amount}], yours}. Your own share must be more than zero: a payment that is ALL someone else's is not a split.
+// shares: [{person_id, amount}], yours}. Your own share may be zero: a payment that is ALL someone else's is money LENT (owner, Nov 22).
 export function planShares(state, { total, shares, ids = {} }) {
   if (!Number.isSafeInteger(total) || total <= 0) return fail("BAD_AMOUNT", "amount must be more than zero");
   if (!Array.isArray(shares) || shares.length === 0) return fail("NO_SHARES", "add at least one person");
@@ -49,7 +49,9 @@ export function planShares(state, { total, shares, ids = {} }) {
     out.push({ person_id: p.id, amount: s.amount });
   }
   const owed = sum(out.map((s) => s.amount));
-  if (owed >= total) return fail("NO_SHARE_LEFT", "the others cannot owe the whole amount: your own share must be more than zero");
+  // Owner, Nov 22 (split leftovers, decided by docs/ACCOUNTING.md principle 13 and the recognition rule "only your share is spending"): money paid ALL for
+  // someone else is LENT: your share is zero, nothing is spending, and the whole amount is owed to you. Owing more than was paid is still refused.
+  if (owed > total) return fail("OWED_TOO_MUCH", "the others cannot owe more than was paid");
   let accounts = state.accounts, account = owedAccount(state);
   if (!account) {
     if (!ids.account) return fail("NO_ID", "no id for the Owed to me account");
@@ -65,7 +67,8 @@ export function shareEntries(entries, transactionId, owedAccountId, shares) {
   const cats = entries.filter((e) => e.category_id != null);
   if (cats.length !== 1) return null;
   const owed = sum(shares.map((s) => s.amount));
-  return [{ ...cats[0], amount: cats[0].amount - owed }, ...entries.filter((e) => e.category_id == null),
+  const mine = cats[0].amount - owed;   // your share; zero when it was all lent (then no category line: nothing of it is spending)
+  return [...(mine > 0 ? [{ ...cats[0], amount: mine }] : []), ...entries.filter((e) => e.category_id == null),
     ...shares.map((s) => ({ transaction_id: transactionId, account_id: owedAccountId, person_id: s.person_id, amount: s.amount }))];
 }
 
@@ -191,6 +194,7 @@ export function owedKind(state, transactionId) {
     const owed = sum(mine.map((e) => e.amount)), yours = sum(cats.map((e) => e.amount));
     return { kind: "shared", total: owed + yours, yours, owed: mine.map(named) };
   }
+  if (mine.every((e) => e.amount > 0) && !cats.length && others.length) return { kind: "lent", total: sum(mine.map((e) => e.amount)), yours: 0, owed: mine.map(named) };   // all of it someone else's
   if (mine.length === 1 && mine[0].amount < 0 && !cats.length && others.length === 1) return { kind: "paid", ...named(mine[0]), to_id: others[0].account_id };
   if (mine.length === 1 && mine[0].amount < 0 && cats.length && !others.length) return { kind: "unpaid", ...named(mine[0]) };
   return null;

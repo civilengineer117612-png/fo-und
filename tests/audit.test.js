@@ -424,3 +424,37 @@ test("OWED TO ME (classification, control totals): your share is the spending, t
   assert.equal(M.planTransfer(S, { transaction_id: "bad2", date: "2026-10-20", from_account_id: "chk", to_account_id: owed.id, amount: 100, source: "manual" }, NOW).violations[0].code, "OWED_NEEDS_PERSON");
   assert.equal(M.planCheckIn(S, { id: "bad3", transaction_id: "bad4", date: "2026-10-20", account_id: owed.id, counted_balance: 5, unlogged_category_id: UL }, NOW).violations[0].code, "NOT_COUNTED");
 });
+
+// ---- The owner's decisions of Nov 22 (project chat) ----
+test("DECISION 1: income counts when it reaches the account: a payslip for Oct 16-31 paid on Nov 3 is November's income in every Income figure", () => {
+  const items = [["earning", "Basic Salary", 1000000], ["deduction", "SSS", 100000]].map(([section, label, amount]) => { const { via, via_overtime, ...d } = M.draftItem({ section, label, amount, employer: "Co", settings: {} }); return d; });
+  const r = M.planPayslip(ledger(), { id: "ps", transaction_id: "ptx", employer: "Co", period_from: "2026-10-16", period_to: "2026-10-31", pay_date: "2026-11-03", account_id: "chk", printed_gross: 1000000, printed_net: 900000, deposit: 900000, items }, NOW);
+  assert.ok(r.ok, JSON.stringify(r.violations)); assertTrial(r.state, "a payslip paid after its period");
+  assert.equal(M.incomeBySource(r.state, { from: "2026-10-01", to: "2026-10-31" }).total, 0, "nothing in October, where the period ended");
+  assert.equal(M.incomeBySource(r.state, { from: "2026-11-01", to: "2026-11-30" }).total, 900000, "the deposit counts in November, when it arrived");
+  const m = M.incomeMonths(r.state, { from: "2026-10-01", to: "2026-11-30" }).months;
+  assert.deepEqual(m.map((x) => [x.month, x.total]), [["2026-10", 0], ["2026-11", 900000]], "the month-by-month view (Trends) by deposit date");
+  assert.equal(M.netPerPayday(r.state, "2026")[0].date, "2026-11-03");
+});
+
+test("DECISION 2: a cash advance is borrowed money: the card owes more and the cash account holds more; no income and no spending", () => {
+  let s = ledger();
+  const before = { income: M.incomeBySource(s, { from: "2026-10-01", to: "2026-10-31" }).total, spent: M.spendingByCategory(s, { month: "2026-10" }).total, card: balanceOf(s, "card"), wal: balanceOf(s, "wal") };
+  s = transfer(s, "2026-10-12", "card", "wal", 300000);   // Move money from the card to the wallet: a cash advance
+  s = verifyAll(s); assertTrial(s, "a cash advance");
+  assert.equal(M.incomeBySource(s, { from: "2026-10-01", to: "2026-10-31" }).total, before.income, "never income");
+  assert.equal(M.spendingByCategory(s, { month: "2026-10" }).total, before.spent, "never spending");
+  assert.equal(balanceOf(s, "card") - before.card, 300000, "the card owes 3,000.00 more");
+  assert.equal(balanceOf(s, "wal") - before.wal, 300000, "the wallet holds 3,000.00 more");
+});
+
+test("DECISION 3: a payroll loan repayment is already deducted from the pay: it is never spending, and only the deposit counts as income", () => {
+  const items = [["earning", "Basic Salary", 1000000], ["deduction", "SSS Salary Loan", 150000], ["deduction", "Withholding Tax", 50000]].map(([section, label, amount]) => { const { via, via_overtime, ...d } = M.draftItem({ section, label, amount, employer: "Co", settings: {} }); return d; });
+  assert.equal(items.find((i) => i.label === "SSS Salary Loan").category, "loans", "a loan line is a Loan repayment");
+  const r = M.planPayslip(ledger(), { id: "ps", transaction_id: "ptx", employer: "Co", period_from: "2026-10-01", period_to: "2026-10-15", pay_date: "2026-10-15", account_id: "chk", printed_gross: 1000000, printed_net: 800000, deposit: 800000, items }, NOW);
+  assert.ok(r.ok); assertTrial(r.state, "a payslip with a loan repayment");
+  assert.equal(M.spendingByCategory(r.state, { month: "2026-10" }).total, 0, "the loan repayment is not spending anywhere");
+  assert.equal(M.incomeBySource(r.state, { from: "2026-10-01", to: "2026-10-31" }).total, 800000, "only the deposit is money in");
+  const loans = M.incomeByCategory(r.state, "2026").deduction.find((c) => c.category === "loans");
+  assert.deepEqual([loans.total, loans.items.map((i) => i.label)], [150000, ["SSS Salary Loan"]], "Income lists it with the deductions, under Loan repayments");
+});

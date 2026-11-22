@@ -3102,6 +3102,7 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   var bt = (await text(page, "#screen")).replace(/\s+/g, " ");
   check(bt.includes("₱30,000.00") && bt.includes("Your own figure") && bt.includes("Left: ₱17,500, not assigned") && await page.locator('#screen button[aria-pressed="true"]:has-text("Month")').count() === 1, "Month: the one income with its source, what is left, and the Month button pressed");
   check((await text(page, "#pay-line")).replace(/\s+/g, " ") === "Expected ₱30,000.00 · Received – · Difference –", "Month: Expected, Received and Difference, Received blank until pay is logged");
+  check(await page.locator("#other-in").count() === 0, "with no other money in, no such line");
   check(await page.locator('#screen button.primary').count() === 1 && (await text(page, '#screen button.primary')).includes("Suggest a budget"), "Suggest a budget is a real button, and the only filled one");
   check(await page.locator('button.catrow:has-text("Food")').first().innerText().then((t) => t.includes("₱5,000.00")), "Food is 5,000.00 for the month");
   check(!(await page.locator("#screen").innerText()).includes("Upskill") && bt.includes("Hidden (1)"), "a hidden category has no line: only the Hidden list");
@@ -3143,11 +3144,15 @@ var budgetSeed = (rules, extra = {}, tx = {}) => ({ ...OWNER_STYLE, settings: { 
   check(ledgerNow.state.rules.length === rulesBefore + 1 && ledgerNow.state.rules.at(-1).amount === 600000 && ledgerNow.state.rules.at(-1).effective_from === "2026-10-01" && ledgerNow.state.rules.slice(0, rulesBefore).every((r, i) => r.amount === [500000, 600000, 150000, 200000][i]), "one new dated rule from this month; the old rules are untouched");
   check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : "")); await ctx.close(); }
 { // a payday that is over offers to move an amount to the next payday: only when tapped
-  ({ ctx, page, errors } = await open({ blockSw: true, seed: budgetSeed([rule("r1", "cat-food", 1200000), rule("r2", "cat-rent", 600000), rule("r3", "cat-shopping", 1500000)], { payday_pins: { "cat-rent": 0 } }, { transactions: [{ id: "pay1", date: "2026-10-15", payee: "Pay received", memo: "", status: "verified", source: "manual", created_at: "2026-10-15T09:00:00.000+08:00", verified_at: "2026-10-15T09:00:00.000+08:00" }], entries: [{ transaction_id: "pay1", account_id: "w", amount: 1200000 }, { transaction_id: "pay1", category_id: "cat-salary", amount: -1200000 }] }) }));
+  ({ ctx, page, errors } = await open({ blockSw: true, seed: budgetSeed([rule("r1", "cat-food", 1200000), rule("r2", "cat-rent", 600000), rule("r3", "cat-shopping", 1500000)], { payday_pins: { "cat-rent": 0 } }, { transactions: [{ id: "pay1", date: "2026-10-15", payee: "Pay received", memo: "", status: "verified", source: "manual", created_at: "2026-10-15T09:00:00.000+08:00", verified_at: "2026-10-15T09:00:00.000+08:00" },
+    { id: "int1", date: "2026-10-15", payee: "Interest", memo: "", status: "verified", source: "manual", created_at: "2026-10-15T09:00:00.000+08:00", verified_at: "2026-10-15T09:00:00.000+08:00" }], entries: [{ transaction_id: "pay1", account_id: "w", amount: 1200000 }, { transaction_id: "pay1", category_id: "cat-salary", amount: -1200000 },
+    { transaction_id: "int1", account_id: "w", amount: 5000 }, { transaction_id: "int1", category_id: "cat-interest", amount: -5000 }] }) }));
   await menuGo(page, "Budget"); await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
+  check((await text(page, "#other-in")).replace(/\s+/g, " ") === "Other money in, not pay: ₱50.00", "other money in (interest) is its own line, never in Received (owner, Nov 22, by docs/ACCOUNTING.md)");
   check((await text(page, "#pay-line")).replace(/\s+/g, " ") === "Expected ₱15,483.87 · Received ₱12,000.00 · Difference ₱3,483.87 less", "once pay is logged in the payday's dates: Expected, Received and the Difference in words");
   await page.click('#screen button[data-action="bv-view"][data-id="month"]');
   check((await text(page, "#pay-line")).replace(/\s+/g, " ") === "Expected ₱30,000.00 · Received ₱12,000.00 · Difference ₱18,000.00 less", "and the month says the same three");
+  check((await text(page, "#other-in")).replace(/\s+/g, " ") === "Other money in, not pay: ₱50.00", "and the month shows the same line");
   await page.click('#screen button[data-action="bv-view"][data-id="payday"]');
   var mv = (await text(page, '#screen button[data-action="bv-move-pick"]')).replace(/\s+/g, " ");
   check(/^Move ₱[\d,.]+ to the next payday\?$/.test(mv) && (await text(page, "#screen")).includes("Over by"), "an over payday offers: " + mv);
@@ -4386,8 +4391,8 @@ console.log("\n-- The Emergency target --");
   check(errors.length === 0, "no script errors with the formula target: " + errors.join("; ")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
-// ===== Scheduled: a status on every row, Edit, Remove, and your own entry linked instead of doubled =====
-try { blockName = "Scheduled: a status on every row, Edit, Remove, and your own entry linked instead of doubled";
+// ===== Scheduled: a status on every row, Edit, Remove, and your own entry linked by your tap instead of doubled =====
+try { blockName = "Scheduled: a status on every row, Edit, Remove, and your own entry linked by your tap instead of doubled";
 console.log("\n-- Scheduled status, edit and remove --");
 { const T0b = new Date("2026-10-16T03:00:00Z"), TS = "2026-10-01T09:00:00.000+08:00";
   const A = (id, name, cls, ob) => ({ id, name, class: cls, role: "", hidden_by_default: false, archived: false, opening_balance: ob, opening_date: "2026-04-01" });
@@ -4401,8 +4406,14 @@ console.log("\n-- Scheduled status, edit and remove --");
   ({ ctx, page, errors } = await open({ blockSw: true, seed })); await page.clock.setFixedTime(T0b);
   await menuGo(page, "Scheduled"); await page.waitForTimeout(500);
   const rowOf = (n) => page.locator("#screen button.catrow", { hasText: n });
-  check((await rowOf("Rent").innerText()).includes("Paid Oct 4"), "rent you logged yourself near its due day shows Paid, and no second draft was made");
-  check(JSON.parse((await stored(page)).local).state.transactions.filter((t) => t.schedule_key === "2026-10" && t.schedule_id === "s1").length === 0, "no duplicate entry was written for it");
+  // DECISION 8 (owner, Nov 22; before: the app linked the rent you logged by itself): the draft waits, Verify suggests your entry, your tap links them
+  check((await rowOf("Rent").innerText()).includes("Waiting in Verify") && JSON.parse((await stored(page)).local).state.scheduleChanges.every((c) => c.kind !== "linked"), "the app links nothing by itself: the rent's draft waits in Verify");
+  await page.click('#nav button[data-tab="verify"]'); await page.waitForSelector("#sched-suggest");
+  check((await text(page, "#sched-suggest")).includes("Already logged? Landlord") && (await text(page, "#screen")).includes("Rent"), "Verify suggests the rent you logged yourself (" + (await text(page, "#sched-suggest")).replace(/\n/g, " ") + ")");
+  await page.click('#sched-suggest button[data-action="sched-link"]'); await page.waitForTimeout(600);
+  check(JSON.parse((await stored(page)).local).state.transactions.filter((t) => t.schedule_key === "2026-10" && t.schedule_id === "s1").length === 0, "after your tap the waiting draft is gone: no duplicate entry");
+  await menuGo(page, "Scheduled"); await page.waitForTimeout(400);
+  check((await rowOf("Rent").innerText()).includes("Paid Oct 4"), "and the rent shows Paid Oct 4, your own entry standing for it");
   check((await rowOf("Streaming").innerText()).includes("Waiting in Verify") && (await rowOf("Streaming").innerText()).includes("5 days overdue"), "a draft nobody checked says it waits in Verify and how late it is");
   check((await rowOf("Internet").innerText()).includes("Due Oct 25") && (await rowOf("Internet").innerText()).includes("in 9 days"), "a payment not yet due says when");
   await rowOf("Rent").click(); await page.waitForSelector("#sheet .sheet");

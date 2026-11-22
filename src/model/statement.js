@@ -106,6 +106,9 @@ export function classifyLine({ text, type = "", direction }) {
   // P1-8 fix 3: paying the credit card from this account and taking cash out at an ATM are MOVES between your own accounts (to the card, to Cash), never spending.
   if (direction === "out" && /^(credit card (bill )?(re)?payment|card bill (re)?payment|credit card bill)\b/i.test(t)) return { meaning: "move", payee: t, moveTo: "card" };
   if (direction === "out" && /^(atm (cash )?withdrawal|cash withdrawal)\b/i.test(t)) return { meaning: "move", payee: t, moveTo: "cash" };
+  // DECISION 2 (owner, Nov 22): a CASH ADVANCE taken on a card is BORROWED money: a move from the card (what is owed goes up) to Cash, never spending and never
+  // income. Its fee or interest is still a fee (the fee rule below).
+  if (direction === "out" && /\bcash advance\b/i.test(t + " " + ty) && !/\b(fees?|charges?|interest)\b/i.test(t + " " + ty)) return { meaning: "move", payee: t, moveTo: "cash" };
   if (/^buy load\b/i.test(t)) return { meaning: "spending", payee: "Buy load" };
   const pay = /^payment to\s+(.+?)(?:,?\s*merchant transaction number:.*)?$/i.exec(t);
   if (pay) return { meaning: "spending", payee: pay[1].trim() };

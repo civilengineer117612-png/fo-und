@@ -112,9 +112,9 @@ export function makeDueDrafts(state, today, { reserve_source_id, now = new Date(
       if (p.due > addDaysIso(today, windowDays) || p.due < addDaysIso(today, -CATCH_UP_DAYS)) continue;
       if (h.endedOn !== null && p.due > h.endedOn) continue;
       if (paymentState(next, s, p.key) !== "open") continue;
-      // The payment may already be in the ledger: logged by hand, or scanned, a few days either side of its due date. Then it is linked, never doubled.
-      const have = s.kind === "repeating" ? findLogged(next, s, p) : null;
-      if (have) { const l = linkPayment(next, s.id, p.key, have.id, p.due, now); if (l.ok) { next = l.state; made.push("linked:" + draftIdFor(s.id, p.key)); continue; } }
+      // DECISION 8 (owner, Nov 22): a payment NEVER links itself. Before, an entry you had logged near its due day was linked here by the app alone. Now the draft
+      // is always made; Verify SUGGESTS the entry that looks like it (`suggestedLink`) and only the owner's tap links them (`confirmLink`), so nothing is doubled
+      // and nothing is decided for you.
       const r = draftFor(next, s, p, { reserve_source_id, now });
       if (r.ok) { next = r.state; made.push(draftIdFor(s.id, p.key)); }
     }
@@ -435,6 +435,25 @@ export function findLogged(state, s, p) {
     if (!best || gap < best.gap) best = { id: t.id, gap };
   }
   return best;
+}
+// DECISION 8: the entry that looks like this waiting scheduled draft (same rule as before: not part of a plan, not cancelled, the plan's category or name,
+// about the same amount, within 7 days, standing for no other payment). Only a SUGGESTION: {id, gap} or null. Nothing is changed.
+export function suggestedLink(state, draftId) {
+  const t = state.transactions.find((x) => x.id === draftId && x.schedule_id && x.status === "draft");
+  const s = t && (state.schedules ?? []).find((x) => x.id === t.schedule_id);
+  if (!s || s.kind !== "repeating") return null;
+  const p = paymentsOf(state, s, { through: t.date }).find((x) => x.key === t.schedule_key);
+  return p ? findLogged(state, s, p) : null;
+}
+// The owner's tap: that entry IS this payment. The waiting draft is discarded and a dated "linked" row says which entry stands for the payment; the entry itself
+// (verified or not) is never edited. Refused unless the entry is still the one suggested, so a stale tap cannot link the wrong entry.
+export function confirmLink(state, draftId, transactionId, now = new Date()) {
+  const t = state.transactions.find((x) => x.id === draftId && x.schedule_id && x.status === "draft");
+  if (!t) return fail("UNKNOWN_TRANSACTION", "this scheduled draft is no longer waiting");
+  if (suggestedLink(state, draftId)?.id !== transactionId) return fail("NOT_SUGGESTED", "that entry no longer looks like this payment");
+  const gone = discardDraft(state, draftId);
+  if (!gone.ok) return { ok: false, violations: gone.violations, state: null };
+  return linkPayment(gone.state, t.schedule_id, t.schedule_key, transactionId, t.date, now);
 }
 // Record that an entry you logged stands for one payment (a dated row; the entry itself is never edited).
 export function linkPayment(state, scheduleId, key, transactionId, date, now = new Date()) {

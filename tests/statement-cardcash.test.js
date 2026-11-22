@@ -106,3 +106,21 @@ test("a line already in the ledger never needs an account; the window lists the 
   assert.match(app, /case "stm-acct-cash": case "stm-acct-card":/);
   assert.match(app, /chosen: form\.moveChosen \}\), pm = M\.planStatementMoves/);
 });
+
+test("DECISION 2: a cash advance on a card is borrowed money: a move from the card to Cash (the card owes more), never spending, never income; its fee stays a fee", () => {
+  for (const [text, type] of [["Cash Advance", "Credit Card Transaction"], ["CASH ADVANCE - SAMPLE ATM", ""], ["Sample ATM", "Cash Advance"]]) {
+    const c = classifyLine({ text, type, direction: "out" });
+    assert.deepEqual([c.meaning, c.moveTo], ["move", "cash"], text + " / " + type);
+  }
+  for (const [text, type] of [["Cash Advance Fee", "Credit Card Transaction"], ["Cash Advance Interest", ""], ["Cash advance charge", ""]])
+    assert.notEqual(classifyLine({ text, type, direction: "out" }).meaning, "move", text + ": its fee or interest is a cost (or asked), never a move");
+  const lines = [L("2026-10-12", "Cash Advance", 300000)];
+  assert.deepEqual(statementItems(lines), [], "not offered as spending");
+  const mv = statementMoves(base(), lines, { account_id: "card", bankId: "maribank" });
+  let n = 0; const r = planStatementMoves(base(), mv, { account_id: "card", newId: () => "ca" + ++n, now: NOW });
+  assert.ok(r.ok, r.message); assert.equal(r.count, 1);
+  const legs = r.state.entries.filter((e) => e.transaction_id === "ca1");
+  assert.deepEqual(legs.map((e) => [e.account_id, e.amount]).sort(), [["card", -300000], ["cash", 300000]], "the card owes 3,000.00 more and Cash holds 3,000.00 more");
+  assert.ok(legs.every((e) => e.category_id == null), "no income and no spending category on it");
+  assert.deepEqual(validateState(r.state), []);
+});
