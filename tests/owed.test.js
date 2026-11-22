@@ -57,15 +57,16 @@ test("the Owed to me account is made once, at the first split, and a person is o
   assert.equal(M.owedBy(s, "p1"), 130000);
 });
 
-test("what is refused: no person, no name, the same person twice, a part of zero, and a split that leaves you no share", () => {
+test("what is refused: no person, no name, the same person twice, a part of zero, and more owed than was paid", () => {
   const s = ledger(), plan = (shares, amount = 300000) => M.planSharedExpense(s, { transaction_id: "t1", date: "2026-11-08", payee: "Dinner", category_id: "food", amount, account_id: "chk", shares, ids: { account: "owed", people: ["p1", "p2"] } }, NOW);
   const code = (r) => (r.ok ? "ok" : r.violations[0].code);
   assert.equal(code(plan([])), "NO_SHARES");
   assert.equal(code(plan([{ name: "  ", amount: 100000 }])), "NO_NAME");
   assert.equal(code(plan([{ name: "Ana", amount: 100000 }, { name: "ana", amount: 50000 }])), "SAME_PERSON");
   assert.equal(code(plan([{ name: "Ana", amount: 0 }])), "BAD_SHARE");
-  assert.equal(code(plan([{ name: "Ana", amount: 300000 }])), "NO_SHARE_LEFT", "all of it owed by others is not a split");
-  assert.equal(code(plan([{ name: "Ana", amount: 200000 }, { name: "Ben", amount: 100001 }])), "NO_SHARE_LEFT");
+  assert.equal(code(plan([{ name: "Ana", amount: 300001 }])), "OWED_TOO_MUCH", "more than was paid is refused");
+  assert.equal(code(plan([{ name: "Ana", amount: 200000 }, { name: "Ben", amount: 100001 }])), "OWED_TOO_MUCH");
+  assert.equal(code(plan([{ name: "Ana", amount: 300000 }])), "ok", "all of it someone else's is money LENT (owner, Nov 22)");
   assert.equal(code(plan([{ name: "Ana", amount: 299999 }])), "ok", "one centavo of your own is a share");
   assert.deepEqual([s.accounts.length, s.people.length], [4, 0], "a refused split leaves nothing behind");
 });
@@ -286,4 +287,32 @@ test("a version 11 backup file opens, restores, upgrades, and a split made after
   const back = await M.decryptLedgerBackup(await M.encryptLedgerBackup(next, "a long passphrase for tests"), "a long passphrase for tests");
   assert.deepEqual(back.state, s); assert.deepEqual(M.selfCheck(back), []);
   assert.equal(M.owedBy(back.state, "p1"), 100000);
+});
+
+// SPLIT LEFTOVER (owner, Nov 22; decided by docs/ACCOUNTING.md principle 13 and the recognition rule "only your share is spending"): money paid ALL for someone
+// else is LENT. Nothing of it is spending; the whole amount is owed to that person; it leaves only by being paid back (a transfer) or given up (your spending).
+test("money LENT (your share zero): nothing is spending, the whole amount is owed, paid back by a transfer, given up as spending, cancelled only", () => {
+  let s = split(ledger(), { id: "L1", payee: "Ana's ticket", cat: "fun", amount: 250000, shares: [{ name: "Ana", amount: 250000 }] });
+  assert.deepEqual(s.entries.filter((e) => e.transaction_id === "L1"), [
+    { transaction_id: "L1", account_id: "chk", amount: -250000 }, { transaction_id: "L1", account_id: "owed", person_id: "p1", amount: 250000 }], "no category line: none of it is spending");
+  assert.deepEqual(M.validateState(s), []);
+  s = verify(s, "L1");
+  assert.equal(M.spendingByCategory(s, { month: MONTH }).total, 0, "not spending");
+  assert.equal(M.dayTotal(s, "2026-11-08").verified, 0, "not in Spent today");
+  assert.equal(M.incomeBySource(s, { from: "2026-11-01", to: "2026-11-30" }).total, 0, "not income");
+  assert.deepEqual(M.owedKind(s, "L1"), { kind: "lent", total: 250000, yours: 0, owed: [{ person_id: "p1", name: "Ana", amount: 250000 }] });
+  assert.deepEqual([M.owedSummary(s).total, M.owedSummary(s).unassigned], [250000, 0]);
+  assert.equal(balance(s, "chk"), 9000000 - 250000);
+  // paid back in part, the rest given up: the given-up part is spending in Uncategorized (the purchase had no category of its own)
+  const back = M.planPayBack(s, { transaction_id: "L2", person_id: "p1", amount: 100000, to_account_id: "wal", date: "2026-11-10" }, NOW); assert.ok(back.ok); s = verify(back.state, "L2");
+  assert.equal(M.spendingByCategory(s, { month: MONTH }).total, 0, "a pay-back is never income and never spending");
+  const gone = M.planNotPaid(s, { transaction_id: "L3", person_id: "p1", date: "2026-11-20" }, NOW); assert.ok(gone.ok, JSON.stringify(gone.violations)); s = verify(gone.state, "L3");
+  assert.equal(M.spendingByCategory(s, { month: MONTH }).total, 150000, "what Ana will not pay back is your spending now");
+  assert.equal(M.owedSummary(s).total, 0);
+  // cancelled at the Weekly review: cancelled only (never turned into a plain move, which would leave a line on Owed to me without its person)
+  let c0 = verify(split(ledger(), { id: "L9", payee: "Ana's ticket", cat: "fun", amount: 250000, shares: [{ name: "Ana", amount: 250000 }] }), "L9");
+  const c = M.planCorrection(c0, { id: "L9", redo_id: "fixL", today: "2026-11-08" }, NOW); assert.ok(c.ok, JSON.stringify(c.violations));
+  assert.equal(c.redo, null, "money lent is cancelled only, like a split");
+  c0 = M.applyCorrection(c0, c);
+  assert.deepEqual([M.owedSummary(c0).total, balance(c0, "chk")], [0, 9000000]);
 });

@@ -34,6 +34,9 @@ These become version 1.0.0 at the end of the overhaul.
 - Each version's notes show once after an update, and About this app lists every version.
 
 ### Improved
+- Budget shows other money in (interest, cashback) on its own line, apart from pay.
+- A split can be all someone else's: the money is lent, and none of it is your spending.
+- Loan repayments taken from your pay say they were already deducted.
 - Everything you type waits in Verify until you check it; only a document that proves it, like a payslip or a matching statement, is verified at once.
 - The box you type in stays above the keyboard, and a tap outside a window you typed in asks before throwing it away.
 - Amounts are read the careful way: a comma only between thousands, so a mistyped comma is refused, never guessed.
@@ -41,6 +44,8 @@ These become version 1.0.0 at the end of the overhaul.
 - Every screen shares one look: white cards, one thin bar per line, and an outlined button for every action.
 
 ### Fixed
+- A scheduled payment no longer links itself to an entry you logged: Verify suggests it, and your tap links them.
+- A cash advance on a card statement is a move from the card, not spending.
 - A backup now also holds the photos still waiting to be read, so a restore no longer loses them.
 - With the app open in two windows, one can no longer erase what the other saved.
 - A picture that cannot be kept never stops an entry from being saved.

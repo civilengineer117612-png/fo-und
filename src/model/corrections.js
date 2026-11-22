@@ -71,7 +71,7 @@ export function planCorrection(state, input, now = new Date()) {
   const plain = !isCountGap(original) && mine.length === 2 && cat && acct && cat.amount > 0 && acct.amount < 0
     && (probe.categories.find((c) => c.id === cat.category_id)?.kind === "expense");
   let redo = null;
-  const moved = mine.length === 2 && mine.every((e) => e.account_id != null);   // a move between two of the owner's accounts, with its fee when it had one
+  const moved = mine.length === 2 && mine.every((e) => e.account_id != null && e.person_id == null);   // money LENT to a person (Owed to me) is cancelled only, like a split   // a move between two of the owner's accounts, with its fee when it had one
   const ch = input.changes ?? {};
   if (plain) {
     const p = planExpense(probe, {

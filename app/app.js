@@ -175,6 +175,8 @@ function describe(t) {
   const ow = es.some((e) => e.person_id != null) ? M.owedKind(S(), t.id) : null;
   if (ow?.kind === "shared") { const payer = es.find((e) => e.account_id != null && e.person_id == null);
     return { kind: "expense", shared: true, editable: false, title: shortPayee(t.payee) || categoryName(cat.category_id), category_id: cat.category_id, account_id: payer.account_id, amount: ow.yours, total: ow.total, owed: ow.owed, detail: accountName(payer.account_id) + " \u00b7 your share of " + peso(ow.total) }; }
+  if (ow?.kind === "lent") { const payer = es.find((e) => e.account_id != null && e.person_id == null);   // all of it someone else's: money lent, nothing is spending (owner, Nov 22)
+    return { kind: "lent", editable: false, title: "Lent to " + ow.owed.map((o) => o.name).join(", "), account_id: payer.account_id, amount: ow.total, total: ow.total, owed: ow.owed, detail: accountName(payer.account_id) + " \u00b7 owed to you, not spending" }; }
   if (ow?.kind === "paid") return { kind: "payback", editable: false, title: ow.name + " paid you back", amount: ow.amount, to_id: ow.to_id, detail: "into " + accountName(ow.to_id) };
   if (ow?.kind === "unpaid") { const parts = es.filter((e) => e.category_id != null).map((e) => ({ name: categoryName(e.category_id), amount: e.amount }));   // it is spending now: one category, or several like a split
     return { kind: parts.length > 1 ? "split" : "expense", unpaid: true, editable: false, title: ow.name + " did not pay", ...(parts.length === 1 ? { category_id: cat.category_id } : {}), amount: ow.amount, parts, detail: "counted as your spending" }; }
@@ -577,10 +579,13 @@ function viewVerify() {
   const shot = M.attachmentsFor(S(), t.id)[0];
   const sched = t.schedule_id ? (S().schedules ?? []).find((x) => x.id === t.schedule_id) : null;
   const schedNote = sched ? `<p class="note">Scheduled payment${sched.kind === "installment" ? ", " + t.schedule_key + " of " + sched.count : ""}. Check the amount and date.</p>` : "";
+  // DECISION 8 (owner, Nov 22): the app never links a payment by itself; it suggests the entry you already logged, and your tap links it (counted once).
+  const sug = sched && t.status === "draft" ? M.suggestedLink(S(), t.id) : null, sugTx = sug ? S().transactions.find((x) => x.id === sug.id) : null;
+  const linkNote = sugTx ? `<div class="note" id="sched-suggest">Already logged? ${esc(describe(sugTx).title)}, ${esc(listDate(sugTx.date))}, ${peso(describe(sugTx).amount)}. <button class="act sm" data-action="sched-link" data-id="${esc(t.id)}" data-link="${esc(sugTx.id)}">That's it: link them</button></div>` : "";
   const finalNote = t.corrects ? `<p class="note">Replaces an entry you cancelled at the Weekly review.</p>` : "";
   const twins = M.sameAmountElsewhere(S(), t.id);   // only a note: the same payment can arrive as a receipt photo and as the bank's own screen
   const twinNote = twins.length ? `<p class="note">\u25B2 Same amount as ${twins.length === 1 ? "another entry" : twins.length + " other entries"}: ${twins.slice(0, 2).map((x) => { const d = describe(S().transactions.find((y) => y.id === x.id)); return esc(d.title) + (d.detail ? " (" + esc(d.detail) + ")" : "") + (x.status === "verified" ? ", already verified" : ", a draft") + (x.days ? ", a day apart" : ", the same day"); }).join("; ")}. If it is the same payment shown twice, delete this one.</p>` : "";
-  const fromPhoto = twinNote + schedNote + finalNote + (t.source === "photo" ? `<p class="note">Read from the photo. Compare each line with the paper before you tap Correct.</p>`
+  const fromPhoto = twinNote + schedNote + linkNote + finalNote + (t.source === "photo" ? `<p class="note">Read from the photo. Compare each line with the paper before you tap Correct.</p>`
     : t.source === "voice" ? `<p class="note">Made from what you said${t.memo ? ": \u201C" + esc(t.memo) + "\u201D" : ""}. Check each line before you tap Correct.</p>` : "");
   return `${head}
     <div class="card">${shot ? `<button class="shotbtn" data-action="open-photo" data-id="${esc(shot.id)}" aria-label="Open the photo full size"><img class="shot" data-photo="${esc(shot.id)}" alt="The photo this entry was read from" hidden></button>` : ""}${fromPhoto}<div class="what">${esc(d.title)}</div><div class="big">${peso(d.total ?? d.amount)}</div>
@@ -631,7 +636,7 @@ function printedLines(p) {
 // Printed lines grouped by their category for a period (tap a category to see its lines; a line with none counts under Other). Older payslips are counted apart.
 function categoryBlock(sections, range) {
   const g = M.incomeByCategory(S(), range), title = { earning: "Earnings by category", deduction: "Deductions by category", employer: "Employer share (not taken from your pay)" };
-  const one = (section) => g[section].length ? `<h2>${title[section]}</h2><div class="clist">${g[section].map((c) => `<details class="crow"><summary><span class="mn">${esc(c.name)}</span><b class="mv">${peso(c.total)}</b><span class="tchev" aria-hidden="true">\u203A</span></summary>${c.items.map((i, n) => plRow({ n: n + 1, label: i.label, amount: i.amount, zero: i.amount === 0, catText: i.employer + " \u00B7 " + fullDate(i.pay_date), notes: [i.overtime ? "Overtime" : "", i.back_pay ? "Back pay" : "", i.tax === "non_taxable" ? "Not taxable" : i.tax === "taxable" ? "Taxable" : "", i.hours ? i.hours + " hours" : ""].filter(Boolean), action: "open-itemcat", id: i.id })).join("")}</details>`).join("")}</div>` : "";
+  const one = (section) => g[section].length ? `<h2>${title[section]}</h2><div class="clist">${g[section].map((c) => `<details class="crow"><summary><span class="mn">${esc(c.name)}${section === "deduction" && c.category === "loans" ? `<small class="crowsub">Already deducted from your pay</small>` : ""}</span><b class="mv">${peso(c.total)}</b><span class="tchev" aria-hidden="true">\u203A</span></summary>${c.items.map((i, n) => plRow({ n: n + 1, label: i.label, amount: i.amount, zero: i.amount === 0, catText: i.employer + " \u00B7 " + fullDate(i.pay_date), notes: [i.overtime ? "Overtime" : "", i.back_pay ? "Back pay" : "", i.tax === "non_taxable" ? "Not taxable" : i.tax === "taxable" ? "Taxable" : "", i.hours ? i.hours + " hours" : ""].filter(Boolean), action: "open-itemcat", id: i.id })).join("")}</details>`).join("")}</div>` : "";
   const old = g.original.count ? `<p class="note small">${g.original.count === 1 ? "1 payslip was" : g.original.count + " payslips were"} saved before every printed line was kept: ${esc(M.ORIGINAL_NOT_KEPT.toLowerCase())}. Their figures are in the totals above.</p>` : "";
   return sections.map(one).join("") + old;
 }
@@ -1920,7 +1925,7 @@ function shareState(f) {
   const list = rows.map((r, i) => ({ name: (r.name ?? "").trim(), amount: amounts[i] })).filter((x, i) => used[i]);
   const keys = list.map((x) => M.personKey(x.name)), owed = list.reduce((n, x) => n + Math.max(0, x.amount), 0), yours = total - owed;
   const why = !list.length ? "Type who owes you." : keys.some((k) => !k) ? "Type each person's name." : new Set(keys).size !== keys.length ? "Each person can be listed once."
-    : !(total > 0) ? "" : fixed >= total || yours <= 0 ? "Your own share must be more than zero." : list.some((x) => !(x.amount > 0)) ? "Each person's part must be more than zero." : "";
+    : !(total > 0) ? "" : fixed > total || yours < 0 ? "The others cannot owe more than you paid." : list.some((x) => !(x.amount > 0)) ? "Each person's part must be more than zero." : "";
   return { total, each, amounts, list, yours, why };
 }
 const shareAmt = (c) => (c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -2574,6 +2579,9 @@ function viewBudget() {
   const daySeg = per === "payday" && v.paydays.length > 1 ? `<div class="seg" role="group" aria-label="Which payday">${v.paydays.map((p, i) => `<button data-action="bv-payday" data-id="${i}" aria-pressed="${w === i}">${esc(p.label)}</button>`).join("")}</div>` : "";
   const prog = per === "payday" && has ? M.paydayProgress(S(), set, month, { categoryMaps: S().categoryMaps })[w] ?? null : null;   // this payday's cutoff: what was spent so far, what arrived
   const payHead = per === "payday" && prog ? M.payHeader(income, prog.received, prog.count) : per === "month" ? (() => { const mp = M.monthPay(S(), month); return M.payHeader(income, mp.received, mp.count); })() : null;
+  // The "other money in" line (owner, Nov 22, by docs/ACCOUNTING.md principles 10 and 12): interest, cashback and other income that is not pay is shown on its
+  // own line, never added to Received, so every peso that came in is accounted for and Received keeps one meaning (pay).
+  const otherIn = per === "payday" ? prog?.other ?? 0 : per === "month" ? M.monthPay(S(), month).other : 0;
   const diffWords = (d) => (d === 0 ? "As expected" : peso(Math.abs(d)) + (d > 0 ? " more" : " less"));
   const payLine = payHead && income > 0 ? `Expected ${peso(payHead.expected)} \u00b7 Received ${payHead.received === null ? "\u2013" : peso(payHead.received)} \u00b7 Difference ${payHead.difference === null ? "\u2013" : diffWords(payHead.difference)}` : "";
   const eyebrow = per === "month" ? "Pay each month" : per === "week" ? "Pay each week" : "Pay on this payday";
@@ -2601,7 +2609,7 @@ function viewBudget() {
   const noPay = !has ? `<p class="center"><button class="act" data-action="bv-paydays">Set your paydays</button></p><p class="note small">Per payday and Per week need your paydays.</p>` : `<p class="center"><button class="act small" data-action="bv-paydays" style="flex-basis:auto;text-align:center">Change paydays</button></p>`;
   const top = v.income.amount ? `<div class="flathero"><div class="eyebrow">${eyebrow}</div><div class="flatfig"><p class="flatbig">${peso(income)}</p></div>
     <div class="pp-whole" role="img" aria-label="${esc(pesoW(block.placed))} of ${esc(pesoW(income))} placed" style="margin:12px 0 8px"><span style="width:${income > 0 ? Math.max(0, Math.min(100, Math.round((block.placed * 100) / income))) : 0}%"></span></div>
-    <div class="ct" style="display:flex;justify-content:space-between;gap:10px"><span class="note small" style="margin:0">${esc(src)}</span><span class="amt" style="white-space:nowrap">${esc(leftLine)}</span></div>${v.income.other ? `<p class="note small">Your payslips say ${peso(v.income.other.amount)}; your own figure is used.</p>` : ""}${payLine ? `<p class="note small" id="pay-line">${payLine}</p>` : ""}${prog ? `<p class="note small">${esc(longDate(prog.start))} to ${esc(longDate(prog.end))}. Only verified spending counts.</p>` : ""}</div>` : `<p class="note">${esc(M.NO_INCOME_PROMPT)}</p>`;
+    <div class="ct" style="display:flex;justify-content:space-between;gap:10px"><span class="note small" style="margin:0">${esc(src)}</span><span class="amt" style="white-space:nowrap">${esc(leftLine)}</span></div>${v.income.other ? `<p class="note small">Your payslips say ${peso(v.income.other.amount)}; your own figure is used.</p>` : ""}${payLine ? `<p class="note small" id="pay-line">${payLine}</p>` : ""}${otherIn > 0 ? `<p class="note small" id="other-in">Other money in, not pay: ${peso(otherIn)}</p>` : ""}${prog ? `<p class="note small">${esc(longDate(prog.start))} to ${esc(longDate(prog.end))}. Only verified spending counts.</p>` : ""}</div>` : `<p class="note">${esc(M.NO_INCOME_PROMPT)}</p>`;
   const body = BUDGET_GROUPS.map(card).join("");
   const monthStep = per === "month" ? `<div class="stepper"><button data-action="budget-month" data-step="-1" aria-label="Earlier">\u2039</button><b>${esc(M.monthLabel(month))}</b><button data-action="budget-month" data-step="1" aria-label="Later"${past ? "" : " disabled"}>\u203A</button></div>` : "";
   if (past) return `<h1>Budget</h1>${seg}${monthStep}${top}${body}${noBudgetCard}<p class="note small">An earlier month, as it was. Budgets change from this month on.</p>`;
@@ -5064,6 +5072,12 @@ async function onClick(el) {
       const sh = ui.sheet, r = M.linkToDue(S(), sh.newId, sh.dueId);
       ui.sheet = null; renderSheet();
       if (r.ok && await commit(r.state)) showToast("Linked. It is counted once.");
+      break;
+    }
+    case "sched-link": {   // decision 8: the owner's tap links a due payment to the entry already logged; the waiting draft goes, the entry is not edited
+      const r = M.confirmLink(S(), id, el.dataset.link, new Date());
+      if (!r.ok) { showToast("Not linked: " + (r.violations?.[0]?.message ?? "it no longer matches")); renderScreen(); break; }
+      if (await commit(r.state)) showToast("Linked. It is counted once.");
       break;
     }
     case "mark-due": {
