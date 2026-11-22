@@ -163,7 +163,7 @@ const stars = async (page) => page.locator("#sheet label .req").count();   // ho
 
 
 // The app has no way to load a plan file any more (nobody has one yet), so tests that need a plan put one in the phone's settings, as parsed by the model.
-import { parsePlan, planWithBudgets, CHANGES, emptyState, recordFromParse, addSchedule, makeDueDrafts, BANKS } from "../src/model/index.js";
+import { parsePlan, planWithBudgets, CHANGES, emptyState, recordFromParse, addSchedule, makeDueDrafts, BANKS, HELP_TOPICS } from "../src/model/index.js";
 async function writeLedger(page, led) {
   const text = JSON.stringify(led);
   await page.evaluate(async ([text]) => { localStorage.setItem("financialTracker.ledger", text); await new Promise((res) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => { const tx = r.result.transaction("kv", "readwrite"); tx.objectStore("kv").put(text, "ledger"); tx.oncomplete = () => { r.result.close(); res(); }; }; }); }, [text]);
@@ -303,7 +303,7 @@ var txCount = async () => JSON.parse((await stored(page)).local).state.transacti
 var presetsNow = async () => JSON.parse((await stored(page)).local).state.presets;
 var nBefore = await txCount();
 check((await text(page, ".tiles")).includes("Food") && await page.locator(".tile .tcat").first().evaluate((e) => getComputedStyle(e).fontSize === "12px"), "each tile shows its category, small and quiet");
-check((await text(page, "#screen")).includes("Hold a tile to move, change or remove it."), "a one-line hint says how to arrange the tiles");
+check(!(await text(page, "#screen")).includes("Hold a tile to move"), "LESS TEXT (Nov 22; before: a one-line hint under the tiles): how to arrange the tiles is in Help");
 // the pencil in a tile's window opens the tile editor
 await page.click('button.tile:has-text("Dinner")');
 await page.click('#sheet button[data-action="pay-edit"]');
@@ -1000,7 +1000,8 @@ await menuGo(page, "Weekly review");
 check((await text(page, "#top")).includes("Weekly review") && (await text(page, "#screen")).includes("0 / "), "the weekly review lists every account, none counted yet");
 check(!(await text(page, "#screen")).includes("Weekly questions"), "the weekly questions wait until something is counted");
 var ck = await text(page, "#screen"), lastBackup = JSON.parse((await stored(page)).local).settings.last_backup_at;
-check(ck.includes("One reminder: back up after this check-in") === !lastBackup, "the check-in carries the backup reminder when a backup is due, and stays quiet right after one (last backup: " + (lastBackup ? "today" : "never") + ")");
+check(/No backup yet|Last backup \d+ days ago/.test(ck) === !lastBackup,   // LESS TEXT (Nov 22; before: "One reminder: back up after this check-in")
+  "the check-in carries the backup reminder when a backup is due, and stays quiet right after one (last backup: " + (lastBackup ? "today" : "never") + ")");
 // A count with a gap is only kept until you say what happened (here: "I spent some of it", which books the missing money as unlogged spending, as the owner chose).
 var decide = async (page, name, why) => {   // `why` is wanted when that choice exists (a shortfall offers "spent"); a count with no gap has nothing to decide
   const card = `#screen .card:has-text("${name}") button[data-action="gap-decide"]`;
@@ -1044,8 +1045,8 @@ for (let wk = 1; wk <= 3; wk++) {   // three more weeks, so there are four answe
 }
 await menuGo(page, "Checks");
 var review = await text(page, "#screen");
-check(review.includes("Easier (1-5)") && review.includes("week 3 note") && review.toLowerCase().includes("what annoyed you"), "after four weeks the review shows each week's answers and what annoyed you");
-check(/Not accounted for went from .* in the first week to .* in the latest/.test(review), "and the Unlogged trend in words, with a shape");
+check(review.includes("Easier") && review.includes("Unaccounted") && review.includes("week 3 note") && review.toLowerCase().includes("what annoyed you"), "after four weeks the review shows each week's answers and what annoyed you");
+check(/Unaccounted money went from .* in the first week to .* in the latest/.test(review), "and the Unlogged trend in words, with a shape");
 await shot(page, "40-survey-review");
 await page.clock.setFixedTime(T0); await page.reload(); await page.waitForSelector("#nav button");
 await shot(page, "22-checkin");
@@ -1089,7 +1090,7 @@ try { blockName = "5e9. checks: card reserve and the Unlogged habit";
 ({ ctx, page, errors } = await fromSeed("5e9", { blockSw: true }));   // A11: its own ledger, as the section before left it
 await menuGo(page, "Checks");
 var ctext = await text(page, "#screen");
-check(/No card reserve|Covered|Short by/.test(ctext), "the card reserve check says covered, short, or that none is set up");
+check(/None set up|Covered|Short by/.test(ctext), "the card reserve check says covered, short, or that none is set up");
 check(await page.locator(".catcard .catrow").count() === 1, "Uncategorized by week has one row for the one week that was counted");
 check(((await page.locator(".catcard .catbar").first().getAttribute("aria-label")) ?? "").includes("could not be accounted for"), "its bar says what it means in words");
 await page.click('button:has-text("Show as list")');
@@ -1112,8 +1113,17 @@ check(await page.locator("#f-save").isDisabled(), "a trip needs a name first");
 check(await stars(page) === 1 && (await text(page, "#sheet")).includes("needed before you can save"), "a trip marks only its name with the *");
 await page.fill("#t-name", "Test Trip"); await page.fill("#f-amount", "1000");
 await page.click("#f-save"); await seen(page, "#toast", "Trip added");
-check((await text(page, "#screen")).includes("₱0.00 / ₱1,000.00") && (await text(page, "#screen")).includes("On track"), "a new trip shows its budget in words and as a graded meter");
-await page.click('button:has-text("Tag new entries with this trip")');
+check((await text(page, "#screen")).includes("₱0.00 / ₱1,000.00") && (await page.locator('#screen button[data-action="view-trip"]').count()) === 1 && (await page.locator('#screen button[data-action="use-trip"]').count()) === 0, "a new trip is ONE row with its budget; its buttons are in its window (owner, Nov 22)");
+await page.click('#screen button[data-action="view-trip"]');
+check((await seen(page, "#sheet", "On track")) && (await text(page, "#sheet")).includes("left of ₱1,000.00") && (await page.locator("#sheet .gring .gon").count()) === 1, "tapping the trip opens its window: the budget in words, with a ring that fills with it");
+// the trip's picture (owner, Nov 22: "like a profile picture"): a built-in one, chosen from the window, kept on the trip and shown in its row
+await page.click('#sheet button[data-action="open-icon"][data-trip="1"]');
+await page.click('#sheet button[data-action="trip-symbol"][data-id="plane"]');
+await seen(page, "#sheet", "Tag new entries");
+check(JSON.parse((await stored(page)).local).state.tags[0].symbol === "plane" && (await page.locator('#sheet .gpic svg').count()) > 0, "a trip takes a picture from its window and comes back to it");
+await page.click('#sheet button[data-action="use-trip"]');
+await seen(page, '#sheet button[data-action="use-trip"]', "On");
+await page.click('#sheet button[data-action="close-sheet"]');
 await seen(page, "#screen", "Tagging new entries");
 await page.click('#nav button:has-text("Log")');
 check((await text(page, "#screen")).includes("Tagging new entries: Test Trip"), "the Log screen says new entries are being tagged");
@@ -1121,22 +1131,26 @@ await page.click('button:has-text("Add expense")'); await page.fill("#f-amount",
 ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.state.transactions.some((t) => t.trip_add === ledgerNow.state.tags[0].id && t.status === "draft"), "the new entry carries the trip tag with no extra taps");
 await menuGo(page, "Trips");
-check((await text(page, "#screen")).includes("plus ₱120.00 not verified yet"), "unverified trip spending is mentioned, not counted");
+await page.click('#screen button[data-action="view-trip"]');
+check(await seen(page, "#sheet", "plus ₱120.00 waiting in Verify"), "unverified trip spending is mentioned, not counted");
 await shot(page, "28-trips");
 // trip dates: the dates add entries by themselves, trips cannot overlap, hand overrides, "Before the trip"
 {
   const nowMs = await page.evaluate(() => Date.now());   // the test clock, not the real one
   const phDay = (n) => new Date(nowMs + 8 * 3600e3 + n * 864e5).toISOString().slice(0, 10);
-  await page.click('button[data-action="open-trip-dates"]');
+  await page.click('#sheet button[data-action="open-trip-dates"]');
   check(await page.locator("#f-save").isDisabled(), "dates need both days");
   await page.fill("#t-start", phDay(-1)); await page.fill("#t-end", phDay(1)); await page.click("#f-save"); await seen(page, "#toast", "Dates saved");
-  check((await text(page, "#screen")).includes(" to ") && (await text(page, "#screen")).includes("Change dates"), "the trip shows its days");
+  check((await text(page, "#sheet")).includes(" to ") && (await page.locator('#sheet button[data-action="view-trip"], #sheet button[data-action="use-trip"]').count()) > 0, "saving the dates goes back to the trip's window, which shows its days");
+  await page.click('#sheet button[data-action="close-sheet"]');
+  check((await text(page, "#screen")).includes(" to "), "and the trip's row shows them too");
   await page.click('button:has-text("Add a trip")'); await page.fill("#t-name", "Second Trip"); await page.fill("#t-start", phDay(1)); await page.fill("#t-end", phDay(4)); await page.click("#f-save");
   check((await text(page, "#sheet")).includes('overlap your trip "Test Trip"') && (await page.locator("#sheet #t-name").count()) === 1, "overlapping dates show a plain message naming the other trip, and the sheet stays open");
   check(JSON.parse((await stored(page)).local).state.tags.length === 1, "and nothing is saved");
   await page.fill("#t-start", phDay(2)); await page.click("#f-save"); await seen(page, "#toast", "Trip added");
   check(JSON.parse((await stored(page)).local).state.tags.length === 2, "free days are accepted");
-  await page.click('button[data-action="open-trip-detail"] >> nth=0');
+  check((await page.locator('#screen button[data-action="view-trip"]').first().innerText()).includes("Test Trip"), "the trip being tagged sits on top");
+  await page.click('#screen button[data-action="view-trip"]:has-text("Test Trip")'); await page.click('#sheet button[data-action="open-trip-detail"]');
   check((await text(page, "#screen")).includes("Upskill") || (await text(page, "#screen")).includes("₱120.00"), "the trip's entries are listed");
   check(!(await text(page, "#screen")).includes("Before the trip"), "no Before the trip heading yet");
   await page.locator('#screen .row:has-text("₱120.00") button[data-action="trip-remove"]').click();
@@ -1152,7 +1166,8 @@ await shot(page, "28-trips");
   await page.click('button[data-action="trip-back"]');
   check((await text(page, "#screen")).includes("Second Trip"), "back to all trips");
 }
-await page.click('button:has-text("Tagging new entries")');
+await page.click('#screen button[data-action="view-trip"]:has-text("Test Trip")'); await page.click('#sheet button[data-action="use-trip"]');
+await page.click('#sheet button[data-action="close-sheet"]');
 await page.click('#nav button:has-text("Log")');
 check(!(await text(page, "#screen")).includes("Tagging new entries"), "tagging can be switched off");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
@@ -2795,7 +2810,7 @@ console.log("Correct a verified entry");
   await page.click('button[data-action="acct-more"][data-id="z"]');
   check(await seen(page, "#toast", "Shown again") && await page.locator('#sheet button[data-action="hide-account"]').count() === 1, "Show again brings it back"); await page.click('#sheet button[data-action="close-sheet"]');
   await menuGo(page, "Weekly review");
-  check((await text(page, "#screen")).includes("A verified entry is final"), "the Weekly review says a verified entry is final");
+  check((await text(page, "#screen")).includes("Put right a verified entry") && HELP_TOPICS.find((t) => t.tab === "checkin").lines.some((l) => l.includes("A verified entry is final")), "the Weekly review offers Put right a verified entry; that a verified entry is final is said in Help (LESS TEXT, Nov 22)");
   check(!(await page.locator('button[data-action="open-correct"]').isDisabled()) && (await text(page, "#screen")).includes("1 can be put right"), "and offers the one entry that can still be put right");
   await page.click('button[data-action="open-correct"]');
   check((await text(page, "#sheet")).includes("Corner Cafe") && (await text(page, "#sheet")).includes("\u20B11,200.00") && /20\d\d/.test(await text(page, "#sheet")), "the list shows the entry, the date with its year and the amount");
@@ -2820,7 +2835,7 @@ console.log("Correct a verified entry");
   check((await text(page, "#screen")).includes("none to put right"), "the same entry cannot be put right twice");
   await page.click('#nav button:has-text("Verify")');
   const vt = await text(page, "#screen");
-  check(vt.includes("Replaces an entry you cancelled") && vt.includes("Correct makes this entry final"), "Verify says the draft replaces the cancelled entry, and that verifying makes it final");
+  check(vt.includes("Replaces an entry you cancelled") && vt.includes("Final once verified."), "Verify says the draft replaces the cancelled entry, and that verifying makes it final");
   check((await text(page, "#screen .card .big")) === "\u20B11,000.00", "Verify shows the corrected amount, \u20B11,000.00, already filled in from the window");
   await page.click('#screen button:has-text("Correct")'); await page.waitForTimeout(400);
   const l2 = JSON.parse((await stored(page)).local), net = l2.state.entries.filter((e) => e.account_id === "w").reduce((n, e) => n + e.amount, 0);
@@ -2835,7 +2850,7 @@ console.log("Correct a verified entry");
   await page.click('#sheet button[data-action="toggle-cancelled"]');
   await page.click('#sheet button[data-action="close-sheet"]');   // the Close button: the window with its search box can now cover the dark around it
   await menuGo(page, "Weekly review"); await page.click('.choice:has-text("Wallet")'); await page.fill("#f-amount", "1"); await page.click("#f-save"); await seen(page, "#toast", "Wallet:");
-  check((await text(page, "#screen")).includes("A gap can come from a wrong entry"), "a count that shows a gap points to the entries that can be put right");
+  check(await page.locator('#screen button[data-action="open-correct"]:has-text("Find a wrong entry")').count() === 1, "a count that shows a gap points to the entries that can be put right");
   check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
 } catch (e) { await blockFailed(e); }
@@ -2859,7 +2874,7 @@ console.log("Space, pictures and the photo reader");
   check(await seen(page, "#toast", "The photo reader is on this phone", 120000), "the button downloads the reader");
   check(await seen(page, "#about-reader", "The photo reader is on this phone.", 20000) && await page.locator("#warm-btn").waitFor({ state: "hidden", timeout: 20000 }).then(() => true, () => false), "and the line changes, with no button left");   // waits for both (the line and the hidden button change a tick apart on a slow runner)
   await menuGo(page, "Weekly review");
-  check((await text(page, "#screen")).includes("One reminder") && (await text(page, "#screen")).includes("2 pictures are kept on this phone. Back up includes them."), "a due backup reminder at the Weekly review names the pictures");
+  check(/No backup yet|Last backup \d+ days ago/.test(await text(page, "#ck-backup")) && await page.locator('#ck-backup button:has-text("Back up now")').count() === 1, "a due backup shows at the Weekly review with Back up now (LESS TEXT, Nov 22: the pictures sentence lives in Setup and Help)");
   check((await text(page, "#screen")).includes("Your pictures have not been backed up yet."), "and says the pictures have never been backed up");
   check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
   await ctx.close(); }
@@ -4873,7 +4888,7 @@ console.log("\n-- Count with a gap --");
   await page.click('button[data-action="gap-decide"][data-why="later"]'); await page.waitForTimeout(500);
   d = JSON.parse((await stored(page)).local);
   check(d.state.transactions.filter((x) => x.source === "reconciliation" && x.adjustment).length === 1 && d.settings.checkin_pending?.b === undefined, "I'll explain later holds it: balance corrected, not spending");
-  check((await text(page, "#screen")).includes("1 gap is not yet explained"), "Weekly review says one gap waits");
+  check((await text(page, "#ck-held")).trim() === "1 gap not yet explained", "Weekly review says one gap waits");
   await menuGo(page, "Spending");
   t = (await text(page, "#screen")).replace(/\s+/g, " ");
   check(/not yet explained/i.test(t) && t.includes("₱500.00") && t.includes("₱0.00 spent") , "Category lists the 500.00 apart; the total says 0.00 spent");
@@ -4898,7 +4913,7 @@ console.log("\n-- Count with a gap --");
   await page.click('#sheet button[data-action="explain-gap"]'); await seen(page, "#toast", "The gap is cleared"); await page.waitForTimeout(500);
   await menuGo(page, "Spending");
   t = (await text(page, "#screen")).replace(/\s+/g, " ");
-  check(t.includes("₱500.00 not verified yet") && !t.includes("Test Bank missing") && t.includes("Cash missing") && t.includes("₱3,800.00") && (t.match(/Not part of what you spent/g) ?? []).length === 1, "the 500.00 entry counts once (it waits in Verify); only the Cash gap of 3,800.00 is still not yet explained");
+  check(t.includes("₱500.00 not verified yet") && !t.includes("Test Bank missing") && t.includes("Cash missing") && t.includes("₱3,800.00") && (t.match(/counted [A-Z][a-z]{2}, [A-Z][a-z]{2} \d+/g) ?? []).length === 1, "the 500.00 entry counts once (it waits in Verify); only the Cash gap of 3,800.00 is still not yet explained");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -5289,7 +5304,7 @@ console.log("\n-- Checks screen --");
   const box = await page.locator(".rescard .rc-state").boundingBox(), card = await page.locator(".rescard").boundingBox();
   check(box && card && box.x + box.width <= card.x + card.width, "the status sits inside the card on one line");
   await page.click('button[data-action="chart-mode"]');
-  check((await text(page, "#screen")).includes("Not accounted for"), "Show as list still gives the table twin");
+  check((await text(page, "#screen")).includes("Unaccounted"), "Show as list still gives the table twin");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
@@ -5311,7 +5326,7 @@ console.log("\n-- Uncategorized and Not yet explained --");
   check((await text(page, ".hero")).trim() === "\u20B11,000.00", "the month's spending is exactly 1,000.00: the food and the uncategorized, never the held gap (" + (await text(page, ".hero")).trim() + ")");
   check(/Uncategorized \u20B1700\.00/.test(rows) && /Food \u20B1300\.00/.test(rows), "the spending rows say Uncategorized 700.00 and Food 300.00 (an older ledger's stored name is read as the new one)");
   check(!/Not yet explained/.test(rows), "Not yet explained is in no spending row");
-  check(await page.locator("h2:has-text('Not yet explained')").count() === 1 && /Not yet explained.*Not part of what you spent\.\s*\u20B1500\.00/i.test(t), "it is its own list apart, with the held 500.00 and the words 'Not part of what you spent'");
+  check(await page.locator("h2:has-text('Not yet explained')").count() === 1 && /Not yet explained[\s\S]*counted[^\n]*\s*\u20B1500\.00/i.test(t), "it is its own list apart, with the held 500.00 (LESS TEXT, Nov 22: what it means is in Help)");
   const names = {};
   for (const [name, go] of [["Spending", async () => {}], ["Checks", async () => menuGo(page, "Checks")], ["Weekly review", async () => menuGo(page, "Weekly review")], ["Help", async () => menuGo(page, "Help")], ["Verify", async () => page.click('#nav button:has-text("Verify")')]]) { await go(); names[name] = (await text(page, "#screen")); }
   check(Object.entries(names).every(([, v]) => !/unlogged/i.test(v)), "no screen says Unlogged: " + Object.entries(names).filter(([, v]) => /unlogged/i.test(v)).map(([k]) => k).join(", "));

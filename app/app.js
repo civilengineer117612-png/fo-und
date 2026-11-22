@@ -18,6 +18,8 @@ const longDateOf = dateWriter("en-PH", { weekday: "short", day: "numeric", month
 const yearDateOf = dateWriter("en-PH", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 const listDate = (d) => (String(d).slice(0, 4) === today().slice(0, 4) ? longDate(d) : yearDate(d));   // an entry list shows the year when it is not this year (old statements were set up in earlier years)
 const longDate = (d) => longDateOf(d, (x) => x + "T00:00:00Z");
+const dayMonthOf = dateWriter("en-PH", { day: "numeric", month: "short" });
+const dayMonth = (d) => dayMonthOf(d, (x) => x + "T00:00:00Z");   // "Oct 3": a narrow table column (the weekly questions)
 const yearDate = (d) => yearDateOf(d, (x) => x + "T00:00:00Z");   // the import window shows the year (a statement spans years)
 // The eye that shows or hides the amounts on a screen (Cards and Goals): an open eye while they are shown, a crossed one while they are hidden.
 const EYE_ATTRS = 'width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
@@ -521,7 +523,7 @@ function tilesHtml() {
   const tile = (p, arranging) => `<${arranging ? "div" : "button"} class="tile" data-action="${arranging ? "edit-tile" : "open-preset"}" data-id="${esc(p.id)}"${arranging ? ' role="button" tabindex="0"' : ""}><b>${esc(p.name)}</b><span>${peso(p.amount)}</span><i class="tcat">${esc(categoryName(p.category_id))}</i>${arranging ? `<button class="tminus" data-action="remove-tile-now" data-id="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">-</button>` : ""}</${arranging ? "div" : "button"}>`;
   if (!ui.arrange && !S().presets.length) return `<p><button class="addtile" data-action="arrange-start">+ Add a quick tile</button></p>`;
   if (!ui.arrange) {
-    const hint = ledger.settings.tile_hint_done ? "" : `<p class="note small center">Hold a tile to move, change or remove it.</p>`;
+    const hint = "";   // LESS TEXT (owner, Nov 22): "Hold a tile to move or change it" is in Help (Log)
     return `<div class="tiles">${S().presets.map((p) => tile(p, false)).join("")}</div>${hint}`;
   }
   const add = S().presets.length < M.MAX_PRESETS ? `<div class="tile addtile" data-action="add-tile" data-howto="log" role="button" tabindex="0" aria-label="Add a tile"><b>+</b></div>` : "";
@@ -594,7 +596,7 @@ function viewVerify() {
         <button class="primary wide" data-action="verify-ok" data-id="${esc(t.id)}">Correct</button>
         <button data-action="verify-edit" data-id="${esc(t.id)}">Edit</button>
         <button data-action="verify-delete" data-id="${esc(t.id)}">${del ? "Tap again to delete" : "Delete"}</button>
-      </div><p class="note finalnote">Correct makes this entry final. A mistake is put right only at the Weekly review.</p></div>`;
+      </div><p class="note finalnote">Final once verified.</p></div>`;
 }
 
 // ---------- Income: where every peso of pay comes from ----------
@@ -1129,10 +1131,9 @@ function viewScan() {
   const s = ui.scan, busy = s?.busy === true;
   const status = busy ? `<p class="note" id="scan-msg" role="status">${esc(s.msg)}</p>` : s?.error ? `<p class="note" role="alert">${esc(s.error)}</p>` : s?.done ? `<p class="note" role="status">${esc(s.done)} <button class="act" data-action="tab" data-tab="verify">Go to Verify</button></p>` : "";
   return `<h1>Scan</h1><p class="sub">A receipt, payslip or payment screenshot</p>
-    <p class="note">This phone reads the photo. Nothing is sent anywhere. You check each guess in Verify, with the photo beside it.</p>
+    <p class="note">Read on this phone. Nothing is sent anywhere.</p>
     ${photoButtons("1", busy)}
-    ${status}
-    <p class="note">The first photo downloads the reader (about 30 MB), then it works offline. Handwriting is read poorly: check the numbers. Photos stay on this phone.</p>`;
+    ${status}`;   // LESS TEXT (owner, Nov 22): the reader's download, handwriting and checking in Verify are in Help (Scan)
 }
 
 const incomeCategories = () => S().categories.filter((c) => c.kind === "income");
@@ -2087,8 +2088,8 @@ function unexplainedHtml(from, to) {
   const list = M.unexplainedGaps(S(), { from, to, unlogged_category_id: M.UNLOGGED_CATEGORY_ID });
   if (!list.length) return "";
   const word = (g) => { const card = S().accounts.find((x) => x.id === g.account_id)?.class === "liability"; return g.kind === "short" ? (card ? "owes more than logged" : "missing") : (card ? "owes less than logged" : "more than logged"); };
-  return `<h2 class="today">Not yet explained</h2><div class="group">${list.map((g) => `<div class="row"><div>${esc(accountName(g.account_id))}<small>${esc(word(g))}, counted ${esc(listDate(g.date))}. Not part of what you spent.</small></div><div class="amt">${peso(g.amount)}</div></div>`).join("")}</div>
-    <p class="note small">Log what explains it and you are offered "This explains the gap". Until then it stays out of the total above.</p>`;
+  return `<h2 class="today">Not yet explained</h2><div class="group">${list.map((g) => `<div class="row"><div>${esc(accountName(g.account_id))}<small>${esc(word(g))} \u00b7 counted ${esc(listDate(g.date))}</small></div><div class="amt">${peso(g.amount)}</div></div>`).join("")}</div>
+`;
 }
 
 function viewMoney() {
@@ -2251,8 +2252,8 @@ function viewScheduled() {
   const hints = M.scheduleHints(S(), t, planOf(), { dismissed: ledger.settings.schedule_hints_dismissed ?? [] });
   const hintHtml = hints.length ? `<h2>Maybe add</h2><p class="note">Found in your own history and your Pay plan. Nothing is added until you save it.</p>${hints.map((h) => `<div class="row"><div>${esc(h.name)}<small>${h.approx ? "about " : ""}${peso(h.amount)} around the ${esc(ordinal(h.day))}${h.source === "history" ? " \u00b7 paid in " + h.months + " of the last " + h.of + " months" : " \u00b7 from your Pay plan"}</small></div>
       <div class="amt"><button data-action="hint-add" data-id="${esc(h.key)}">Add</button><br><button class="act" data-action="hint-no" data-id="${esc(h.key)}">Not this</button></div></div>`).join("")}` : "";
-  return `<h1>Scheduled</h1><p class="sub">Rent, subscriptions and installment plans. Each payment waits in Verify on its due day.</p>
-    ${hintHtml}${list.some((s) => !M.historyOf(S(), s).removed) ? rows : `<p class="note">Nothing scheduled yet. Add rent, a subscription or an installment plan.</p>`}
+  return `<h1>Scheduled</h1>
+    ${hintHtml}${list.some((s) => !M.historyOf(S(), s).removed) ? rows : `<p class="note">Nothing scheduled yet.</p>`}
     <p><button class="primary" data-action="open-schedule-new" style="margin-top:8px">Add a scheduled payment</button></p>`;
 }
 const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th");
@@ -2320,22 +2321,40 @@ function dueSoonHtml() {
 
 function viewTrips() {
   if (ui.tripId && S().tags.some((t) => t.id === ui.tripId)) return viewTripDetail(ui.tripId);
-  const tags = S().tags, active = ledger.settings.active_tag_id;
-  const cards = tags.map((t) => {
-    const sum = M.tagSummary(S(), t.id, { categoryMaps: S().categoryMaps, asOf: today() });
-    const g = sum.grade, on = active === t.id;
-    const meter = g ? `<div class="meter g-${g.level}"><span class="fill" style="width:${sum.spent > 0 ? Math.max(1, Math.min(100, g.percent)) : 0}%"></span></div>
-      <div class="status">${glyph(g.level)}${esc(LEVELS[g.level])} \u00b7 ${esc(g.over ? "Over by " + peso(sum.spent - sum.budget) : peso(sum.budget - sum.spent) + " left")}</div>` : "";
-    const rows = sum.rows.length ? `<table class="tbl"><tr><th>Category</th><th class="n">Spent</th></tr>${sum.rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="n">${peso(r.amount)}</td></tr>`).join("")}</table>` : `<p class="note">Nothing verified on this trip yet.</p>`;
-    const days = M.tripDays(t);
-    return `<div class="bcard tripcard"><div class="btop"><span class="bname">${esc(t.name)}</span><span class="bval">${sum.budget != null ? pairFig(sum.spent, sum.budget, { over: "over", label: t.name }) : peso(sum.spent)}</span></div>
-      <p class="note">${days ? esc(days) + ` \u00b7 <button class="act" data-action="open-trip-dates" data-id="${esc(t.id)}">Change dates</button>` : `<button class="act" data-action="open-trip-dates" data-id="${esc(t.id)}">Add dates</button>`}</p>${meter}
-      ${sum.pending > 0 ? `<p class="note">plus ${peso(sum.pending)} not verified yet</p>` : ""}${rows}
-      <p><button data-action="open-trip-detail" data-id="${esc(t.id)}">See the entries</button></p>
-      <p><button data-action="use-trip" data-id="${esc(t.id)}" aria-pressed="${on}">${on ? "Tagging new entries \u2713 (tap to stop)" : "Tag new entries with this trip"}</button></p></div>`;
-  }).join("");
-  return `<h1>Trips</h1><p class="sub">Spending for a trip, kept apart from daily spending. Give a trip dates and entries on those days join it.</p>${cards || `<p class="note">No trips yet.</p>`}
+  const active = ledger.settings.active_tag_id;
+  // Owner, Nov 22: ONE row per trip, the newest on top (the trip being tagged first); a tap opens the trip's window with everything else.
+  const order = S().tags.map((t, i) => ({ t, i })).sort((a, b) => (b.t.id === active) - (a.t.id === active) || (b.t.start ?? "").localeCompare(a.t.start ?? "") || b.i - a.i).map((x) => x.t);
+  const rows = order.map((t) => {
+    const sum = M.tagSummary(S(), t.id, { categoryMaps: S().categoryMaps, asOf: today() }), days = tripRange(t);
+    const sub = [days ?? "No dates", active === t.id ? "Tagging new entries" : ""].filter(Boolean).join(" \u00b7 ");
+    return { name: `<span class="gname">${tripPic(t, 36)}<span>${esc(t.name)}<small>${esc(sub)}</small></span></span>`, fig: sum.budget != null ? pairFig(sum.spent, sum.budget, { over: "over", label: t.name }) : peso(sum.spent),
+      pct: sum.budget ? (sum.spent > 0 ? Math.max(1, Math.min(100, (sum.spent / sum.budget) * 100)) : 0) : null, label: `${t.name}: ${pesoW(sum.spent)}${sum.budget != null ? " of " + pesoW(sum.budget) : ""}`, action: "view-trip", id: t.id };
+  });
+  return `<h1>Trips</h1>${rows.length ? barCard(rows) : `<p class="note">No trips yet.</p>`}
     <p><button class="primary" data-action="open-trip" style="margin-top:8px">Add a trip</button></p>`;
+}
+
+// The trip's window (owner, Nov 22: built like the goal window, his marks on the first drawing): the trip's picture inside a ring that fills with the
+// budget, the name, ONE figure (spent) with the budget and what is left under it, then plain rows (Dates, Entries, Tag new entries) and what was spent on.
+const tripPic = (t, size) => goalPic(t, size);
+// A trip's days, short enough for one line on a phone: "4 Oct 2026" for one day, "4 to 7 Oct 2026" in one month, "30 Oct to 2 Nov 2026" in one year.
+const tripRange = (t) => { if (!t.start || !t.end) return null; const a = M.niceDay(t.start), b = M.niceDay(t.end);
+  if (t.start === t.end) return a; if (t.start.slice(0, 7) === t.end.slice(0, 7)) return `${Number(t.start.slice(8))} to ${b}`;
+  return t.start.slice(0, 4) === t.end.slice(0, 4) ? `${a.replace(/ \d{4}$/, "")} to ${b}` : `${a} to ${b}`; };   // the same two kinds of picture as a goal: a built-in line picture or a photo, else the first letter
+function tripViewBody(id) {
+  const t = S().tags.find((x) => x.id === id); if (!t) return `<p class="note">This trip is gone.</p>`;
+  const sum = M.tagSummary(S(), id, { categoryMaps: S().categoryMaps, asOf: today() }), g = sum.grade, days = tripRange(t), on = ledger.settings.active_tag_id === id;
+  const d = M.tripEntries(S(), id), count = d.rows.length + d.before.length, top = sum.rows.reduce((n, r) => Math.max(n, r.amount), 0);
+  const pct = sum.budget ? (sum.spent / sum.budget) * 100 : null;
+  const ring = `<div class="gring"><svg viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="70" class="gtrack"/>${pct == null ? "" : `<circle cx="80" cy="80" r="70" class="gon" stroke-dasharray="${(Math.max(0, Math.min(100, pct)) / 100 * 2 * Math.PI * 70).toFixed(1)} ${(2 * Math.PI * 70).toFixed(1)}" transform="rotate(-90 80 80)"/>`}</svg>
+    <button class="gpic" data-action="open-icon" data-trip="1" data-id="${esc(id)}" aria-label="Change the picture of ${esc(t.name)}">${tripPic(t, 124)}<span class="gedit" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg></span></button></div>`;
+  const sub = sum.budget != null ? `${g ? glyph(g.level) + esc(LEVELS[g.level]) + " \u00b7 " : ""}${esc(g?.over ? "over by " + peso(sum.spent - sum.budget) : peso(sum.budget - sum.spent) + " left")} of ${peso(sum.budget)}` : "No budget";
+  const row = (k, v, action) => `<button class="gvrow" data-action="${action}" data-id="${esc(id)}"><span>${k}</span><b>${v}</b></button>`;
+  return `<div class="gview"><h3>${esc(t.name)}</h3>${ring}
+      <div class="gfig">${peso(sum.spent)}</div><div class="gsub">${sub}</div>
+      ${sum.pending > 0 ? `<p class="note">plus ${peso(sum.pending)} waiting in Verify</p>` : ""}</div>
+    <div class="card gv">${row("Dates", esc(days ?? "Add dates"), "open-trip-dates")}${row("Entries", String(count), "open-trip-detail")}${row("Tag new entries", on ? "On" : "Off", "use-trip")}</div>
+    ${sum.rows.length ? `<h2>Spent on</h2>${barCard(sum.rows.map((r) => ({ name: esc(r.name), fig: peso(r.amount), pct: top ? (r.amount / top) * 100 : 0, label: `${r.name}: ${pesoW(r.amount)}` })))}` : ""}`;
 }
 
 // One trip's entries. Membership is worked out from the dates each time (nothing is written into the entries); the buttons only record a hand override.
@@ -2363,14 +2382,14 @@ function viewChecks() {
       ${coverBar(share, ok ? "The money set aside covers what the card is owed" : "The money set aside is short of what the card is owed")}
       <div class="rc-row"><span>Held in ${esc(res.name)}</span><b>${peso(r.reserve)}</b></div>
       <div class="rc-row"><span>Owed on the card</span><b>${peso(r.outstanding)}</b></div></div>`;
-  }).join("") : `<p class="note">No card reserve is set up. You can add one in Setup.</p>`;
+  }).join("") : `<p class="note">None set up.</p>`;
 
   const weeks = M.unloggedByWeek(S(), M.UNLOGGED_CATEGORY_ID, today(), 8);
   const counted = weeks.filter((w) => w.amount !== null);
   const wlabel = (w) => "Week to " + longDate(w.week_end);
   let habit;
   if (!counted.length) habit = `<p class="note">No weekly count yet. <button class="act" data-action="tab" data-tab="checkin">Do the check-in</button></p>`;
-  else if (ui.asList) habit = `<table class="tbl"><tr><th>Week</th><th class="n">Not accounted for</th></tr>${weeks.map((w) => `<tr><td>${esc(wlabel(w))}</td><td class="n">${w.amount === null ? "Not counted" : w.amount < 0 ? peso(-w.amount) + " found" : peso(w.amount)}</td></tr>`).join("")}</table>`;
+  else if (ui.asList) habit = `<table class="tbl"><tr><th>Week</th><th class="n">Unaccounted</th></tr>${weeks.map((w) => `<tr><td>${esc(wlabel(w))}</td><td class="n">${w.amount === null ? "Not counted" : w.amount < 0 ? peso(-w.amount) + " found" : peso(w.amount)}</td></tr>`).join("")}</table>`;
   else {
     const top = Math.max(1, ...counted.map((w) => Math.max(0, w.amount)));
     habit = barCard(counted.map((w) => ({ name: esc(wlabel(w)), fig: w.amount < 0 ? peso(-w.amount) + " found" : peso(w.amount), pct: w.amount > 0 ? (w.amount / top) * 100 : 0,
@@ -2380,12 +2399,12 @@ function viewChecks() {
   const ago = (w) => w.unlogged_net < 0 ? peso(-w.unlogged_net) + " found" : peso(w.unlogged_net);
   const survey = !sv.weeks.length ? `<p class="note">The weekly questions appear after your first count.</p>`
     : !sv.ready ? `<p class="note">${sv.weeks.length} of 4 weeks answered. The review appears after about 4 weeks.</p>`
-    : `<table class="tbl"><tr><th>Week to</th><th class="n">Not accounted for</th><th class="n">Missed</th><th class="n">Easier (1-5)</th><th class="n">Fixes</th></tr>${sv.weeks.map((w) => `<tr><td>${esc(longDate(w.week_end))}</td><td class="n">${esc(ago(w))}</td><td class="n">${w.q1_missed_count}${w.q1_missed_amount ? " · " + peso(w.q1_missed_amount) : ""}</td><td class="n">${w.q2_ease}</td><td class="n">${w.q4_corrections_count}</td></tr>`).join("")}</table>
-      ${sv.trend ? `<p class="note">${sv.trend.change < 0 ? "\u25BC" : sv.trend.change > 0 ? "\u25B2" : "\u25AC"} Not accounted for went from ${esc(ago({ unlogged_net: sv.trend.first }))} in the first week to ${esc(ago({ unlogged_net: sv.trend.last }))} in the latest. ${sv.trend.change < 0 ? "Smaller is better logging." : sv.trend.change > 0 ? "It is growing." : "No change."}</p>` : ""}
+    : `<table class="tbl tight"><tr><th>Week to</th><th class="n">Unaccounted</th><th class="n">Missed</th><th class="n">Easier</th><th class="n">Fixes</th></tr>${sv.weeks.map((w) => `<tr><td>${esc(dayMonth(w.week_end))}</td><td class="n">${esc(ago(w))}</td><td class="n">${w.q1_missed_count}${w.q1_missed_amount ? " · " + peso(w.q1_missed_amount) : ""}</td><td class="n">${w.q2_ease}</td><td class="n">${w.q4_corrections_count}</td></tr>`).join("")}</table>
+      ${sv.trend ? `<p class="note">${sv.trend.change < 0 ? "\u25BC" : sv.trend.change > 0 ? "\u25B2" : "\u25AC"} Unaccounted money went from ${esc(ago({ unlogged_net: sv.trend.first }))} in the first week to ${esc(ago({ unlogged_net: sv.trend.last }))} in the latest. ${sv.trend.change < 0 ? "Smaller is better logging." : sv.trend.change > 0 ? "It is growing." : "No change."}</p>` : ""}
       ${sv.weeks.some((w) => w.q3_annoyance) ? `<h2>What annoyed you</h2>${sv.weeks.filter((w) => w.q3_annoyance).map((w) => `<p class="note"><b>${esc(longDate(w.week_end))}:</b> ${esc(w.q3_annoyance)}</p>`).join("")}` : ""}`;
   return `<h1>Checks</h1>
     <h2>Card reserve</h2>${reserve}
-    <h2>Uncategorized by week</h2><p class="note">Money your counts could not explain.</p>${habit}
+    <h2>Uncategorized by week</h2>${habit}
     ${counted.length ? `<p><button class="act" data-action="chart-mode" data-mode="${ui.asList ? "chart" : "list"}">${ui.asList ? "Show as chart" : "Show as list"}</button></p>` : ""}
     <h2>Weekly questions</h2>${survey}`;
 }
@@ -2397,7 +2416,7 @@ const planOf = () => M.planInEffect(plansOf(), today());
 // ---------- goals ----------
 // A goal's picture: the one the owner chose, else a plain first-letter tile.
 const goalPic = (g, size) => !g.icon && g.symbol && M.goalSymbolSvg(g.symbol)
-  ? `<span class="ico mono" style="width:${size}px;height:${size}px" aria-hidden="true">${M.goalSymbolSvg(g.symbol, Math.round(size * 0.62))}</span>`
+  ? `<span class="ico mono" style="width:${size}px;height:${size}px" aria-hidden="true">${M.goalSymbolSvg(g.symbol, Math.round(size * (size >= 100 ? 0.5 : 0.62)))}</span>`
   : iconOf({ name: g.name, ...(g.icon ? { icon: g.icon } : {}) }, size);
 // Everything the goal window shows about one goal.
 function goalFacts(g) {
@@ -2413,7 +2432,7 @@ function goalFacts(g) {
 // The picture with a thin ring around it showing how far the goal is.
 const goalRing = (g, percent) => { const r = 70, c = 2 * Math.PI * r, on = Math.max(0, Math.min(100, percent ?? 0)) / 100 * c;
   return `<div class="gring"><svg viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="${r}" class="gtrack"/>${percent == null ? "" : `<circle cx="80" cy="80" r="${r}" class="gon" stroke-dasharray="${on.toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 80 80)"/>`}</svg>
-    <button class="gpic" data-action="open-icon" data-goal="1" data-id="${esc(g.id)}" aria-label="Change the picture of ${esc(g.name)}">${goalPic(g, 96)}<span class="gedit" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg></span></button></div>`; };
+    <button class="gpic" data-action="open-icon" data-goal="1" data-id="${esc(g.id)}" aria-label="Change the picture of ${esc(g.name)}">${goalPic(g, 124)}<span class="gedit" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg></span></button></div>`; };
 // A goal points at an account where the money really sits. Balances are hidden until you choose to show them (spec 9).
 // A hidden amount keeps the room the real one takes, so nothing on the screen moves when the eye is tapped: the figure is written with every digit as a zero (digits are all one
 // width, and the real digits are never in the page), made invisible, and the five dots are drawn over it.
@@ -2474,7 +2493,7 @@ function repairCardHtml() {
   const p = st.plan, net = p.months.reduce((n, m) => n + m.change, 0);
   const twice = p.extraCount ? ` ${p.extraCount === 1 ? "One entry was" : p.extraCount + " entries were"} cancelled twice; that is put right too.` : "";
   return `<div class="card" style="margin-bottom:14px"><p><b>${net < 0 ? "Past counts booked " + peso(-net) + " as spending." : net > 0 ? "Past counts hid " + peso(net) + " of spending." : "Past weekly counts are counted as spending."}</b></p>
-    <p class="note small">${p.gapCount ? p.gapCount + " weekly " + (p.gapCount === 1 ? "count" : "counts") + " counted a gap you did not explain as money spent, or as money found. You can put " + (p.gapCount === 1 ? "it" : "them") + " right." : "An old mistake can be put right."}${esc(twice)}</p>
+    ${twice ? `<p class="note small">${esc(twice.trim())}</p>` : ""}
     ${st.note ? `<p class="note small">${esc(st.note)} <button class="act" data-action="copy-repair-check">Copy the repair check</button></p>` : ""}
     <p><button class="primary" data-action="open-repair">Look at the repair</button></p></div>`;
 }
@@ -2536,16 +2555,16 @@ function viewCheckin() {
   const questions = done
     ? `<h2 class="today">Weekly questions</h2><button class="choice" data-action="open-survey"><span>Four quick questions</span><span class="bval">${sv ? "Answered \u2713" : "Not answered"}</span></button>` : "";
   const age = M.daysSinceBackup(ledger.settings, today());
-  const backupLine = age === null || age >= 6 ? `<p class="note"><b>One reminder:</b> back up after this check-in. ${esc(backupAgeText())} ${esc(M.picturesNote((S().attachments ?? []).length))} <button class="act" data-action="tab" data-tab="setup" data-page="backup">Back up now</button></p>` : "";
+  // LESS TEXT (owner, Nov 22): figures, actions and warnings stay on the screen; the explanations live in Help (src/model/help.js, Weekly review).
+  const backupLine = age === null || age >= 6 ? `<p class="note" id="ck-backup">${age === null ? "No backup yet" : "Last backup " + age + " days ago"} <button class="act" data-action="tab" data-tab="setup" data-page="backup">Back up now</button></p>` : "";
   const fixable = M.correctable(S(), today()).length;
   const gapNote = fixable && accts.some((a) => { const c = countedThisWeek(a.id); return (c && c.difference !== 0) || (pend[a.id] && pendingGap(a, pend[a.id]).difference !== 0); })
-    ? `<p class="note">A gap can come from a wrong entry. <button class="act" data-action="open-correct">Look through the last two weeks</button></p>` : "";
-  const heldGaps = M.unexplainedGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }), matchedNote = heldGaps.length ? `<p class="note small">${heldGaps.length === 1 ? "1 gap is" : heldGaps.length + " gaps are"} not yet explained. ${heldGaps.length === 1 ? "It is" : "They are"} not counted as spending. Log what explains ${heldGaps.length === 1 ? "it" : "them"} when you can.</p>` : "";   // a quiet reminder, never a block
-  const fix = `<h2 class="today">A mistake in something verified?</h2><p class="note">A verified entry is final. Here, and only here, you can cancel one from the last two weeks and enter it again.</p>
+    ? `<p class="note"><button class="act" data-action="open-correct">Find a wrong entry</button></p>` : "";
+  const heldGaps = M.unexplainedGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }), matchedNote = heldGaps.length ? `<p class="note small" id="ck-held">${heldGaps.length === 1 ? "1 gap" : heldGaps.length + " gaps"} not yet explained</p>` : "";   // a quiet reminder, never a block
+  const fix = `<h2 class="today">A mistake in something verified?</h2>
     <button class="choice" data-action="open-correct"${fixable ? "" : " disabled"}><span>Put right a verified entry</span><span class="bval">${fixable ? fixable + " can be put right" : "none to put right"}</span></button>`;
   return `<h1>Weekly review</h1>${amountCheckHtml()}${repairCardHtml()}${pastMovesHtml()}<p class="sub">Week of ${esc(longDate(w.week_start))} to ${esc(longDate(w.week_end))}</p>
-    <p class="note">Open each account, look at the real balance, and type it in. Count them all first; then you see every gap together. ${accts.length ? pairFig(done, accts.length, { fmt: (n) => String(n), tail: "counted", left: "to count", doneWord: "All counted" }) : ""}</p>${backupLine}${(() => { const l = M.picturesBackupLine((S().attachments ?? []).length, ledger.settings.last_pictures_backup_at ?? "", today()); return l ? `<p class="note">${esc(l)} <button class="act" data-action="tab" data-tab="setup" data-page="backup">Back up pictures</button></p>` : ""; })()}${rows}${reviewGapsHtml(accts, pend)}${gapNote}${matchedNote}${fix}${questions}
-    ${why("A gap you do not explain is kept apart as Not yet explained and is not counted as spending. It never blocks anything.")}`;
+    <p class="note">${accts.length ? pairFig(done, accts.length, { fmt: (n) => String(n), tail: "counted", left: "to count", doneWord: "All counted" }) : ""}</p>${backupLine}${(() => { const l = M.picturesBackupLine((S().attachments ?? []).length, ledger.settings.last_pictures_backup_at ?? "", today()); return l ? `<p class="note">${esc(l)} <button class="act" data-action="tab" data-tab="setup" data-page="backup">Back up pictures</button></p>` : ""; })()}${rows}${reviewGapsHtml(accts, pend)}${gapNote}${matchedNote}${fix}${questions}`;
 }
 
 // ONE BUDGET (P0-6): one stored figure per category per month, shown as the whole Month, each payday's share, or a Per week guide. Changing the view never
@@ -2606,7 +2625,7 @@ function viewBudget() {
   const moveCard = !review.done && review.plan && !review.nothing ? `<div class="card" style="margin:10px 0;padding:14px 16px"><div class="ct"><span class="ctn">Your Pay plan moves into Budget<small>Look it over, then move it. Your plan stays in your history.</small></span></div><p style="margin:10px 0 0"><button data-action="open-plan-move" style="width:100%">Look it over</button></p></div>` : "";
   const hiddenList = v.hidden.length ? `<p class="center"><button class="act" data-action="bv-hidden">Hidden (${v.hidden.length})</button></p>${ui.budgetHidden ? barCard(v.hidden.map((h) => ({ name: esc(h.name), sub: "hidden: not in any figure above", fig: peso(h.amount), pct: null }))) : ""}` : "";
   const weekNote = per === "week" ? `<p class="note small">A guide: each month x 12 / 52, rounded down to the centavo. Rounding leaves ${peso(v.perWeek.roundedAway)} a month out of these figures.</p>` : "";
-  const noPay = !has ? `<p class="center"><button class="act" data-action="bv-paydays">Set your paydays</button></p><p class="note small">Per payday and Per week need your paydays.</p>` : `<p class="center"><button class="act small" data-action="bv-paydays" style="flex-basis:auto;text-align:center">Change paydays</button></p>`;
+  const noPay = !has ? `<p class="center"><button class="act" data-action="bv-paydays">Set your paydays</button></p>` : `<p class="center"><button class="act small" data-action="bv-paydays" style="flex-basis:auto;text-align:center">Change paydays</button></p>`;
   const top = v.income.amount ? `<div class="flathero"><div class="eyebrow">${eyebrow}</div><div class="flatfig"><p class="flatbig">${peso(income)}</p></div>
     <div class="pp-whole" role="img" aria-label="${esc(pesoW(block.placed))} of ${esc(pesoW(income))} placed" style="margin:12px 0 8px"><span style="width:${income > 0 ? Math.max(0, Math.min(100, Math.round((block.placed * 100) / income))) : 0}%"></span></div>
     <div class="ct" style="display:flex;justify-content:space-between;gap:10px"><span class="note small" style="margin:0">${esc(src)}</span><span class="amt" style="white-space:nowrap">${esc(leftLine)}</span></div>${v.income.other ? `<p class="note small">Your payslips say ${peso(v.income.other.amount)}; your own figure is used.</p>` : ""}${payLine ? `<p class="note small" id="pay-line">${payLine}</p>` : ""}${otherIn > 0 ? `<p class="note small" id="other-in">Other money in, not pay: ${peso(otherIn)}</p>` : ""}${prog ? `<p class="note small">${esc(longDate(prog.start))} to ${esc(longDate(prog.end))}. Only verified spending counts.</p>` : ""}</div>` : `<p class="note">${esc(M.NO_INCOME_PROMPT)}</p>`;
@@ -3066,6 +3085,8 @@ function renderSheet() {
       ${ui.form.error ? `<p id="f-msg" role="alert"><b>${esc(ui.form.error)}</b></p>` : ""}
       ${REQNOTE}
       <p><button class="primary" id="f-save" data-action="save-trip" style="margin-top:14px" disabled>Save trip</button></p>`;
+  } else if (sh.type === "trip-view") {
+    body = tripViewBody(sh.id);
   } else if (sh.type === "trip-dates") {
     const t = S().tags.find((x) => x.id === sh.id);
     body = `<h3>${esc(t?.name ?? "Trip")}: dates</h3>
@@ -3626,10 +3647,10 @@ function renderSheet() {
       <p><button class="primary" id="f-save" data-action="save-last4" style="margin-top:6px">Save</button></p>`;
   } else if (sh.type === "photo") {
     body = `<h3>Photo</h3><img class="shotfull" data-photo="${esc(sh.id)}" alt="The photo this entry was read from" hidden>`;
-  } else if (sh.type === "icon" && sh.goal) {
-    const g = S().goals.find((x) => x.id === sh.id);
+  } else if (sh.type === "icon" && (sh.goal || sh.trip)) {
+    const g = sh.trip ? S().tags.find((x) => x.id === sh.id) : S().goals.find((x) => x.id === sh.id);
     body = `<h3>Picture for ${esc(g.name)}</h3>
-      <div class="symrow" role="group" aria-label="Pick a picture">${M.GOAL_SYMBOLS.map((x) => `<button class="symtile" data-action="goal-symbol" data-id="${x.id}" aria-label="${esc(x.label)}" aria-pressed="${!g.icon && g.symbol === x.id}">${M.goalSymbolSvg(x.id, 26)}</button>`).join("")}</div>
+      <div class="symrow" role="group" aria-label="Pick a picture">${M.GOAL_SYMBOLS.map((x) => `<button class="symtile" data-action="${sh.trip ? "trip-symbol" : "goal-symbol"}" data-id="${x.id}" aria-label="${esc(x.label)}" aria-pressed="${!g.icon && g.symbol === x.id}">${M.goalSymbolSvg(x.id, 26)}</button>`).join("")}</div>
       <p class="note">Or choose a photo or an image, then zoom and drag until it fills the square. It stays on this phone.</p>
       <input id="i-file" type="file" accept="image/*" data-field="file" aria-label="Choose a picture">
       <div id="i-stage" class="stage"><img id="i-img" alt="" hidden></div>
@@ -3878,7 +3899,7 @@ function renderSheet() {
       <p class="note">Anything entered since this backup was made will be gone.${sh.all ? "" : ` Pictures are not in a backup, so those entries will say "picture not on this phone".`}</p>
       <p><button class="primary" id="f-save" data-action="restore-now">${ui.form.confirmRestore ? "Tap again to replace" : "Replace this phone's data"}</button></p>`;
   }
-  const closer = sh.type === "notice" || sh.type === "firstrun" || sh.type === "setup-restored" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? "" : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "buffer-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "versions" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
+  const closer = sh.type === "notice" || sh.type === "firstrun" || sh.type === "setup-restored" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? "" : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "trip-view" || sh.type === "buffer-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "versions" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
   $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""}${sh.type === "firstrun" ? "" : ' data-action="close-sheet"'}></div><div class="sheet${opening ? " enter" : ""}${sh.type === "firstrun" ? " full" : ""}${sh.type === "setup-restored" || sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
   const box = document.querySelector("#sheet .sheet"); if (box && keepAt) box.scrollTop = keepAt;
   // A rebuilt window that cannot yet hold its old place (its new content not laid out on Safari's engine) tries once more on the next frame.
@@ -4800,17 +4821,18 @@ async function onClick(el) {
       break;
     }
     case "open-trip": ui.sheet = { type: "trip" }; ui.form = { name: "", amount: "", start: "", end: "" }; renderSheet(); break;
-    case "open-trip-dates": { const t = S().tags.find((x) => x.id === id); ui.sheet = { type: "trip-dates", id }; ui.form = { start: t?.start ?? "", end: t?.end ?? "" }; renderSheet(); break; }
+    case "view-trip": ui.sheet = { type: "trip-view", id }; ui.form = {}; renderSheet(); break;
+    case "open-trip-dates": { const t = S().tags.find((x) => x.id === id); ui.sheet = { type: "trip-dates", id, back: ui.sheet?.type === "trip-view" }; ui.form = { start: t?.start ?? "", end: t?.end ?? "" }; renderSheet(); break; }
     case "save-trip-dates": case "clear-trip-dates": {
       const dates = action === "clear-trip-dates" ? {} : { start: ui.form.start, end: ui.form.end };
       const plan = M.planTripDates(S(), ui.sheet.id, dates);
       if (!plan.ok) { ui.form = { ...ui.form, error: plan.violations[0].message }; renderSheet(); break; }   // a plain message in the sheet; nothing is saved
-      ui.sheet = null; renderSheet();
+      ui.sheet = ui.sheet.back ? { type: "trip-view", id: ui.sheet.id } : null; ui.form = {}; renderSheet();   // opened from the trip's window: back to it
       await commit(plan.state);
       showToast(action === "clear-trip-dates" ? "Dates taken off" : "Dates saved");
       break;
     }
-    case "open-trip-detail": ui.tripId = id; renderScreen(); break;
+    case "open-trip-detail": ui.tripId = id; if (ui.sheet?.type === "trip-view") { ui.sheet = null; renderSheet(); } renderScreen(); break;
     case "trip-back": ui.tripId = null; renderScreen(); break;
     case "open-trip-pick": ui.sheet = { type: "trip-pick", id: ui.tripId }; ui.form = {}; renderSheet(); break;
     case "trip-add": case "trip-remove": {
@@ -4885,7 +4907,7 @@ async function onClick(el) {
       if (r.ok) await commit(r.state); else renderSheet();
       break;
     }
-    case "open-icon": ui.sheet = { type: "icon", id, goal: el.dataset.goal === "1" }; ui.form = {}; renderSheet(); break;
+    case "open-icon": ui.sheet = { type: "icon", id, goal: el.dataset.goal === "1", trip: el.dataset.trip === "1" }; ui.form = {}; renderSheet(); break;
     case "acct-more": ui.confirmRemove = null; ui.sheet = { type: "acct-more", id }; ui.form = {}; renderSheet(); break;
     case "cards-more": ui.sheet = { type: "cards-more" }; ui.form = {}; renderSheet(); break;
     case "edit-last4": ui.sheet = { type: "last4", id }; ui.form = { last4: S().accounts.find((a) => a.id === id)?.last4 ?? "", pocket: M.isPocket(S().accounts.find((a) => a.id === id)) }; renderSheet(); break;
@@ -4896,9 +4918,11 @@ async function onClick(el) {
       if (pk && !pk.ok) { const m = $("l4-msg"); if (m) m.textContent = pk.violations[0].message; break; }
       ui.sheet = null; renderSheet(); await commit(pk ? pk.state : r.state); break;
     }
+    case "trip-symbol": { const tid = ui.sheet.id, r = M.setTripSymbol(S(), tid, id); ui.sheet = { type: "trip-view", id: tid }; renderSheet(); if (r.ok) await commit(r.state); break; }
     case "goal-symbol": { const gid = ui.sheet.id, r = M.setGoalSymbol(S(), gid, id); ui.sheet = { type: "goal-view", id: gid, tab: "overview" }; renderSheet(); if (r.ok) await commit(r.state); break; }
     case "save-icon": await saveIcon(); break;
     case "clear-icon": {
+      if (ui.sheet.trip) { const tid = ui.sheet.id, r0 = M.setTripIcon(S(), tid, null), r = r0.ok ? M.setTripSymbol(r0.state, tid, null) : r0; ui.sheet = { type: "trip-view", id: tid }; renderSheet(); if (r.ok) await commit(r.state); break; }
       if (ui.sheet.goal) { const gid = ui.sheet.id, r0 = M.setGoalIcon(S(), gid, null), r = r0.ok ? M.setGoalSymbol(r0.state, gid, null) : r0; ui.sheet = { type: "goal-view", id: gid, tab: "overview" }; renderSheet(); if (r.ok) await commit(r.state); break; }
       const a = S().accounts.find((x) => x.id === ui.sheet.id);
       const r = M.setAccountIcon(S(), a.id, null);
@@ -5670,11 +5694,11 @@ async function saveIcon() {
   ctx.drawImage(c.img, -c.x / scale, -c.y / scale, CROP / scale, CROP / scale, 0, 0, ICON_PX, ICON_PX);
   let url = canvas.toDataURL("image/png");
   if (url.length > 38000) url = canvas.toDataURL("image/jpeg", 0.8);   // a very detailed picture: keep it small
-  const goalId = ui.sheet.goal ? ui.sheet.id : null;
-  const r = goalId ? M.setGoalIcon(S(), goalId, url) : M.setAccountIcon(S(), ui.sheet.id, url);
+  const goalId = ui.sheet.goal ? ui.sheet.id : null, tripId = ui.sheet.trip ? ui.sheet.id : null;
+  const r = tripId ? M.setTripIcon(S(), tripId, url) : goalId ? M.setGoalIcon(S(), goalId, url) : M.setAccountIcon(S(), ui.sheet.id, url);
   if (!r.ok) { $("f-msg").textContent = r.violations[0].message; return; }
   URL.revokeObjectURL(c.url);
-  ui.sheet = goalId ? { type: "goal-view", id: goalId, tab: "overview" } : null; renderSheet();
+  ui.sheet = tripId ? { type: "trip-view", id: tripId } : goalId ? { type: "goal-view", id: goalId, tab: "overview" } : null; renderSheet();
   await commit(r.state);
   showToast("Picture saved");
 }

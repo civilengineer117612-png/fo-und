@@ -12,6 +12,7 @@ import { reportingCategory } from "./rules.js";
 import { heldIds } from "./held.js";
 import { validateShape } from "./schema.js";
 import { isPhDate } from "./util.js";
+import { GOAL_SYMBOLS } from "./goalicons.js";
 
 // Sources that dates never tag. Scheduled payments (a coming feature) must add their source here.
 export const AUTO_TAG_SKIPS = ["template"];
@@ -64,6 +65,23 @@ export function planTripDates(state, tagId, { start = "", end = "" }) {
   const problems = validateShape("Tag", next);
   if (problems.length) return { ok: false, violations: problems };
   return { ok: true, violations: [], tag: next, state: { ...state, tags: tags.map((t) => (t.id === tagId ? next : t)) } };
+}
+
+// A trip's picture (owner, Nov 22: "a bit of a reminder of the event, like a profile picture"), the same two kinds as a goal's: one of the built-in line
+// pictures (null takes it away; a photo chosen before is put away, the latest choice shows) or a photo (a small square; null takes it away).
+export function setTripSymbol(state, tagId, symbolId) {
+  const tag = (state.tags ?? []).find((t) => t.id === tagId);
+  if (!tag) return fail("UNKNOWN_TAG", "no trip " + tagId);
+  if (symbolId != null && !GOAL_SYMBOLS.some((x) => x.id === symbolId)) return fail("BAD_SYMBOL", "no such picture " + symbolId);
+  const { icon, symbol, ...rest } = tag, next = symbolId == null ? rest : { ...rest, symbol: symbolId };
+  return { ok: true, violations: [], state: { ...state, tags: state.tags.map((t) => (t.id === tagId ? next : t)) } };
+}
+export function setTripIcon(state, tagId, dataUrl) {
+  const tag = (state.tags ?? []).find((t) => t.id === tagId);
+  if (!tag) return fail("UNKNOWN_TAG", "no trip " + tagId);
+  const { icon, ...rest } = tag, next = dataUrl == null ? rest : { ...rest, icon: dataUrl };
+  if (validateShape("Tag", next).length) return fail("BAD_ICON", "that picture cannot be used");
+  return { ok: true, violations: [], state: { ...state, tags: state.tags.map((t) => (t.id === tagId ? next : t)) } };
 }
 
 // Which trip each transaction belongs to: Map(transaction id -> {tag_id, how}) where how is "hand" or "dates". Only transactions on a trip are in it.

@@ -42,6 +42,9 @@ These become version 1.0.0 at the end of the overhaul.
 - Amounts are read the careful way: a comma only between thousands, so a mistyped comma is refused, never guessed.
 - Searching every entry answers as you type, even on a big ledger.
 - Every screen shares one look: white cards, one thin bar per line, and an outlined button for every action.
+- Screens say less: the Weekly review and the other screens keep figures, actions and warnings, and explanations moved into Help.
+- Trips is one row per trip, newest first, with a picture of your choice; tap a trip for everything else.
+- The weekly questions table fits on a phone without wrapping.
 
 ### Fixed
 - A scheduled payment no longer links itself to an entry you logged: Verify suggests it, and your tap links them.
