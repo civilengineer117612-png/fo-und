@@ -18,6 +18,8 @@ const longDateOf = dateWriter("en-PH", { weekday: "short", day: "numeric", month
 const yearDateOf = dateWriter("en-PH", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 const listDate = (d) => (String(d).slice(0, 4) === today().slice(0, 4) ? longDate(d) : yearDate(d));   // an entry list shows the year when it is not this year (old statements were set up in earlier years)
 const longDate = (d) => longDateOf(d, (x) => x + "T00:00:00Z");
+const dayMonthOf = dateWriter("en-PH", { day: "numeric", month: "short" });
+const dayMonth = (d) => dayMonthOf(d, (x) => x + "T00:00:00Z");   // "Oct 3": a narrow table column (the weekly questions)
 const yearDate = (d) => yearDateOf(d, (x) => x + "T00:00:00Z");   // the import window shows the year (a statement spans years)
 // The eye that shows or hides the amounts on a screen (Cards and Goals): an open eye while they are shown, a crossed one while they are hidden.
 const EYE_ATTRS = 'width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
@@ -2319,22 +2321,33 @@ function dueSoonHtml() {
 
 function viewTrips() {
   if (ui.tripId && S().tags.some((t) => t.id === ui.tripId)) return viewTripDetail(ui.tripId);
-  const tags = S().tags, active = ledger.settings.active_tag_id;
-  const cards = tags.map((t) => {
-    const sum = M.tagSummary(S(), t.id, { categoryMaps: S().categoryMaps, asOf: today() });
-    const g = sum.grade, on = active === t.id;
-    const meter = g ? `<div class="meter g-${g.level}"><span class="fill" style="width:${sum.spent > 0 ? Math.max(1, Math.min(100, g.percent)) : 0}%"></span></div>
-      <div class="status">${glyph(g.level)}${esc(LEVELS[g.level])} \u00b7 ${esc(g.over ? "Over by " + peso(sum.spent - sum.budget) : peso(sum.budget - sum.spent) + " left")}</div>` : "";
-    const rows = sum.rows.length ? `<table class="tbl"><tr><th>Category</th><th class="n">Spent</th></tr>${sum.rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="n">${peso(r.amount)}</td></tr>`).join("")}</table>` : `<p class="note">Nothing verified on this trip yet.</p>`;
-    const days = M.tripDays(t);
-    return `<div class="bcard tripcard"><div class="btop"><span class="bname">${esc(t.name)}</span><span class="bval">${sum.budget != null ? pairFig(sum.spent, sum.budget, { over: "over", label: t.name }) : peso(sum.spent)}</span></div>
-      <p class="note">${days ? esc(days) + ` \u00b7 <button class="act" data-action="open-trip-dates" data-id="${esc(t.id)}">Change dates</button>` : `<button class="act" data-action="open-trip-dates" data-id="${esc(t.id)}">Add dates</button>`}</p>${meter}
-      ${sum.pending > 0 ? `<p class="note">plus ${peso(sum.pending)} not verified yet</p>` : ""}${rows}
-      <p><button data-action="open-trip-detail" data-id="${esc(t.id)}">See the entries</button></p>
-      <p><button data-action="use-trip" data-id="${esc(t.id)}" aria-pressed="${on}">${on ? "Tagging new entries \u2713 (tap to stop)" : "Tag new entries with this trip"}</button></p></div>`;
-  }).join("");
-  return `<h1>Trips</h1>${cards || `<p class="note">No trips yet.</p>`}
+  const active = ledger.settings.active_tag_id;
+  // Owner, Nov 22: ONE row per trip, the newest on top (the trip being tagged first); a tap opens the trip's window with everything else.
+  const order = S().tags.map((t, i) => ({ t, i })).sort((a, b) => (b.t.id === active) - (a.t.id === active) || (b.t.start ?? "").localeCompare(a.t.start ?? "") || b.i - a.i).map((x) => x.t);
+  const rows = order.map((t) => {
+    const sum = M.tagSummary(S(), t.id, { categoryMaps: S().categoryMaps, asOf: today() }), days = M.tripDays(t);
+    const sub = [days ?? "No dates", active === t.id ? "Tagging new entries" : ""].filter(Boolean).join(" \u00b7 ");
+    return { name: esc(t.name), sub: esc(sub), fig: sum.budget != null ? pairFig(sum.spent, sum.budget, { over: "over", label: t.name }) : peso(sum.spent),
+      pct: sum.budget ? (sum.spent > 0 ? Math.max(1, Math.min(100, (sum.spent / sum.budget) * 100)) : 0) : null, label: `${t.name}: ${pesoW(sum.spent)}${sum.budget != null ? " of " + pesoW(sum.budget) : ""}`, action: "view-trip", id: t.id };
+  });
+  return `<h1>Trips</h1>${rows.length ? barCard(rows) : `<p class="note">No trips yet.</p>`}
     <p><button class="primary" data-action="open-trip" style="margin-top:8px">Add a trip</button></p>`;
+}
+
+// The trip's window (owner, Nov 22: the list was a wall of buttons): what was spent against the budget, by category, its dates, and the two actions.
+function tripViewBody(id) {
+  const t = S().tags.find((x) => x.id === id); if (!t) return `<p class="note">This trip is gone.</p>`;
+  const sum = M.tagSummary(S(), id, { categoryMaps: S().categoryMaps, asOf: today() }), g = sum.grade, days = M.tripDays(t), on = ledger.settings.active_tag_id === id;
+  const top = sum.rows.reduce((n, r) => Math.max(n, r.amount), 0);
+  const status = g ? `<div class="status">${glyph(g.level)}${esc(LEVELS[g.level])} \u00b7 ${esc(g.over ? "Over by " + peso(sum.spent - sum.budget) : peso(sum.budget - sum.spent) + " left")}</div>` : "";
+  const bar = sum.budget ? `<div class="meter g-${g?.level ?? "good"}"><span class="fill" style="width:${sum.spent > 0 ? Math.max(1, Math.min(100, (sum.spent / sum.budget) * 100)) : 0}%"></span></div>` : "";
+  return `<div class="gview"><h3>${esc(t.name)}</h3>
+    <div class="gfig">${sum.budget != null ? pairFig(sum.spent, sum.budget, { over: "over", label: t.name }) : peso(sum.spent)}</div>${bar}${status}
+    ${sum.pending > 0 ? `<p class="note">plus ${peso(sum.pending)} waiting in Verify</p>` : ""}</div>
+    ${sum.rows.length ? barCard(sum.rows.map((r) => ({ name: esc(r.name), fig: peso(r.amount), pct: top ? (r.amount / top) * 100 : 0, label: `${r.name}: ${pesoW(r.amount)}` }))) : `<p class="note">Nothing verified on this trip yet.</p>`}
+    <div class="card gv"><button class="gvrow" data-action="open-trip-dates" data-id="${esc(id)}"><span>Dates</span><b>${esc(days ?? "Add dates")}</b></button></div>
+    <p><button data-action="open-trip-detail" data-id="${esc(id)}" style="width:100%">See the entries</button></p>
+    <p><button data-action="use-trip" data-id="${esc(id)}" aria-pressed="${on}" style="width:100%">${on ? "Tagging new entries \u2713 (tap to stop)" : "Tag new entries with this trip"}</button></p>`;
 }
 
 // One trip's entries. Membership is worked out from the dates each time (nothing is written into the entries); the buttons only record a hand override.
@@ -2369,7 +2382,7 @@ function viewChecks() {
   const wlabel = (w) => "Week to " + longDate(w.week_end);
   let habit;
   if (!counted.length) habit = `<p class="note">No weekly count yet. <button class="act" data-action="tab" data-tab="checkin">Do the check-in</button></p>`;
-  else if (ui.asList) habit = `<table class="tbl"><tr><th>Week</th><th class="n">Not accounted for</th></tr>${weeks.map((w) => `<tr><td>${esc(wlabel(w))}</td><td class="n">${w.amount === null ? "Not counted" : w.amount < 0 ? peso(-w.amount) + " found" : peso(w.amount)}</td></tr>`).join("")}</table>`;
+  else if (ui.asList) habit = `<table class="tbl"><tr><th>Week</th><th class="n">Unaccounted</th></tr>${weeks.map((w) => `<tr><td>${esc(wlabel(w))}</td><td class="n">${w.amount === null ? "Not counted" : w.amount < 0 ? peso(-w.amount) + " found" : peso(w.amount)}</td></tr>`).join("")}</table>`;
   else {
     const top = Math.max(1, ...counted.map((w) => Math.max(0, w.amount)));
     habit = barCard(counted.map((w) => ({ name: esc(wlabel(w)), fig: w.amount < 0 ? peso(-w.amount) + " found" : peso(w.amount), pct: w.amount > 0 ? (w.amount / top) * 100 : 0,
@@ -2379,8 +2392,8 @@ function viewChecks() {
   const ago = (w) => w.unlogged_net < 0 ? peso(-w.unlogged_net) + " found" : peso(w.unlogged_net);
   const survey = !sv.weeks.length ? `<p class="note">The weekly questions appear after your first count.</p>`
     : !sv.ready ? `<p class="note">${sv.weeks.length} of 4 weeks answered. The review appears after about 4 weeks.</p>`
-    : `<table class="tbl"><tr><th>Week to</th><th class="n">Not accounted for</th><th class="n">Missed</th><th class="n">Easier (1-5)</th><th class="n">Fixes</th></tr>${sv.weeks.map((w) => `<tr><td>${esc(longDate(w.week_end))}</td><td class="n">${esc(ago(w))}</td><td class="n">${w.q1_missed_count}${w.q1_missed_amount ? " · " + peso(w.q1_missed_amount) : ""}</td><td class="n">${w.q2_ease}</td><td class="n">${w.q4_corrections_count}</td></tr>`).join("")}</table>
-      ${sv.trend ? `<p class="note">${sv.trend.change < 0 ? "\u25BC" : sv.trend.change > 0 ? "\u25B2" : "\u25AC"} Not accounted for went from ${esc(ago({ unlogged_net: sv.trend.first }))} in the first week to ${esc(ago({ unlogged_net: sv.trend.last }))} in the latest. ${sv.trend.change < 0 ? "Smaller is better logging." : sv.trend.change > 0 ? "It is growing." : "No change."}</p>` : ""}
+    : `<table class="tbl tight"><tr><th>Week to</th><th class="n">Unaccounted</th><th class="n">Missed</th><th class="n">Easier</th><th class="n">Fixes</th></tr>${sv.weeks.map((w) => `<tr><td>${esc(dayMonth(w.week_end))}</td><td class="n">${esc(ago(w))}</td><td class="n">${w.q1_missed_count}${w.q1_missed_amount ? " · " + peso(w.q1_missed_amount) : ""}</td><td class="n">${w.q2_ease}</td><td class="n">${w.q4_corrections_count}</td></tr>`).join("")}</table>
+      ${sv.trend ? `<p class="note">${sv.trend.change < 0 ? "\u25BC" : sv.trend.change > 0 ? "\u25B2" : "\u25AC"} Unaccounted money went from ${esc(ago({ unlogged_net: sv.trend.first }))} in the first week to ${esc(ago({ unlogged_net: sv.trend.last }))} in the latest. ${sv.trend.change < 0 ? "Smaller is better logging." : sv.trend.change > 0 ? "It is growing." : "No change."}</p>` : ""}
       ${sv.weeks.some((w) => w.q3_annoyance) ? `<h2>What annoyed you</h2>${sv.weeks.filter((w) => w.q3_annoyance).map((w) => `<p class="note"><b>${esc(longDate(w.week_end))}:</b> ${esc(w.q3_annoyance)}</p>`).join("")}` : ""}`;
   return `<h1>Checks</h1>
     <h2>Card reserve</h2>${reserve}
@@ -3065,6 +3078,8 @@ function renderSheet() {
       ${ui.form.error ? `<p id="f-msg" role="alert"><b>${esc(ui.form.error)}</b></p>` : ""}
       ${REQNOTE}
       <p><button class="primary" id="f-save" data-action="save-trip" style="margin-top:14px" disabled>Save trip</button></p>`;
+  } else if (sh.type === "trip-view") {
+    body = tripViewBody(sh.id);
   } else if (sh.type === "trip-dates") {
     const t = S().tags.find((x) => x.id === sh.id);
     body = `<h3>${esc(t?.name ?? "Trip")}: dates</h3>
@@ -3877,7 +3892,7 @@ function renderSheet() {
       <p class="note">Anything entered since this backup was made will be gone.${sh.all ? "" : ` Pictures are not in a backup, so those entries will say "picture not on this phone".`}</p>
       <p><button class="primary" id="f-save" data-action="restore-now">${ui.form.confirmRestore ? "Tap again to replace" : "Replace this phone's data"}</button></p>`;
   }
-  const closer = sh.type === "notice" || sh.type === "firstrun" || sh.type === "setup-restored" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? "" : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "buffer-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "versions" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
+  const closer = sh.type === "notice" || sh.type === "firstrun" || sh.type === "setup-restored" ? "" : sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? "" : `<p><button data-action="close-sheet" style="width:100%">${sh.type === "photo" || sh.type === "register" || sh.type === "goal-view" || sh.type === "trip-view" || sh.type === "buffer-view" || sh.type === "txdetail" || sh.type === "payslips" || sh.type === "howto" || sh.type === "whatsnew" || sh.type === "versions" || sh.type === "entries" || sh.type === "spending-entries" || sh.type === "networth" ? "Close" : "Cancel"}</button></p>`;   // the first-run notice has one answer, I understand
   $("sheet").innerHTML = `<div id="scrim"${opening ? ' class="enter"' : ""}${sh.type === "firstrun" ? "" : ' data-action="close-sheet"'}></div><div class="sheet${opening ? " enter" : ""}${sh.type === "firstrun" ? " full" : ""}${sh.type === "setup-restored" || sh.type === "welcome" || sh.type === "stmonth" || sh.type === "stcompare" || sh.type === "cardpay" || sh.type === "catcard" || sh.type === "replaced" || sh.type === "explain-gap" || sh.type === "slip-verify" || sh.type === "repair" || sh.type === "refund-repair" || sh.type === "paymonth" || sh.type === "intro" ? " center" : ""}" role="dialog">${body}${closer}</div>`;
   const box = document.querySelector("#sheet .sheet"); if (box && keepAt) box.scrollTop = keepAt;
   // A rebuilt window that cannot yet hold its old place (its new content not laid out on Safari's engine) tries once more on the next frame.
@@ -4799,17 +4814,18 @@ async function onClick(el) {
       break;
     }
     case "open-trip": ui.sheet = { type: "trip" }; ui.form = { name: "", amount: "", start: "", end: "" }; renderSheet(); break;
-    case "open-trip-dates": { const t = S().tags.find((x) => x.id === id); ui.sheet = { type: "trip-dates", id }; ui.form = { start: t?.start ?? "", end: t?.end ?? "" }; renderSheet(); break; }
+    case "view-trip": ui.sheet = { type: "trip-view", id }; ui.form = {}; renderSheet(); break;
+    case "open-trip-dates": { const t = S().tags.find((x) => x.id === id); ui.sheet = { type: "trip-dates", id, back: ui.sheet?.type === "trip-view" }; ui.form = { start: t?.start ?? "", end: t?.end ?? "" }; renderSheet(); break; }
     case "save-trip-dates": case "clear-trip-dates": {
       const dates = action === "clear-trip-dates" ? {} : { start: ui.form.start, end: ui.form.end };
       const plan = M.planTripDates(S(), ui.sheet.id, dates);
       if (!plan.ok) { ui.form = { ...ui.form, error: plan.violations[0].message }; renderSheet(); break; }   // a plain message in the sheet; nothing is saved
-      ui.sheet = null; renderSheet();
+      ui.sheet = ui.sheet.back ? { type: "trip-view", id: ui.sheet.id } : null; ui.form = {}; renderSheet();   // opened from the trip's window: back to it
       await commit(plan.state);
       showToast(action === "clear-trip-dates" ? "Dates taken off" : "Dates saved");
       break;
     }
-    case "open-trip-detail": ui.tripId = id; renderScreen(); break;
+    case "open-trip-detail": ui.tripId = id; if (ui.sheet?.type === "trip-view") { ui.sheet = null; renderSheet(); } renderScreen(); break;
     case "trip-back": ui.tripId = null; renderScreen(); break;
     case "open-trip-pick": ui.sheet = { type: "trip-pick", id: ui.tripId }; ui.form = {}; renderSheet(); break;
     case "trip-add": case "trip-remove": {

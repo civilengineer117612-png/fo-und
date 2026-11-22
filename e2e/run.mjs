@@ -1045,8 +1045,8 @@ for (let wk = 1; wk <= 3; wk++) {   // three more weeks, so there are four answe
 }
 await menuGo(page, "Checks");
 var review = await text(page, "#screen");
-check(review.includes("Easier (1-5)") && review.includes("week 3 note") && review.toLowerCase().includes("what annoyed you"), "after four weeks the review shows each week's answers and what annoyed you");
-check(/Not accounted for went from .* in the first week to .* in the latest/.test(review), "and the Unlogged trend in words, with a shape");
+check(review.includes("Easier") && review.includes("Unaccounted") && review.includes("week 3 note") && review.toLowerCase().includes("what annoyed you"), "after four weeks the review shows each week's answers and what annoyed you");
+check(/Unaccounted money went from .* in the first week to .* in the latest/.test(review), "and the Unlogged trend in words, with a shape");
 await shot(page, "40-survey-review");
 await page.clock.setFixedTime(T0); await page.reload(); await page.waitForSelector("#nav button");
 await shot(page, "22-checkin");
@@ -1113,8 +1113,12 @@ check(await page.locator("#f-save").isDisabled(), "a trip needs a name first");
 check(await stars(page) === 1 && (await text(page, "#sheet")).includes("needed before you can save"), "a trip marks only its name with the *");
 await page.fill("#t-name", "Test Trip"); await page.fill("#f-amount", "1000");
 await page.click("#f-save"); await seen(page, "#toast", "Trip added");
-check((await text(page, "#screen")).includes("₱0.00 / ₱1,000.00") && (await text(page, "#screen")).includes("On track"), "a new trip shows its budget in words and as a graded meter");
-await page.click('button:has-text("Tag new entries with this trip")');
+check((await text(page, "#screen")).includes("₱0.00 / ₱1,000.00") && (await page.locator('#screen button[data-action="view-trip"]').count()) === 1 && (await page.locator('#screen button[data-action="use-trip"]').count()) === 0, "a new trip is ONE row with its budget; its buttons are in its window (owner, Nov 22)");
+await page.click('#screen button[data-action="view-trip"]');
+check((await seen(page, "#sheet", "On track")) && (await text(page, "#sheet")).includes("₱0.00 / ₱1,000.00"), "tapping the trip opens its window: the budget in words and as a graded meter");
+await page.click('#sheet button:has-text("Tag new entries with this trip")');
+await seen(page, "#sheet", "Tagging new entries");
+await page.click('#sheet button[data-action="close-sheet"]');
 await seen(page, "#screen", "Tagging new entries");
 await page.click('#nav button:has-text("Log")');
 check((await text(page, "#screen")).includes("Tagging new entries: Test Trip"), "the Log screen says new entries are being tagged");
@@ -1122,22 +1126,26 @@ await page.click('button:has-text("Add expense")'); await page.fill("#f-amount",
 ledgerNow = JSON.parse((await stored(page)).local);
 check(ledgerNow.state.transactions.some((t) => t.trip_add === ledgerNow.state.tags[0].id && t.status === "draft"), "the new entry carries the trip tag with no extra taps");
 await menuGo(page, "Trips");
-check((await text(page, "#screen")).includes("plus ₱120.00 not verified yet"), "unverified trip spending is mentioned, not counted");
+await page.click('#screen button[data-action="view-trip"]');
+check(await seen(page, "#sheet", "plus ₱120.00 waiting in Verify"), "unverified trip spending is mentioned, not counted");
 await shot(page, "28-trips");
 // trip dates: the dates add entries by themselves, trips cannot overlap, hand overrides, "Before the trip"
 {
   const nowMs = await page.evaluate(() => Date.now());   // the test clock, not the real one
   const phDay = (n) => new Date(nowMs + 8 * 3600e3 + n * 864e5).toISOString().slice(0, 10);
-  await page.click('button[data-action="open-trip-dates"]');
+  await page.click('#sheet button[data-action="open-trip-dates"]');
   check(await page.locator("#f-save").isDisabled(), "dates need both days");
   await page.fill("#t-start", phDay(-1)); await page.fill("#t-end", phDay(1)); await page.click("#f-save"); await seen(page, "#toast", "Dates saved");
-  check((await text(page, "#screen")).includes(" to ") && (await text(page, "#screen")).includes("Change dates"), "the trip shows its days");
+  check((await text(page, "#sheet")).includes(" to ") && (await page.locator('#sheet button[data-action="view-trip"], #sheet button[data-action="use-trip"]').count()) > 0, "saving the dates goes back to the trip's window, which shows its days");
+  await page.click('#sheet button[data-action="close-sheet"]');
+  check((await text(page, "#screen")).includes(" to "), "and the trip's row shows them too");
   await page.click('button:has-text("Add a trip")'); await page.fill("#t-name", "Second Trip"); await page.fill("#t-start", phDay(1)); await page.fill("#t-end", phDay(4)); await page.click("#f-save");
   check((await text(page, "#sheet")).includes('overlap your trip "Test Trip"') && (await page.locator("#sheet #t-name").count()) === 1, "overlapping dates show a plain message naming the other trip, and the sheet stays open");
   check(JSON.parse((await stored(page)).local).state.tags.length === 1, "and nothing is saved");
   await page.fill("#t-start", phDay(2)); await page.click("#f-save"); await seen(page, "#toast", "Trip added");
   check(JSON.parse((await stored(page)).local).state.tags.length === 2, "free days are accepted");
-  await page.click('button[data-action="open-trip-detail"] >> nth=0');
+  check((await page.locator('#screen button[data-action="view-trip"]').first().innerText()).includes("Test Trip"), "the trip being tagged sits on top");
+  await page.click('#screen button[data-action="view-trip"]:has-text("Test Trip")'); await page.click('#sheet button[data-action="open-trip-detail"]');
   check((await text(page, "#screen")).includes("Upskill") || (await text(page, "#screen")).includes("₱120.00"), "the trip's entries are listed");
   check(!(await text(page, "#screen")).includes("Before the trip"), "no Before the trip heading yet");
   await page.locator('#screen .row:has-text("₱120.00") button[data-action="trip-remove"]').click();
@@ -1153,7 +1161,8 @@ await shot(page, "28-trips");
   await page.click('button[data-action="trip-back"]');
   check((await text(page, "#screen")).includes("Second Trip"), "back to all trips");
 }
-await page.click('button:has-text("Tagging new entries")');
+await page.click('#screen button[data-action="view-trip"]:has-text("Test Trip")'); await page.click('#sheet button[data-action="use-trip"]');
+await page.click('#sheet button[data-action="close-sheet"]');
 await page.click('#nav button:has-text("Log")');
 check(!(await text(page, "#screen")).includes("Tagging new entries"), "tagging can be switched off");
 check(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
@@ -5290,7 +5299,7 @@ console.log("\n-- Checks screen --");
   const box = await page.locator(".rescard .rc-state").boundingBox(), card = await page.locator(".rescard").boundingBox();
   check(box && card && box.x + box.width <= card.x + card.width, "the status sits inside the card on one line");
   await page.click('button[data-action="chart-mode"]');
-  check((await text(page, "#screen")).includes("Not accounted for"), "Show as list still gives the table twin");
+  check((await text(page, "#screen")).includes("Unaccounted"), "Show as list still gives the table twin");
   check(errors.length === 0, "no script errors: " + errors.join("; ")); await ctx.close(); }
 } catch (e) { await blockFailed(e); }
 
