@@ -521,7 +521,7 @@ function tilesHtml() {
   const tile = (p, arranging) => `<${arranging ? "div" : "button"} class="tile" data-action="${arranging ? "edit-tile" : "open-preset"}" data-id="${esc(p.id)}"${arranging ? ' role="button" tabindex="0"' : ""}><b>${esc(p.name)}</b><span>${peso(p.amount)}</span><i class="tcat">${esc(categoryName(p.category_id))}</i>${arranging ? `<button class="tminus" data-action="remove-tile-now" data-id="${esc(p.id)}" aria-label="Remove ${esc(p.name)}">-</button>` : ""}</${arranging ? "div" : "button"}>`;
   if (!ui.arrange && !S().presets.length) return `<p><button class="addtile" data-action="arrange-start">+ Add a quick tile</button></p>`;
   if (!ui.arrange) {
-    const hint = ledger.settings.tile_hint_done ? "" : `<p class="note small center">Hold a tile to move, change or remove it.</p>`;
+    const hint = "";   // LESS TEXT (owner, Nov 22): "Hold a tile to move or change it" is in Help (Log)
     return `<div class="tiles">${S().presets.map((p) => tile(p, false)).join("")}</div>${hint}`;
   }
   const add = S().presets.length < M.MAX_PRESETS ? `<div class="tile addtile" data-action="add-tile" data-howto="log" role="button" tabindex="0" aria-label="Add a tile"><b>+</b></div>` : "";
@@ -594,7 +594,7 @@ function viewVerify() {
         <button class="primary wide" data-action="verify-ok" data-id="${esc(t.id)}">Correct</button>
         <button data-action="verify-edit" data-id="${esc(t.id)}">Edit</button>
         <button data-action="verify-delete" data-id="${esc(t.id)}">${del ? "Tap again to delete" : "Delete"}</button>
-      </div><p class="note finalnote">Correct makes this entry final. A mistake is put right only at the Weekly review.</p></div>`;
+      </div><p class="note finalnote">Final once verified.</p></div>`;
 }
 
 // ---------- Income: where every peso of pay comes from ----------
@@ -1129,10 +1129,9 @@ function viewScan() {
   const s = ui.scan, busy = s?.busy === true;
   const status = busy ? `<p class="note" id="scan-msg" role="status">${esc(s.msg)}</p>` : s?.error ? `<p class="note" role="alert">${esc(s.error)}</p>` : s?.done ? `<p class="note" role="status">${esc(s.done)} <button class="act" data-action="tab" data-tab="verify">Go to Verify</button></p>` : "";
   return `<h1>Scan</h1><p class="sub">A receipt, payslip or payment screenshot</p>
-    <p class="note">This phone reads the photo. Nothing is sent anywhere. You check each guess in Verify, with the photo beside it.</p>
+    <p class="note">Read on this phone. Nothing is sent anywhere.</p>
     ${photoButtons("1", busy)}
-    ${status}
-    <p class="note">The first photo downloads the reader (about 30 MB), then it works offline. Handwriting is read poorly: check the numbers. Photos stay on this phone.</p>`;
+    ${status}`;   // LESS TEXT (owner, Nov 22): the reader's download, handwriting and checking in Verify are in Help (Scan)
 }
 
 const incomeCategories = () => S().categories.filter((c) => c.kind === "income");
@@ -2087,8 +2086,8 @@ function unexplainedHtml(from, to) {
   const list = M.unexplainedGaps(S(), { from, to, unlogged_category_id: M.UNLOGGED_CATEGORY_ID });
   if (!list.length) return "";
   const word = (g) => { const card = S().accounts.find((x) => x.id === g.account_id)?.class === "liability"; return g.kind === "short" ? (card ? "owes more than logged" : "missing") : (card ? "owes less than logged" : "more than logged"); };
-  return `<h2 class="today">Not yet explained</h2><div class="group">${list.map((g) => `<div class="row"><div>${esc(accountName(g.account_id))}<small>${esc(word(g))}, counted ${esc(listDate(g.date))}. Not part of what you spent.</small></div><div class="amt">${peso(g.amount)}</div></div>`).join("")}</div>
-    <p class="note small">Log what explains it and you are offered "This explains the gap". Until then it stays out of the total above.</p>`;
+  return `<h2 class="today">Not yet explained</h2><div class="group">${list.map((g) => `<div class="row"><div>${esc(accountName(g.account_id))}<small>${esc(word(g))} \u00b7 counted ${esc(listDate(g.date))}</small></div><div class="amt">${peso(g.amount)}</div></div>`).join("")}</div>
+`;
 }
 
 function viewMoney() {
@@ -2251,8 +2250,8 @@ function viewScheduled() {
   const hints = M.scheduleHints(S(), t, planOf(), { dismissed: ledger.settings.schedule_hints_dismissed ?? [] });
   const hintHtml = hints.length ? `<h2>Maybe add</h2><p class="note">Found in your own history and your Pay plan. Nothing is added until you save it.</p>${hints.map((h) => `<div class="row"><div>${esc(h.name)}<small>${h.approx ? "about " : ""}${peso(h.amount)} around the ${esc(ordinal(h.day))}${h.source === "history" ? " \u00b7 paid in " + h.months + " of the last " + h.of + " months" : " \u00b7 from your Pay plan"}</small></div>
       <div class="amt"><button data-action="hint-add" data-id="${esc(h.key)}">Add</button><br><button class="act" data-action="hint-no" data-id="${esc(h.key)}">Not this</button></div></div>`).join("")}` : "";
-  return `<h1>Scheduled</h1><p class="sub">Rent, subscriptions and installment plans. Each payment waits in Verify on its due day.</p>
-    ${hintHtml}${list.some((s) => !M.historyOf(S(), s).removed) ? rows : `<p class="note">Nothing scheduled yet. Add rent, a subscription or an installment plan.</p>`}
+  return `<h1>Scheduled</h1>
+    ${hintHtml}${list.some((s) => !M.historyOf(S(), s).removed) ? rows : `<p class="note">Nothing scheduled yet.</p>`}
     <p><button class="primary" data-action="open-schedule-new" style="margin-top:8px">Add a scheduled payment</button></p>`;
 }
 const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th");
@@ -2334,7 +2333,7 @@ function viewTrips() {
       <p><button data-action="open-trip-detail" data-id="${esc(t.id)}">See the entries</button></p>
       <p><button data-action="use-trip" data-id="${esc(t.id)}" aria-pressed="${on}">${on ? "Tagging new entries \u2713 (tap to stop)" : "Tag new entries with this trip"}</button></p></div>`;
   }).join("");
-  return `<h1>Trips</h1><p class="sub">Spending for a trip, kept apart from daily spending. Give a trip dates and entries on those days join it.</p>${cards || `<p class="note">No trips yet.</p>`}
+  return `<h1>Trips</h1>${cards || `<p class="note">No trips yet.</p>`}
     <p><button class="primary" data-action="open-trip" style="margin-top:8px">Add a trip</button></p>`;
 }
 
@@ -2363,7 +2362,7 @@ function viewChecks() {
       ${coverBar(share, ok ? "The money set aside covers what the card is owed" : "The money set aside is short of what the card is owed")}
       <div class="rc-row"><span>Held in ${esc(res.name)}</span><b>${peso(r.reserve)}</b></div>
       <div class="rc-row"><span>Owed on the card</span><b>${peso(r.outstanding)}</b></div></div>`;
-  }).join("") : `<p class="note">No card reserve is set up. You can add one in Setup.</p>`;
+  }).join("") : `<p class="note">None set up.</p>`;
 
   const weeks = M.unloggedByWeek(S(), M.UNLOGGED_CATEGORY_ID, today(), 8);
   const counted = weeks.filter((w) => w.amount !== null);
@@ -2385,7 +2384,7 @@ function viewChecks() {
       ${sv.weeks.some((w) => w.q3_annoyance) ? `<h2>What annoyed you</h2>${sv.weeks.filter((w) => w.q3_annoyance).map((w) => `<p class="note"><b>${esc(longDate(w.week_end))}:</b> ${esc(w.q3_annoyance)}</p>`).join("")}` : ""}`;
   return `<h1>Checks</h1>
     <h2>Card reserve</h2>${reserve}
-    <h2>Uncategorized by week</h2><p class="note">Money your counts could not explain.</p>${habit}
+    <h2>Uncategorized by week</h2>${habit}
     ${counted.length ? `<p><button class="act" data-action="chart-mode" data-mode="${ui.asList ? "chart" : "list"}">${ui.asList ? "Show as chart" : "Show as list"}</button></p>` : ""}
     <h2>Weekly questions</h2>${survey}`;
 }
@@ -2474,7 +2473,7 @@ function repairCardHtml() {
   const p = st.plan, net = p.months.reduce((n, m) => n + m.change, 0);
   const twice = p.extraCount ? ` ${p.extraCount === 1 ? "One entry was" : p.extraCount + " entries were"} cancelled twice; that is put right too.` : "";
   return `<div class="card" style="margin-bottom:14px"><p><b>${net < 0 ? "Past counts booked " + peso(-net) + " as spending." : net > 0 ? "Past counts hid " + peso(net) + " of spending." : "Past weekly counts are counted as spending."}</b></p>
-    <p class="note small">${p.gapCount ? p.gapCount + " weekly " + (p.gapCount === 1 ? "count" : "counts") + " counted a gap you did not explain as money spent, or as money found. You can put " + (p.gapCount === 1 ? "it" : "them") + " right." : "An old mistake can be put right."}${esc(twice)}</p>
+    ${twice ? `<p class="note small">${esc(twice.trim())}</p>` : ""}
     ${st.note ? `<p class="note small">${esc(st.note)} <button class="act" data-action="copy-repair-check">Copy the repair check</button></p>` : ""}
     <p><button class="primary" data-action="open-repair">Look at the repair</button></p></div>`;
 }
@@ -2536,16 +2535,16 @@ function viewCheckin() {
   const questions = done
     ? `<h2 class="today">Weekly questions</h2><button class="choice" data-action="open-survey"><span>Four quick questions</span><span class="bval">${sv ? "Answered \u2713" : "Not answered"}</span></button>` : "";
   const age = M.daysSinceBackup(ledger.settings, today());
-  const backupLine = age === null || age >= 6 ? `<p class="note"><b>One reminder:</b> back up after this check-in. ${esc(backupAgeText())} ${esc(M.picturesNote((S().attachments ?? []).length))} <button class="act" data-action="tab" data-tab="setup" data-page="backup">Back up now</button></p>` : "";
+  // LESS TEXT (owner, Nov 22): figures, actions and warnings stay on the screen; the explanations live in Help (src/model/help.js, Weekly review).
+  const backupLine = age === null || age >= 6 ? `<p class="note" id="ck-backup">${age === null ? "No backup yet" : "Last backup " + age + " days ago"} <button class="act" data-action="tab" data-tab="setup" data-page="backup">Back up now</button></p>` : "";
   const fixable = M.correctable(S(), today()).length;
   const gapNote = fixable && accts.some((a) => { const c = countedThisWeek(a.id); return (c && c.difference !== 0) || (pend[a.id] && pendingGap(a, pend[a.id]).difference !== 0); })
-    ? `<p class="note">A gap can come from a wrong entry. <button class="act" data-action="open-correct">Look through the last two weeks</button></p>` : "";
-  const heldGaps = M.unexplainedGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }), matchedNote = heldGaps.length ? `<p class="note small">${heldGaps.length === 1 ? "1 gap is" : heldGaps.length + " gaps are"} not yet explained. ${heldGaps.length === 1 ? "It is" : "They are"} not counted as spending. Log what explains ${heldGaps.length === 1 ? "it" : "them"} when you can.</p>` : "";   // a quiet reminder, never a block
-  const fix = `<h2 class="today">A mistake in something verified?</h2><p class="note">A verified entry is final. Here, and only here, you can cancel one from the last two weeks and enter it again.</p>
+    ? `<p class="note"><button class="act" data-action="open-correct">Find a wrong entry</button></p>` : "";
+  const heldGaps = M.unexplainedGaps(S(), { unlogged_category_id: M.UNLOGGED_CATEGORY_ID }), matchedNote = heldGaps.length ? `<p class="note small" id="ck-held">${heldGaps.length === 1 ? "1 gap" : heldGaps.length + " gaps"} not yet explained</p>` : "";   // a quiet reminder, never a block
+  const fix = `<h2 class="today">A mistake in something verified?</h2>
     <button class="choice" data-action="open-correct"${fixable ? "" : " disabled"}><span>Put right a verified entry</span><span class="bval">${fixable ? fixable + " can be put right" : "none to put right"}</span></button>`;
   return `<h1>Weekly review</h1>${amountCheckHtml()}${repairCardHtml()}${pastMovesHtml()}<p class="sub">Week of ${esc(longDate(w.week_start))} to ${esc(longDate(w.week_end))}</p>
-    <p class="note">Open each account, look at the real balance, and type it in. Count them all first; then you see every gap together. ${accts.length ? pairFig(done, accts.length, { fmt: (n) => String(n), tail: "counted", left: "to count", doneWord: "All counted" }) : ""}</p>${backupLine}${(() => { const l = M.picturesBackupLine((S().attachments ?? []).length, ledger.settings.last_pictures_backup_at ?? "", today()); return l ? `<p class="note">${esc(l)} <button class="act" data-action="tab" data-tab="setup" data-page="backup">Back up pictures</button></p>` : ""; })()}${rows}${reviewGapsHtml(accts, pend)}${gapNote}${matchedNote}${fix}${questions}
-    ${why("A gap you do not explain is kept apart as Not yet explained and is not counted as spending. It never blocks anything.")}`;
+    <p class="note">${accts.length ? pairFig(done, accts.length, { fmt: (n) => String(n), tail: "counted", left: "to count", doneWord: "All counted" }) : ""}</p>${backupLine}${(() => { const l = M.picturesBackupLine((S().attachments ?? []).length, ledger.settings.last_pictures_backup_at ?? "", today()); return l ? `<p class="note">${esc(l)} <button class="act" data-action="tab" data-tab="setup" data-page="backup">Back up pictures</button></p>` : ""; })()}${rows}${reviewGapsHtml(accts, pend)}${gapNote}${matchedNote}${fix}${questions}`;
 }
 
 // ONE BUDGET (P0-6): one stored figure per category per month, shown as the whole Month, each payday's share, or a Per week guide. Changing the view never
@@ -2606,7 +2605,7 @@ function viewBudget() {
   const moveCard = !review.done && review.plan && !review.nothing ? `<div class="card" style="margin:10px 0;padding:14px 16px"><div class="ct"><span class="ctn">Your Pay plan moves into Budget<small>Look it over, then move it. Your plan stays in your history.</small></span></div><p style="margin:10px 0 0"><button data-action="open-plan-move" style="width:100%">Look it over</button></p></div>` : "";
   const hiddenList = v.hidden.length ? `<p class="center"><button class="act" data-action="bv-hidden">Hidden (${v.hidden.length})</button></p>${ui.budgetHidden ? barCard(v.hidden.map((h) => ({ name: esc(h.name), sub: "hidden: not in any figure above", fig: peso(h.amount), pct: null }))) : ""}` : "";
   const weekNote = per === "week" ? `<p class="note small">A guide: each month x 12 / 52, rounded down to the centavo. Rounding leaves ${peso(v.perWeek.roundedAway)} a month out of these figures.</p>` : "";
-  const noPay = !has ? `<p class="center"><button class="act" data-action="bv-paydays">Set your paydays</button></p><p class="note small">Per payday and Per week need your paydays.</p>` : `<p class="center"><button class="act small" data-action="bv-paydays" style="flex-basis:auto;text-align:center">Change paydays</button></p>`;
+  const noPay = !has ? `<p class="center"><button class="act" data-action="bv-paydays">Set your paydays</button></p>` : `<p class="center"><button class="act small" data-action="bv-paydays" style="flex-basis:auto;text-align:center">Change paydays</button></p>`;
   const top = v.income.amount ? `<div class="flathero"><div class="eyebrow">${eyebrow}</div><div class="flatfig"><p class="flatbig">${peso(income)}</p></div>
     <div class="pp-whole" role="img" aria-label="${esc(pesoW(block.placed))} of ${esc(pesoW(income))} placed" style="margin:12px 0 8px"><span style="width:${income > 0 ? Math.max(0, Math.min(100, Math.round((block.placed * 100) / income))) : 0}%"></span></div>
     <div class="ct" style="display:flex;justify-content:space-between;gap:10px"><span class="note small" style="margin:0">${esc(src)}</span><span class="amt" style="white-space:nowrap">${esc(leftLine)}</span></div>${v.income.other ? `<p class="note small">Your payslips say ${peso(v.income.other.amount)}; your own figure is used.</p>` : ""}${payLine ? `<p class="note small" id="pay-line">${payLine}</p>` : ""}${otherIn > 0 ? `<p class="note small" id="other-in">Other money in, not pay: ${peso(otherIn)}</p>` : ""}${prog ? `<p class="note small">${esc(longDate(prog.start))} to ${esc(longDate(prog.end))}. Only verified spending counts.</p>` : ""}</div>` : `<p class="note">${esc(M.NO_INCOME_PROMPT)}</p>`;

@@ -149,7 +149,7 @@ test("tidy-up: the menu has no one-row groups, the notice has one answer, an emp
   assert.match(js, /<div class="vhead"><b>\$\{r\.version \? "Version " \+ esc\(r\.version\) : esc\(r\.label\)\}<\/b>\$\{r\.date \? `<small>\$\{esc\(fullDate\(r\.date\)\)\}<\/small>` : ""\}<\/div>/, "a version's number and its date head its own card (P2-13; before: each change with its date on its own line)");
   assert.match(js, /<h3>All versions<\/h3>.*\$\{versionList\(\[\.\.\.next, \.\.\.M\.CHANGELOG\.releases\]\)\}/, "All versions is one compact list (owner, Nov 21: smaller, since it grows), not a card per version");
   assert.match(js, /<details class="vrow"\$\{i === 0 \? " open" : ""\}>/, "only the top version starts open");
-  assert.ok(js.includes("downloads the reader (about 30 MB)") && !js.includes("about 7 MB"), "the reader's size is stated once, correctly");
+  assert.ok(js.includes("downloads the reader, about 30 MB") && read("src/model/help.js").includes("downloads the reader (about 30 MB)") && !js.includes("about 7 MB"), "the reader's size is stated correctly: while it downloads, and in Help (LESS TEXT, Nov 22: no longer a standing note on Scan)");
 });
 
 test("hubs: screens that belong together share one menu row and a picture strip; Log shows this month at a glance", async () => {
@@ -243,7 +243,11 @@ test("round 3: the Setup form waits behind a button once there are accounts, goa
   assert.ok(!js.includes('verify-delete"]\')?.click'), "a swipe never deletes");
   assert.match(help, /Swipe an entry to the right to mark it Correct\./);
   assert.match(js, /const why = \(html, label = "Why\?"\) => `<details class="why"><summary>\$\{label\}<\/summary><p class="note">\$\{html\}<\/p><\/details>`;/);
-  assert.ok((js.match(/\$\{why\(/g) ?? []).length >= 2, "the long notes on Weekly review and Setup are folded");
+  // LESS TEXT (owner, Nov 22; before: the long notes on Weekly review and Setup were folded under Why?): the Weekly review shows figures, actions and
+  // warnings only; its explanations are in Help.
+  const ck = js.slice(js.indexOf("function viewCheckin()"), js.indexOf("// ONE BUDGET (P0-6)"));
+  assert.ok(ck.length > 500 && !ck.includes("${why(") && !ck.includes("Here, and only here") && !ck.includes("Count them all first"), "the Weekly review carries no explanation paragraphs");
+  assert.match(help, /Find a wrong entry lists the entries of the last two weeks/, "they are in Help");
   assert.ok(!js.slice(js.indexOf("function viewCards()"), js.indexOf("function viewMoney()")).includes("why("), "Cards carries no Why? fold (owner, Nov 11: not needed there)");
   assert.match(css, /\.seg\[aria-label="What to show"\] button\[aria-pressed="true"\]::after/, "Cash flow's views are tabs with a line under the current one");
   assert.ok(!/\.ring \{/.test(css), "the ring is gone with the old Goals look");
