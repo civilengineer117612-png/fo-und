@@ -22,7 +22,7 @@ export async function protectionChecks({ browser, base, open, addAccount, menuGo
       await addAccount(page,"Example Third","asset","300");
       check(await page.evaluate(()=>window.__persistCalls)===0,mode+": reload and another save do not repeat the request");
       // The real store transaction must serialize competing claims too.
-      const claims=await page.evaluate(async()=>{const {claimPersistenceRequest}=await import('./store.js');return await Promise.all([claimPersistenceRequest(),claimPersistenceRequest()]);});
+      const claims=await page.evaluate(async()=>{const {claimPersistenceRequest}=await import('./store.js');const key=(navigator.standalone===true||matchMedia("(display-mode: standalone)").matches)?"persistence-requested-installed":"persistence-requested";return await Promise.all([claimPersistenceRequest(key),claimPersistenceRequest(key)]);});   // the claim the app itself used: an installed app has its own (Nov 22)
       check(claims.filter(Boolean).length===(mode==="missing"?1:0),mode+": durable claim serializes concurrent callers");
       check(errors.length===0,mode+": no page errors and logging remains available");
     }finally{await ctx.close();}

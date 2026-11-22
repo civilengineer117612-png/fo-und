@@ -149,16 +149,19 @@ export const writeRestoreCopies = (copies) => writeList(RESTORE_KEY, "restore-co
 
 // Claim once per browser storage bucket, in the existing database (no ledger
 // field/version change). An IndexedDB transaction also serializes other tabs.
-export async function claimPersistenceRequest() {
+// Two claims (owner, Nov 22, found on his Android phone): one for a browser tab and one for the INSTALLED app. On Android the tab and the
+// installed app share one storage, so a first save made in the tab used the only claim, Chrome said no to a tab, and the installed app never
+// asked: About said "Storage protected: no" for good. The installed app now has its own single claim.
+export async function claimPersistenceRequest(key = "persistence-requested") {
   const db = await openDb();
   try {
     return await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, "readwrite"), st = tx.objectStore(STORE);
       let claimed = false;
-      const request = st.get("persistence-requested");
+      const request = st.get(key);
       request.onsuccess = () => {
         if (request.result === true) return;
-        st.put(true, "persistence-requested"); claimed = true;
+        st.put(true, key); claimed = true;
       };
       tx.oncomplete = () => resolve(claimed);
       tx.onerror = tx.onabort = () => reject(tx.error);

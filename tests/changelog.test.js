@@ -47,11 +47,12 @@ test("a release moves Unreleased under the new number, dated, leaves Unreleased 
   assert.deepEqual(log.releases.map((x) => [x.version, x.date]), [["1.2.0", "2027-01-05"], ["1.1.0", "2026-12-20"], ["1.0.0", "2026-12-01"]]);
   assert.deepEqual(log.releases[0].notes, { new: ["Budget by year."], improved: [], fixed: ["A fix."] });
   assert.equal(cutRelease(sample(""), { date: "2027-01-05" }).ok, false);
-  // RELEASED (owner, Nov 22): the overhaul's notes became 1.0.0, the first version; nothing waits under Unreleased, so a release now refuses.
+  // RELEASED (owner, Nov 22): the overhaul's notes became 1.0.0, the first version (later lines under Unreleased do not change that).
   const live = parseChangelog(LOG);
-  assert.deepEqual(live.releases.map((x) => x.version), ["1.0.0"], "1.0.0 is the first and only version");
-  assert.ok(noteCount(live.releases[0].notes) > 0, "1.0.0 carries the overhaul's notes");
-  assert.equal(cutRelease(LOG, { date: "2027-01-05" }).ok, false, "nothing under Unreleased: no release");
+  const first = live.releases.at(-1);
+  assert.equal(first.version, "1.0.0", "the first version is 1.0.0");
+  assert.equal(first.date, "2026-11-22");
+  assert.ok(noteCount(first.notes) > 0, "1.0.0 carries the overhaul's notes");
 });
 test("What's new: every version missed, newest first; once seen, nothing; an older phone sees them all once; nothing while no version exists", () => {
   const log = parseChangelog(sample());

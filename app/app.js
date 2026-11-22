@@ -251,7 +251,7 @@ async function commit(state, settings = ledger.settings, { quiet = false } = {})
   // (a rebuild behind a scrolled window threw it back up on WebKit, 138 to 46).
   if (!quiet) renderAll(); else { if (ui.sheet || document.activeElement?.matches("input, textarea, select")) ui.screenStale = true; else { renderBanner(); renderScreenQuiet(); } if (ui.sheet?.type === "banks") renderSheet(); }   // the screen behind a window may change; the window stays
   if (!ledger.settings.bankLogosTried && !logoRun && failed.length === 0) loadBankLogos();   // a new install: logos after the first save
-  if (out.ok && !quiet) void requestStorageProtection().then((ok) => { if (ok && installHint) { installHint = false; if (ui.sheet) ui.screenStale = true; else renderScreenQuiet(); } });   // the install line goes once the browser protects the storage
+  if (out.ok && !quiet) void requestStorageProtection({ installed: navigator.standalone === true || matchMedia("(display-mode: standalone)").matches }).then((ok) => { if (ok && installHint) { installHint = false; if (ui.sheet) ui.screenStale = true; else renderScreenQuiet(); } });   // the install line goes once the browser protects the storage
   return failed.length === 0;
 }
 
