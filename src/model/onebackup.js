@@ -30,6 +30,14 @@ async function keyFrom(passphrase, salt, iterations) {
   return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
 }
 
+// EVERY picture the owner keeps on the phone goes into a backup (owner, Nov 22, decision 5: "backups include everything the owner set on the phone"):
+// the pictures attached to entries AND the photos taken into the reading queue but not yet read (settings `scan_queue`; before, those were left out and
+// a restore quietly dropped them). One id once, attachments first, in their order. Used for what a backup puts in and what a restore puts back.
+export function keptPictureIds(ledger) {
+  const ids = [...(ledger?.state?.attachments ?? []).map((a) => a.id), ...(ledger?.settings?.scan_queue ?? []).map((q) => q.id)];
+  return [...new Set(ids.filter((id) => typeof id === "string" && id))];
+}
+
 export const newBackupId = () => hex(crypto.getRandomValues(new Uint8Array(16)));
 
 // "fo-und backup 2026-10-31 20-37.json", or "... (1 of 3).json" when it is in parts. `stamp` is a timestamp like 2026-10-31T20:37:00+08:00 (the phone's own clock).

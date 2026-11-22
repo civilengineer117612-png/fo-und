@@ -56,6 +56,13 @@ async function steps(extraCss, { wait = 400, blur = false, js = null, bgSave = f
   await page.click('[data-action="open-other"]'); await page.waitForSelector("#sheet #f-amount");
   if (wait) await page.waitForTimeout(wait);   // the window has arrived (wait 0: typed at once, as run.mjs 5i does)
   await page.fill("#f-amount", "50");
+  // Nov 22 (#375 red twice on WebKit, 19 of 20, on a PR that touches no window code; main saw the same 212 to 151 on Nov 20). A probe that logged
+  // every scroll, rebuild and keyboard change caught the move on Chromium under load too: no tap, no rebuild, no keyboard, and it always landed when
+  // the window's slide-up (.22s) ended (opened at 1152, moved at 1408; 3088 and 3359). The script typed and scrolled to the bottom while the window
+  // was still rising, and the browser settled the place when the rise ended. A thumb cannot scroll a window that has not finished arriving, so
+  // the scroll waits for the rise to end. With this wait: 160 repeats clean under load, while the same runs without it moved in 3 of 4.
+  // What is checked is unchanged: choosing at the bottom never moves the window, 20 of 20, same tolerance.
+  await page.evaluate(() => Promise.all(document.querySelector("#sheet .sheet").getAnimations().map((a) => a.finished)));
   const top = () => page.evaluate(() => document.querySelector("#sheet .sheet").scrollTop);
   await page.evaluate(() => { const s = document.querySelector("#sheet .sheet"); s.scrollTop = s.scrollHeight; });
   const before = await top();

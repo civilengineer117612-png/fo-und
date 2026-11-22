@@ -36,8 +36,8 @@ function data(n, t) {
   const s = stack();
   s.box("This phone: ledger and photos", "ha"); s.arrow(`${n.setup}, Backup`); s.box(`${t.backupFile} (needs passphrase)`); s.note("Photos go in their own files.");
   s.note("Nothing is kept anywhere else.");
-  return wrap("data", "Where your data lives", `Your ledger and photos live on this phone only. A ${t.backupFile.toLowerCase()} made in ${n.setup} holds the entries but not the photos.`,
-    `Your data lives only on this phone; a backup made in ${n.setup} holds the entries, not the photos.`, s, s.y + 6);
+  return wrap("data", "Where your data lives", `Your ledger and photos live on this phone only. A ${t.backupFile.toLowerCase()} made in ${n.setup} holds the entries and the photos.`,
+    `Your data lives only on this phone; a backup made in ${n.setup} holds the entries and the photos.`, s, s.y + 6);
 }
 
 function cashflow(n, t) {

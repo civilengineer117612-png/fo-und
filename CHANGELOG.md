@@ -41,6 +41,7 @@ These become version 1.0.0 at the end of the overhaul.
 - Every screen shares one look: white cards, one thin bar per line, and an outlined button for every action.
 
 ### Fixed
+- A backup now also holds the photos still waiting to be read, so a restore no longer loses them.
 - With the app open in two windows, one can no longer erase what the other saved.
 - A picture that cannot be kept never stops an entry from being saved.
 - A tall window no longer jumps back up when you choose something near its bottom.
