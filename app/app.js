@@ -2347,7 +2347,7 @@ function tripViewBody(id) {
   const d = M.tripEntries(S(), id), count = d.rows.length + d.before.length, top = sum.rows.reduce((n, r) => Math.max(n, r.amount), 0);
   const pct = sum.budget ? (sum.spent / sum.budget) * 100 : null;
   const ring = `<div class="gring"><svg viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="70" class="gtrack"/>${pct == null ? "" : `<circle cx="80" cy="80" r="70" class="gon" stroke-dasharray="${(Math.max(0, Math.min(100, pct)) / 100 * 2 * Math.PI * 70).toFixed(1)} ${(2 * Math.PI * 70).toFixed(1)}" transform="rotate(-90 80 80)"/>`}</svg>
-    <button class="gpic" data-action="open-icon" data-trip="1" data-id="${esc(id)}" aria-label="Change the picture of ${esc(t.name)}">${tripPic(t, 96)}<span class="gedit" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg></span></button></div>`;
+    <button class="gpic" data-action="open-icon" data-trip="1" data-id="${esc(id)}" aria-label="Change the picture of ${esc(t.name)}">${tripPic(t, 124)}<span class="gedit" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg></span></button></div>`;
   const sub = sum.budget != null ? `${g ? glyph(g.level) + esc(LEVELS[g.level]) + " \u00b7 " : ""}${esc(g?.over ? "over by " + peso(sum.spent - sum.budget) : peso(sum.budget - sum.spent) + " left")} of ${peso(sum.budget)}` : "No budget";
   const row = (k, v, action) => `<button class="gvrow" data-action="${action}" data-id="${esc(id)}"><span>${k}</span><b>${v}</b></button>`;
   return `<div class="gview"><h3>${esc(t.name)}</h3>${ring}
@@ -2416,7 +2416,7 @@ const planOf = () => M.planInEffect(plansOf(), today());
 // ---------- goals ----------
 // A goal's picture: the one the owner chose, else a plain first-letter tile.
 const goalPic = (g, size) => !g.icon && g.symbol && M.goalSymbolSvg(g.symbol)
-  ? `<span class="ico mono" style="width:${size}px;height:${size}px" aria-hidden="true">${M.goalSymbolSvg(g.symbol, Math.round(size * 0.62))}</span>`
+  ? `<span class="ico mono" style="width:${size}px;height:${size}px" aria-hidden="true">${M.goalSymbolSvg(g.symbol, Math.round(size * (size >= 100 ? 0.5 : 0.62)))}</span>`
   : iconOf({ name: g.name, ...(g.icon ? { icon: g.icon } : {}) }, size);
 // Everything the goal window shows about one goal.
 function goalFacts(g) {
@@ -2432,7 +2432,7 @@ function goalFacts(g) {
 // The picture with a thin ring around it showing how far the goal is.
 const goalRing = (g, percent) => { const r = 70, c = 2 * Math.PI * r, on = Math.max(0, Math.min(100, percent ?? 0)) / 100 * c;
   return `<div class="gring"><svg viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="${r}" class="gtrack"/>${percent == null ? "" : `<circle cx="80" cy="80" r="${r}" class="gon" stroke-dasharray="${on.toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 80 80)"/>`}</svg>
-    <button class="gpic" data-action="open-icon" data-goal="1" data-id="${esc(g.id)}" aria-label="Change the picture of ${esc(g.name)}">${goalPic(g, 96)}<span class="gedit" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg></span></button></div>`; };
+    <button class="gpic" data-action="open-icon" data-goal="1" data-id="${esc(g.id)}" aria-label="Change the picture of ${esc(g.name)}">${goalPic(g, 124)}<span class="gedit" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg></span></button></div>`; };
 // A goal points at an account where the money really sits. Balances are hidden until you choose to show them (spec 9).
 // A hidden amount keeps the room the real one takes, so nothing on the screen moves when the eye is tapped: the figure is written with every digit as a zero (digits are all one
 // width, and the real digits are never in the page), made invisible, and the five dots are drawn over it.
