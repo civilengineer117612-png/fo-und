@@ -1115,9 +1115,14 @@ await page.fill("#t-name", "Test Trip"); await page.fill("#f-amount", "1000");
 await page.click("#f-save"); await seen(page, "#toast", "Trip added");
 check((await text(page, "#screen")).includes("₱0.00 / ₱1,000.00") && (await page.locator('#screen button[data-action="view-trip"]').count()) === 1 && (await page.locator('#screen button[data-action="use-trip"]').count()) === 0, "a new trip is ONE row with its budget; its buttons are in its window (owner, Nov 22)");
 await page.click('#screen button[data-action="view-trip"]');
-check((await seen(page, "#sheet", "On track")) && (await text(page, "#sheet")).includes("₱0.00 / ₱1,000.00"), "tapping the trip opens its window: the budget in words and as a graded meter");
-await page.click('#sheet button:has-text("Tag new entries with this trip")');
-await seen(page, "#sheet", "Tagging new entries");
+check((await seen(page, "#sheet", "On track")) && (await text(page, "#sheet")).includes("left of ₱1,000.00") && (await page.locator("#sheet .gring .gon").count()) === 1, "tapping the trip opens its window: the budget in words, with a ring that fills with it");
+// the trip's picture (owner, Nov 22: "like a profile picture"): a built-in one, chosen from the window, kept on the trip and shown in its row
+await page.click('#sheet button[data-action="open-icon"][data-trip="1"]');
+await page.click('#sheet button[data-action="trip-symbol"][data-id="plane"]');
+await seen(page, "#sheet", "Tag new entries");
+check(JSON.parse((await stored(page)).local).state.tags[0].symbol === "plane" && (await page.locator('#sheet .gpic svg').count()) > 0, "a trip takes a picture from its window and comes back to it");
+await page.click('#sheet button[data-action="use-trip"]');
+await seen(page, '#sheet button[data-action="use-trip"]', "On");
 await page.click('#sheet button[data-action="close-sheet"]');
 await seen(page, "#screen", "Tagging new entries");
 await page.click('#nav button:has-text("Log")');

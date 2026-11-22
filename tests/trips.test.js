@@ -164,3 +164,23 @@ test("trip dates must be both or neither, real, and in order; a dated trip passe
   assert.deepEqual(cleared.tag, { id: "a", name: "Trip A" }); assert.deepEqual(ids(cleared.state, "a"), []);
   assert.equal(planTripDates(s, "zzz", {}).ok, false);
 });
+
+// A trip's picture (owner, Nov 22: "like a profile picture"): the same two kinds as a goal's, optional fields, data version unchanged.
+test("a trip takes a built-in picture or a photo; the latest choice shows, and a trip without one still validates", async () => {
+  const { setTripSymbol, setTripIcon, validateState } = await import("../src/model/index.js");
+  const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+  const a = planTag(s0(), { id: "tr1", name: "Test Island", budget: 100000 });
+  assert.ok(a.ok); assert.deepEqual(validateShape("Tag", a.tag), [], "no picture is valid (absent is valid)");
+  const sym = setTripSymbol(a.state, "tr1", "plane");
+  assert.ok(sym.ok); assert.equal(sym.state.tags[0].symbol, "plane"); assert.deepEqual(validateShape("Tag", sym.state.tags[0]), []);
+  const pic = setTripIcon(sym.state, "tr1", PNG);
+  assert.ok(pic.ok); assert.equal(pic.state.tags[0].icon, PNG); assert.deepEqual(validateState(pic.state), []);
+  const back = setTripSymbol(pic.state, "tr1", "camera");
+  assert.equal(back.state.tags[0].icon, undefined, "choosing a built-in picture puts the photo away: the latest choice shows");
+  assert.equal(setTripSymbol(a.state, "tr1", "no-such").ok, false, "an unknown picture is refused");
+  assert.equal(setTripIcon(a.state, "tr1", "https://example.invalid/x.png").ok, false, "an outside address is never a trip picture");
+  assert.equal(setTripSymbol(a.state, "nope", "plane").ok, false, "an unknown trip is refused");
+  const gone = setTripSymbol(setTripIcon(pic.state, "tr1", null).state, "tr1", null);
+  assert.equal(gone.state.tags[0].icon, undefined); assert.equal(gone.state.tags[0].symbol, undefined, "Remove the picture takes both away");
+  assert.equal(gone.state.tags[0].budget, 100000, "nothing else about the trip changes");
+});

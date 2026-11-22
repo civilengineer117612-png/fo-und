@@ -2325,29 +2325,36 @@ function viewTrips() {
   // Owner, Nov 22: ONE row per trip, the newest on top (the trip being tagged first); a tap opens the trip's window with everything else.
   const order = S().tags.map((t, i) => ({ t, i })).sort((a, b) => (b.t.id === active) - (a.t.id === active) || (b.t.start ?? "").localeCompare(a.t.start ?? "") || b.i - a.i).map((x) => x.t);
   const rows = order.map((t) => {
-    const sum = M.tagSummary(S(), t.id, { categoryMaps: S().categoryMaps, asOf: today() }), days = M.tripDays(t);
+    const sum = M.tagSummary(S(), t.id, { categoryMaps: S().categoryMaps, asOf: today() }), days = tripRange(t);
     const sub = [days ?? "No dates", active === t.id ? "Tagging new entries" : ""].filter(Boolean).join(" \u00b7 ");
-    return { name: esc(t.name), sub: esc(sub), fig: sum.budget != null ? pairFig(sum.spent, sum.budget, { over: "over", label: t.name }) : peso(sum.spent),
+    return { name: `<span class="gname">${tripPic(t, 36)}<span>${esc(t.name)}<small>${esc(sub)}</small></span></span>`, fig: sum.budget != null ? pairFig(sum.spent, sum.budget, { over: "over", label: t.name }) : peso(sum.spent),
       pct: sum.budget ? (sum.spent > 0 ? Math.max(1, Math.min(100, (sum.spent / sum.budget) * 100)) : 0) : null, label: `${t.name}: ${pesoW(sum.spent)}${sum.budget != null ? " of " + pesoW(sum.budget) : ""}`, action: "view-trip", id: t.id };
   });
   return `<h1>Trips</h1>${rows.length ? barCard(rows) : `<p class="note">No trips yet.</p>`}
     <p><button class="primary" data-action="open-trip" style="margin-top:8px">Add a trip</button></p>`;
 }
 
-// The trip's window (owner, Nov 22: the list was a wall of buttons): what was spent against the budget, by category, its dates, and the two actions.
+// The trip's window (owner, Nov 22: built like the goal window, his marks on the first drawing): the trip's picture inside a ring that fills with the
+// budget, the name, ONE figure (spent) with the budget and what is left under it, then plain rows (Dates, Entries, Tag new entries) and what was spent on.
+const tripPic = (t, size) => goalPic(t, size);
+// A trip's days, short enough for one line on a phone: "4 Oct 2026" for one day, "4 to 7 Oct 2026" in one month, "30 Oct to 2 Nov 2026" in one year.
+const tripRange = (t) => { if (!t.start || !t.end) return null; const a = M.niceDay(t.start), b = M.niceDay(t.end);
+  if (t.start === t.end) return a; if (t.start.slice(0, 7) === t.end.slice(0, 7)) return `${Number(t.start.slice(8))} to ${b}`;
+  return t.start.slice(0, 4) === t.end.slice(0, 4) ? `${a.replace(/ \d{4}$/, "")} to ${b}` : `${a} to ${b}`; };   // the same two kinds of picture as a goal: a built-in line picture or a photo, else the first letter
 function tripViewBody(id) {
   const t = S().tags.find((x) => x.id === id); if (!t) return `<p class="note">This trip is gone.</p>`;
-  const sum = M.tagSummary(S(), id, { categoryMaps: S().categoryMaps, asOf: today() }), g = sum.grade, days = M.tripDays(t), on = ledger.settings.active_tag_id === id;
-  const top = sum.rows.reduce((n, r) => Math.max(n, r.amount), 0);
-  const status = g ? `<div class="status">${glyph(g.level)}${esc(LEVELS[g.level])} \u00b7 ${esc(g.over ? "Over by " + peso(sum.spent - sum.budget) : peso(sum.budget - sum.spent) + " left")}</div>` : "";
-  const bar = sum.budget ? `<div class="meter g-${g?.level ?? "good"}"><span class="fill" style="width:${sum.spent > 0 ? Math.max(1, Math.min(100, (sum.spent / sum.budget) * 100)) : 0}%"></span></div>` : "";
-  return `<div class="gview"><h3>${esc(t.name)}</h3>
-    <div class="gfig">${sum.budget != null ? pairFig(sum.spent, sum.budget, { over: "over", label: t.name }) : peso(sum.spent)}</div>${bar}${status}
-    ${sum.pending > 0 ? `<p class="note">plus ${peso(sum.pending)} waiting in Verify</p>` : ""}</div>
-    ${sum.rows.length ? barCard(sum.rows.map((r) => ({ name: esc(r.name), fig: peso(r.amount), pct: top ? (r.amount / top) * 100 : 0, label: `${r.name}: ${pesoW(r.amount)}` }))) : `<p class="note">Nothing verified on this trip yet.</p>`}
-    <div class="card gv"><button class="gvrow" data-action="open-trip-dates" data-id="${esc(id)}"><span>Dates</span><b>${esc(days ?? "Add dates")}</b></button></div>
-    <p><button data-action="open-trip-detail" data-id="${esc(id)}" style="width:100%">See the entries</button></p>
-    <p><button data-action="use-trip" data-id="${esc(id)}" aria-pressed="${on}" style="width:100%">${on ? "Tagging new entries \u2713 (tap to stop)" : "Tag new entries with this trip"}</button></p>`;
+  const sum = M.tagSummary(S(), id, { categoryMaps: S().categoryMaps, asOf: today() }), g = sum.grade, days = tripRange(t), on = ledger.settings.active_tag_id === id;
+  const d = M.tripEntries(S(), id), count = d.rows.length + d.before.length, top = sum.rows.reduce((n, r) => Math.max(n, r.amount), 0);
+  const pct = sum.budget ? (sum.spent / sum.budget) * 100 : null;
+  const ring = `<div class="gring"><svg viewBox="0 0 160 160" aria-hidden="true"><circle cx="80" cy="80" r="70" class="gtrack"/>${pct == null ? "" : `<circle cx="80" cy="80" r="70" class="gon" stroke-dasharray="${(Math.max(0, Math.min(100, pct)) / 100 * 2 * Math.PI * 70).toFixed(1)} ${(2 * Math.PI * 70).toFixed(1)}" transform="rotate(-90 80 80)"/>`}</svg>
+    <button class="gpic" data-action="open-icon" data-trip="1" data-id="${esc(id)}" aria-label="Change the picture of ${esc(t.name)}">${tripPic(t, 96)}<span class="gedit" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg></span></button></div>`;
+  const sub = sum.budget != null ? `${g ? glyph(g.level) + esc(LEVELS[g.level]) + " \u00b7 " : ""}${esc(g?.over ? "over by " + peso(sum.spent - sum.budget) : peso(sum.budget - sum.spent) + " left")} of ${peso(sum.budget)}` : "No budget";
+  const row = (k, v, action) => `<button class="gvrow" data-action="${action}" data-id="${esc(id)}"><span>${k}</span><b>${v}</b></button>`;
+  return `<div class="gview"><h3>${esc(t.name)}</h3>${ring}
+      <div class="gfig">${peso(sum.spent)}</div><div class="gsub">${sub}</div>
+      ${sum.pending > 0 ? `<p class="note">plus ${peso(sum.pending)} waiting in Verify</p>` : ""}</div>
+    <div class="card gv">${row("Dates", esc(days ?? "Add dates"), "open-trip-dates")}${row("Entries", String(count), "open-trip-detail")}${row("Tag new entries", on ? "On" : "Off", "use-trip")}</div>
+    ${sum.rows.length ? `<h2>Spent on</h2>${barCard(sum.rows.map((r) => ({ name: esc(r.name), fig: peso(r.amount), pct: top ? (r.amount / top) * 100 : 0, label: `${r.name}: ${pesoW(r.amount)}` })))}` : ""}`;
 }
 
 // One trip's entries. Membership is worked out from the dates each time (nothing is written into the entries); the buttons only record a hand override.
@@ -3640,10 +3647,10 @@ function renderSheet() {
       <p><button class="primary" id="f-save" data-action="save-last4" style="margin-top:6px">Save</button></p>`;
   } else if (sh.type === "photo") {
     body = `<h3>Photo</h3><img class="shotfull" data-photo="${esc(sh.id)}" alt="The photo this entry was read from" hidden>`;
-  } else if (sh.type === "icon" && sh.goal) {
-    const g = S().goals.find((x) => x.id === sh.id);
+  } else if (sh.type === "icon" && (sh.goal || sh.trip)) {
+    const g = sh.trip ? S().tags.find((x) => x.id === sh.id) : S().goals.find((x) => x.id === sh.id);
     body = `<h3>Picture for ${esc(g.name)}</h3>
-      <div class="symrow" role="group" aria-label="Pick a picture">${M.GOAL_SYMBOLS.map((x) => `<button class="symtile" data-action="goal-symbol" data-id="${x.id}" aria-label="${esc(x.label)}" aria-pressed="${!g.icon && g.symbol === x.id}">${M.goalSymbolSvg(x.id, 26)}</button>`).join("")}</div>
+      <div class="symrow" role="group" aria-label="Pick a picture">${M.GOAL_SYMBOLS.map((x) => `<button class="symtile" data-action="${sh.trip ? "trip-symbol" : "goal-symbol"}" data-id="${x.id}" aria-label="${esc(x.label)}" aria-pressed="${!g.icon && g.symbol === x.id}">${M.goalSymbolSvg(x.id, 26)}</button>`).join("")}</div>
       <p class="note">Or choose a photo or an image, then zoom and drag until it fills the square. It stays on this phone.</p>
       <input id="i-file" type="file" accept="image/*" data-field="file" aria-label="Choose a picture">
       <div id="i-stage" class="stage"><img id="i-img" alt="" hidden></div>
@@ -4900,7 +4907,7 @@ async function onClick(el) {
       if (r.ok) await commit(r.state); else renderSheet();
       break;
     }
-    case "open-icon": ui.sheet = { type: "icon", id, goal: el.dataset.goal === "1" }; ui.form = {}; renderSheet(); break;
+    case "open-icon": ui.sheet = { type: "icon", id, goal: el.dataset.goal === "1", trip: el.dataset.trip === "1" }; ui.form = {}; renderSheet(); break;
     case "acct-more": ui.confirmRemove = null; ui.sheet = { type: "acct-more", id }; ui.form = {}; renderSheet(); break;
     case "cards-more": ui.sheet = { type: "cards-more" }; ui.form = {}; renderSheet(); break;
     case "edit-last4": ui.sheet = { type: "last4", id }; ui.form = { last4: S().accounts.find((a) => a.id === id)?.last4 ?? "", pocket: M.isPocket(S().accounts.find((a) => a.id === id)) }; renderSheet(); break;
@@ -4911,9 +4918,11 @@ async function onClick(el) {
       if (pk && !pk.ok) { const m = $("l4-msg"); if (m) m.textContent = pk.violations[0].message; break; }
       ui.sheet = null; renderSheet(); await commit(pk ? pk.state : r.state); break;
     }
+    case "trip-symbol": { const tid = ui.sheet.id, r = M.setTripSymbol(S(), tid, id); ui.sheet = { type: "trip-view", id: tid }; renderSheet(); if (r.ok) await commit(r.state); break; }
     case "goal-symbol": { const gid = ui.sheet.id, r = M.setGoalSymbol(S(), gid, id); ui.sheet = { type: "goal-view", id: gid, tab: "overview" }; renderSheet(); if (r.ok) await commit(r.state); break; }
     case "save-icon": await saveIcon(); break;
     case "clear-icon": {
+      if (ui.sheet.trip) { const tid = ui.sheet.id, r0 = M.setTripIcon(S(), tid, null), r = r0.ok ? M.setTripSymbol(r0.state, tid, null) : r0; ui.sheet = { type: "trip-view", id: tid }; renderSheet(); if (r.ok) await commit(r.state); break; }
       if (ui.sheet.goal) { const gid = ui.sheet.id, r0 = M.setGoalIcon(S(), gid, null), r = r0.ok ? M.setGoalSymbol(r0.state, gid, null) : r0; ui.sheet = { type: "goal-view", id: gid, tab: "overview" }; renderSheet(); if (r.ok) await commit(r.state); break; }
       const a = S().accounts.find((x) => x.id === ui.sheet.id);
       const r = M.setAccountIcon(S(), a.id, null);
@@ -5685,11 +5694,11 @@ async function saveIcon() {
   ctx.drawImage(c.img, -c.x / scale, -c.y / scale, CROP / scale, CROP / scale, 0, 0, ICON_PX, ICON_PX);
   let url = canvas.toDataURL("image/png");
   if (url.length > 38000) url = canvas.toDataURL("image/jpeg", 0.8);   // a very detailed picture: keep it small
-  const goalId = ui.sheet.goal ? ui.sheet.id : null;
-  const r = goalId ? M.setGoalIcon(S(), goalId, url) : M.setAccountIcon(S(), ui.sheet.id, url);
+  const goalId = ui.sheet.goal ? ui.sheet.id : null, tripId = ui.sheet.trip ? ui.sheet.id : null;
+  const r = tripId ? M.setTripIcon(S(), tripId, url) : goalId ? M.setGoalIcon(S(), goalId, url) : M.setAccountIcon(S(), ui.sheet.id, url);
   if (!r.ok) { $("f-msg").textContent = r.violations[0].message; return; }
   URL.revokeObjectURL(c.url);
-  ui.sheet = goalId ? { type: "goal-view", id: goalId, tab: "overview" } : null; renderSheet();
+  ui.sheet = tripId ? { type: "trip-view", id: tripId } : goalId ? { type: "goal-view", id: goalId, tab: "overview" } : null; renderSheet();
   await commit(r.state);
   showToast("Picture saved");
 }

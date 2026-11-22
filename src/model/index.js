@@ -93,7 +93,7 @@ export { applyDrafts, planExpense, discardDraft, verifyDraft, editDraftFields, s
 export { LEDGER_VERSION, emptyState, emptyLedger, nextLedger, parseLedger, chooseLedger, restoreLedger, summarizeLedger, backupFileName, daysSinceBackup, saveOutcome, ledgerBytes, formatBytes, ledgerHead, mayOverwrite, CHANGED_ELSEWHERE } from "./persist.js";
 export { monthOf, addMonths, monthLabel, spendingByCategory, spendingByRange, spendingByAccount, spendingTransactions, sharesOf, cardsSummary, accountsOverview, monthlySpending, dayTotal } from "./reports.js";
 export { parsePlan, addPlan, planInEffect, planTotals, planEmergencyTarget, emergencyFundStatus, emergencyFundFromBudgets, DEFAULT_EF, cutoffFor, planProgress, planIncome, planPayReceived } from "./plan.js";
-export { planTag, planTripDates, planTripOverride, tripMembership, tripEntries, tagSummary, overlappingTrip, tripDays, niceDay, AUTO_TAG_SKIPS } from "./trips.js";
+export { planTag, planTripDates, planTripOverride, setTripSymbol, setTripIcon, tripMembership, tripEntries, tagSummary, overlappingTrip, tripDays, niceDay, AUTO_TAG_SKIPS } from "./trips.js";
 export { BANKS, CASH, pickerBanks, bankById, bankForName, planAccount, isPocket, setAccountPocket, linkAccountBank, setBankIconUrl, bankPicture, isPlaceholderAddress, dropPlaceholderAddresses, logosToFetch } from "./banks.js";
 export { MOVE_KINDS, CHOOSE_MESSAGE, FEE_PREFIX, BANK_FEES_ROLE, isFeeId, feeIdOf, normalizeLast4, accountByLast4, setAccountLast4, last4In, recipientKey, readMove, classifyMove, rememberRecipient, ensureBankFees, planTransfer, editTransfer, draftToMove, feeOf, foreignOf, lastRate } from "./transfers.js";
 export { findDuplicate } from "./invariants.js";

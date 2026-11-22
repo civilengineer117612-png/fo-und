@@ -94,7 +94,9 @@ export const SCHEMAS = {
   CheckIn: { id, date, account_id: id, counted_balance: centavos, ledger_balance: centavos, difference: centavos, matched: optional(bool) },
   Attachment: { id, transaction_id: id, type: name, file: name, file_timestamp: timestamp },
   Tag: { id, name, budget: optional(centavos),
-    start: optional(date), end: optional(date) },   // ADDED (data version 4): the trip's first and last day, inclusive; entries on those days belong to it, worked out when shown
+    start: optional(date), end: optional(date),   // ADDED (data version 4): the trip's first and last day, inclusive; entries on those days belong to it, worked out when shown
+    symbol: optional(text),   // ADDED (no version change, absent is valid, owner Nov 22): one of the built-in line pictures, like a goal's (`goalicons.js`)
+    icon: optional({ type: "icon" }) },   // ADDED (no version change, absent is valid): a photo of the trip the owner chose, a small square kept in the ledger like a goal's; it wins over the symbol
   // Addendum 3: one row per week, answered at the end of the weekly check-in.
   SurveyResponse: {
     id, week_start: date, week_end: date,
