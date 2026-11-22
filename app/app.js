@@ -3556,7 +3556,7 @@ function renderSheet() {
     const cats = pickCategoriesWith(ui.form.category_id).filter((c) => c.id !== M.UNLOGGED_CATEGORY_ID);
     body = `<h3>${esc(sh.label)}</h3><p class="note">${n} ${n === 1 ? "payment" : "payments"}${year ? " \u00b7 " + peso(year.members.find((m) => m.key === key).total) + " in " + today().slice(0, 4) : ""}</p>
       <div class="pmonths">${bars}</div>
-      <label for="p-name">Who is this? (only on this phone)</label><input id="p-name" data-field="pname" maxlength="40" autocomplete="off" value="${esc(ui.form.pname ?? "")}" placeholder="e.g. Mama, Landlord">
+      <label for="p-name">Who is this? (kept on this phone and in your backups)</label><input id="p-name" data-field="pname" maxlength="40" autocomplete="off" value="${esc(ui.form.pname ?? "")}" placeholder="e.g. Mama, Landlord">
       <label>Category${REQ}</label>${categoryPicker(cats, ui.form.category_id)}${REQNOTE}
       <p class="note small">Give two numbers the same name and they show as one person. ${n > 1 ? `All ${n} payments` : "This payment"} to ${esc(sh.label)} leave Uncategorized, and the next statement does the same by itself.</p>
       <p><button class="primary" id="f-save" data-action="payee-save"${ui.form.category_id ? "" : " disabled"}>${n > 1 ? `Save for all ${n}` : "Save"}</button></p>
@@ -5699,7 +5699,7 @@ async function shareFiles(files, title) {
 // Returns the files, or null when there is no picture on the phone.
 async function pictureFiles(pass) {
   const have = [];
-  for (const a of S().attachments ?? []) { const b = await getPhoto(a.id).catch(() => null); if (b) have.push({ id: a.id, size: b.size }); }
+  for (const id of M.keptPictureIds(ledger)) { const b = await getPhoto(id).catch(() => null); if (b) have.push({ id, size: b.size }); }   // attached pictures and photos waiting to be read (decision 5)
   if (!have.length) return null;
   const parts = M.planParts(have), day = today(), files = [];
   for (let i = 0; i < parts.length; i++) {
@@ -5714,21 +5714,24 @@ async function pictureFiles(pass) {
 // The pictures this phone holds: [{id, size}], in the order of the entries.
 async function pictureList() {
   const have = [];
-  for (const a of S().attachments ?? []) { const b = await getPhoto(a.id).catch(() => null); if (b) have.push({ id: a.id, size: b.size }); }
+  for (const id of M.keptPictureIds(ledger)) { const b = await getPhoto(id).catch(() => null); if (b) have.push({ id, size: b.size }); }   // attached pictures and photos waiting to be read (decision 5)
   return have;
 }
 // ONE file with the ledger and every picture, or, only when that would pass the limit (M.BACKUP_PART_BYTES), parts that share one id. Made one picture at a time.
 async function oneBackupFiles(pass) {
   const check = M.parseLedger(JSON.stringify(ledger));
   if (!check.ok) throw new Error("refusing to back up invalid data: " + check.error);
-  const text = JSON.stringify(ledger), have = await pictureList(), plan = M.planBackupParts(new Blob([text]).size, have), id = M.newBackupId(), stamp = M.phTimestamp(), files = [];
+  // The file carries its own backup date (decision 5, a restore gives back every setting): the phone records the same date once the file is saved.
+  const have = await pictureList(), stamp = M.phTimestamp();
+  const text = JSON.stringify({ ...ledger, settings: { ...ledger.settings, last_backup_at: stamp, ...(have.length ? { last_pictures_backup_at: stamp } : {}) } });
+  const plan = M.planBackupParts(new Blob([text]).size, have), id = M.newBackupId(), files = [];
   for (let i = 0; i < plan.length; i++) {
     if (plan.length > 1) working(true, "Making file " + (i + 1) + " of " + plan.length + "...");
     const items = plan[i].ids.map((pid) => async () => { const b = await getPhoto(pid).catch(() => null); return b ? { id: pid, bytes: new Uint8Array(await b.arrayBuffer()) } : null; });
     const blob = await M.sealBackupPart({ ledger: plan[i].ledger ? text : null, items, passphrase: pass, id, part: i + 1, parts: plan.length, savedAt: stamp });
     files.push(new File([blob], M.oneBackupFileName(stamp, i + 1, plan.length), { type: "application/json" }));
   }
-  return { files, pictures: have.length };
+  return { files, pictures: have.length, stamp };
 }
 
 async function makeBackup() {
@@ -5746,7 +5749,8 @@ async function makeBackup() {
     return;
   }
   ui.sheet = null;
-  await commit(S(), { ...ledger.settings, last_backup_at: M.phTimestamp(), ...(pictures ? { last_pictures_backup_at: M.phTimestamp() } : {}) });
+  const at = made?.stamp ?? M.phTimestamp();   // the same date the file carries
+  await commit(S(), { ...ledger.settings, last_backup_at: at, ...(pictures ? { last_pictures_backup_at: at } : {}) });
   showToast(M.backupDoneText({ parts: made?.files.length ?? 1, pictures }));
 }
 
@@ -5767,7 +5771,7 @@ async function makePicturesBackup() {
 async function openPicturesFile() {
   working(true, "Opening...");
   try {
-    const have = new Set((S().attachments ?? []).map((a) => a.id)), missing = [];
+    const have = new Set(M.keptPictureIds(ledger)), missing = [];
     const r = await M.openPictures(ui.form.file, ui.form.pass, async (id) => { if (have.has(id) && !(await getPhoto(id).catch(() => null))) missing.push(id); });
     ui.form = { ...ui.form, picsFound: { ...r, missing: missing.length }, busy: false };
     renderSheet();
@@ -5779,7 +5783,7 @@ async function openPicturesFile() {
 async function restorePictures() {
   working(true, "Putting pictures back...");
   try {
-    const have = new Set((S().attachments ?? []).map((a) => a.id)); let put = 0;
+    const have = new Set(M.keptPictureIds(ledger)); let put = 0;
     await M.openPictures(ui.form.file, ui.form.pass, async (id, bytes) => {
       if (have.has(id) && !(await getPhoto(id).catch(() => null))) { await putPhoto(id, new Blob([bytes], { type: "image/jpeg" })); put++; }
     });
@@ -5800,7 +5804,7 @@ async function openBackupFile() {
     }
     // One file, the parts of one backup, or an older ledger file with its pictures files: read by what is INSIDE the files (model/onebackup.js). Nothing is restored here.
     const set = await M.openBackupSet(ui.form.files ?? [], ui.form.pass);
-    const want = new Set((set.ledger.state?.attachments ?? []).map((a) => a.id)); let missing = 0;
+    const want = new Set(M.keptPictureIds(set.ledger)); let missing = 0;   // the pictures the restored ledger keeps: attached ones and photos waiting to be read
     await set.eachPicture(async (id) => { if (want.has(id) && !(await getPhoto(id).catch(() => null))) missing++; });
     ui.form = { restored: set.ledger, confirmRestore: false, pass: ui.form.pass, set, pictures: (set.mode === "old" ? set.files : set.pictures) ? { files: set.files, parts: set.parts, total: set.total, missing, want, inside: set.pictures, mode: set.mode } : null };
     renderSheet();
