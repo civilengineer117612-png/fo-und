@@ -163,7 +163,7 @@ const stars = async (page) => page.locator("#sheet label .req").count();   // ho
 
 
 // The app has no way to load a plan file any more (nobody has one yet), so tests that need a plan put one in the phone's settings, as parsed by the model.
-import { parsePlan, planWithBudgets, CHANGES, emptyState, recordFromParse, addSchedule, makeDueDrafts, BANKS } from "../src/model/index.js";
+import { parsePlan, planWithBudgets, CHANGES, emptyState, recordFromParse, addSchedule, makeDueDrafts, BANKS, HELP_TOPICS } from "../src/model/index.js";
 async function writeLedger(page, led) {
   const text = JSON.stringify(led);
   await page.evaluate(async ([text]) => { localStorage.setItem("financialTracker.ledger", text); await new Promise((res) => { const r = indexedDB.open("financialTracker", 3); r.onsuccess = () => { const tx = r.result.transaction("kv", "readwrite"); tx.objectStore("kv").put(text, "ledger"); tx.oncomplete = () => { r.result.close(); res(); }; }; }); }, [text]);
@@ -1090,7 +1090,7 @@ try { blockName = "5e9. checks: card reserve and the Unlogged habit";
 ({ ctx, page, errors } = await fromSeed("5e9", { blockSw: true }));   // A11: its own ledger, as the section before left it
 await menuGo(page, "Checks");
 var ctext = await text(page, "#screen");
-check(/No card reserve|Covered|Short by/.test(ctext), "the card reserve check says covered, short, or that none is set up");
+check(/None set up|Covered|Short by/.test(ctext), "the card reserve check says covered, short, or that none is set up");
 check(await page.locator(".catcard .catrow").count() === 1, "Uncategorized by week has one row for the one week that was counted");
 check(((await page.locator(".catcard .catbar").first().getAttribute("aria-label")) ?? "").includes("could not be accounted for"), "its bar says what it means in words");
 await page.click('button:has-text("Show as list")');
@@ -2810,7 +2810,7 @@ console.log("Correct a verified entry");
   await page.click('button[data-action="acct-more"][data-id="z"]');
   check(await seen(page, "#toast", "Shown again") && await page.locator('#sheet button[data-action="hide-account"]').count() === 1, "Show again brings it back"); await page.click('#sheet button[data-action="close-sheet"]');
   await menuGo(page, "Weekly review");
-  check((await text(page, "#screen")).includes("A verified entry is final"), "the Weekly review says a verified entry is final");
+  check((await text(page, "#screen")).includes("Put right a verified entry") && HELP_TOPICS.find((t) => t.tab === "checkin").lines.some((l) => l.includes("A verified entry is final")), "the Weekly review offers Put right a verified entry; that a verified entry is final is said in Help (LESS TEXT, Nov 22)");
   check(!(await page.locator('button[data-action="open-correct"]').isDisabled()) && (await text(page, "#screen")).includes("1 can be put right"), "and offers the one entry that can still be put right");
   await page.click('button[data-action="open-correct"]');
   check((await text(page, "#sheet")).includes("Corner Cafe") && (await text(page, "#sheet")).includes("\u20B11,200.00") && /20\d\d/.test(await text(page, "#sheet")), "the list shows the entry, the date with its year and the amount");
