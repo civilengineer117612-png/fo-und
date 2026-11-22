@@ -22,7 +22,7 @@ const seeded = () => {
   spend("m1", "2026-10-06", "Merienda", 4000); spend("m2", "2026-10-13", "Merienda", 4500);
   spend("t1", "2026-10-07", "Taho", 2000); spend("t2", "2026-10-14", "Taho", 2500); spend("t3", "2026-10-21", "Taho", 25000);   // a second one to check: ten times the usual
   assert.deepEqual(validateState(s), []);
-  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, bankLogosTried: {}, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])) };
+  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, bankLogosTried: {}, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])) };
   return l;
 };
 const ctx = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,

@@ -33,7 +33,7 @@ const seeded = ({ accounts = [], transactions = [], entries = [] } = {}) => {
   const l = emptyLedger(); l.rev = 1; l.saved_at = TS;
   l.state.categories.push({ id: "food", name: "Food", kind: "expense" }, { id: "cat-unlogged", name: "Uncategorized", kind: "expense" });   // every real ledger has Uncategorized from its first save
   l.state.accounts.push(...accounts); l.state.transactions.push(...transactions); l.state.entries.push(...entries);
-  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS,
+  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS,
     intro_off: { log: true, money: true, income: true, cards: true, review: true, setup: true, scan: true } };
   return l;
 };

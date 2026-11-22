@@ -20,7 +20,7 @@ const seeded = () => {
   s.rules.push({ id: "r1", kind: "budget", subject_id: "cat-food", amount: 800000, effective_from: "2026-11-01", created_at: "2026-11-01T09:00:00.000+08:00" },
     { id: "r2", kind: "budget", subject_id: "cat-fun", amount: 300000, effective_from: "2026-11-01", created_at: "2026-11-01T09:00:00.000+08:00" });
   assert.deepEqual(validateState(s), []);
-  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, bankLogosTried: {}, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])),
+  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, bankLogosTried: {}, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])),
     income_base_pin: 2500000, starter_rent: 0 };
   return l;
 };

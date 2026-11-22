@@ -18,7 +18,7 @@ const ledgerText = (label) => {
   l.state.categories.push({ id: "food", name: "Food", kind: "expense" });
   l.state.transactions.push({ id: "tx-" + label, date: "2026-10-05", payee: label + " marker", memo: "", status: "verified", source: "manual", created_at: AT, verified_at: AT });
   l.state.entries.push({ transaction_id: "tx-" + label, category_id: "food", amount: 5000 }, { transaction_id: "tx-" + label, account_id: "acct-" + label, amount: -5000 });
-  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, intro_off: { scan: true, income: true, log: true, money: true } };
+  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, intro_off: { scan: true, income: true, log: true, money: true } };
   return JSON.stringify(l);
 };
 

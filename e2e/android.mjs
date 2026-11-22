@@ -20,7 +20,7 @@ const seeded = () => {
   s.accounts.push({ id: "wal", name: "Sample Wallet", class: "asset", role: "", opening_balance: 50000, opening_date: "2026-01-01", hidden_by_default: false, archived: false });
   s.categories = [{ id: "food", name: "Food", kind: "expense", role: "food" }, ...s.categories.filter((c) => c.kind === "income")];
   assert.deepEqual(validateState(s), []);
-  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, firstrun_done: TS, bankLogosTried: {}, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])) };
+  l.settings = { notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, firstrun_done: TS, bankLogosTried: {}, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])) };
   return l;
 };
 // A Pixel-size phone. `installed`: the app runs as an installed app (Chrome reports display-mode standalone; a test browser cannot install, so

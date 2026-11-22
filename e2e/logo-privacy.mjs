@@ -13,7 +13,7 @@ let passed = 0;
 const ok = (cond, label) => { assert.ok(cond, label); passed++; console.log("ok: " + label); };
 const HOSTS = ["icon.horse", "api.faviconkit.com", "en.wikipedia.org", "upload.wikimedia.org"];
 
-const settings = (TS, more = {}) => ({ notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])), ...more });
+const settings = (TS, more = {}) => ({ notice_seen_at: TS, whatsnew_seen: CHANGES[0].id, version_seen: "999.0.0", welcome_off: true, start_rule_seen: TS, cat_card_seen: TS, intro_off: Object.fromEntries(Object.keys(SCREEN_NAMES).map((k) => [k, true])), ...more });
 const acct = (id, name, o = {}) => ({ id, name, class: "asset", role: "", opening_balance: 1234500, opening_date: "2026-01-01", hidden_by_default: false, archived: false, ...o });
 // Ledger A: accounts at listed banks, digits, a credit card, a logo address an earlier version saved (on the bank and on an account).
 const ledgerA = () => { const l = emptyLedger(); l.rev = 1; l.saved_at = "2026-11-10T08:00:00.000+08:00";

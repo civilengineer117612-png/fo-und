@@ -21,7 +21,7 @@ const ledger = () => {
     s.entries.push({ transaction_id: id, category_id: cat(c), amount: a }, { transaction_id: id, account_id: "cash", amount: -a });
   }
   for (const [c, a] of [["Food", 800000], ["Essentials", 400000]]) s.rules.push({ id: "r" + ++k, kind: "budget", subject_id: cat(c), amount: a, effective_from: "2026-09-01", created_at: CT });
-  l.settings = { notice_seen_at: CT, firstrun_done: CT, whatsnew_seen: M.CHANGES[0].id, start_rule_seen: CT, cat_card_seen: CT, last_backup_at: CT, bankLogosTried: {}, pay_schedule: { kind: "twice", days: [15, "last"] }, income_base_pin: 5000000,
+  l.settings = { notice_seen_at: CT, firstrun_done: CT, whatsnew_seen: M.CHANGES[0].id, version_seen: "999.0.0", start_rule_seen: CT, cat_card_seen: CT, last_backup_at: CT, bankLogosTried: {}, pay_schedule: { kind: "twice", days: [15, "last"] }, income_base_pin: 5000000,
     intro_off: Object.fromEntries(["plan", "money", "income", "cards", "budget", "goals", "scheduled", "checkin", "scan", "trips", "buffer", "setup", "log", "verify"].map((x) => [x, true])) };
   return l;
 };

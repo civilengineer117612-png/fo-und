@@ -18,6 +18,14 @@ jobs:
       - run: npm test
       # DATE GUARD: the same tests again as if today were New Year, a leap day and other days (tools/test-dates.mjs)
       - run: npm run test:dates
+      # CHANGELOG (owner, Nov 21): a pull request that changes the app adds one plain line under "Unreleased" in CHANGELOG.md, or its
+      # description says "no user-facing change" (tools/changelog-check.mjs). The description reaches the script only as an environment value.
+      - name: A changelog line for a change users see
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node tools/changelog-check.mjs
 
   e2e:
     runs-on: ubuntu-latest

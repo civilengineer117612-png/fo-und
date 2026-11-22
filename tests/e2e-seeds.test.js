@@ -73,5 +73,5 @@ for (const name of files) test("seed " + name + " is a current ledger the app op
 });
 
 test("a seed stays as it was recorded when a later PR adds a What's new line: it is opened with the newest line already seen", () => {
-  assert.match(run, /const ledger = opts\.whatsNew \? saved\.ledger : \{ \.\.\.saved\.ledger, settings: \{ \.\.\.saved\.ledger\.settings, whatsnew_seen: CHANGES\[0\]\.id \} \};\n  return open\(\{ \.\.\.opts, seed: ledger, now: new Date\(saved\.now\) \}\);/);
+  assert.match(run, /const ledger = opts\.whatsNew \? saved\.ledger : \{ \.\.\.saved\.ledger, settings: \{ \.\.\.saved\.ledger\.settings, whatsnew_seen: CHANGES\[0\]\.id, version_seen: \"999\.0\.0\" \} \};\n  return open\(\{ \.\.\.opts, seed: ledger, now: new Date\(saved\.now\) \}\);/);
 });
