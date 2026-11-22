@@ -9,7 +9,7 @@ the next version with its date: MAJOR when it breaks habits or data, MINOR for n
 
 ## Unreleased
 
-These become version 1.0.0 at the end of the overhaul.
+## 1.0.0 (2026-11-22)
 
 ### New
 - Log what you spend in a few taps: type it, say it, use a quick tile, or scan a receipt or payment screen.
