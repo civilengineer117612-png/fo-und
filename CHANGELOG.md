@@ -31,6 +31,7 @@ These become version 1.0.0 at the end of the overhaul.
 - Works on any phone: add it to your Home Screen from the browser; in a browser tab, Log says how to install it so your phone keeps your data.
 - Swipe to change the day, month or payday, pull a window down to close it, and Back closes an open window instead of the app.
 - Spending can be exported as a spreadsheet file.
+- Each version's notes show once after an update, and About this app lists every version.
 
 ### Improved
 - Everything you type waits in Verify until you check it; only a document that proves it, like a payslip or a matching statement, is verified at once.
