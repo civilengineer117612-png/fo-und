@@ -18,6 +18,16 @@ export async function protectionChecks({ browser, base, open, addAccount, menuGo
       await page.locator('#about-protection').waitFor();
       await page.waitForFunction(expected=>document.getElementById('about-protection')?.textContent===expected,"Storage protected: "+(mode==="granted"?"yes":"no"));
       check(await page.locator('#about-protection').innerText()==="Storage protected: "+(mode==="granted"?"yes":"no"),mode+": Setup reports the actual result");
+      // Owner, Nov 23: About's "Ask to protect it" asks again on every tap after the one request was refused, and shows the answer.
+      const askShown=await page.locator('#protect-btn').isVisible();
+      check(askShown===(mode==="refused"||mode==="throws"||mode==="pending"),mode+": the ask button shows only while the browser could still say yes");
+      if(mode==="refused"||mode==="throws"){
+        const before=await page.evaluate(()=>window.__persistCalls);
+        await page.click('#protect-btn');
+        await page.waitForFunction(()=>document.getElementById('about-protection')?.textContent.startsWith('Storage protected: no. Asked just now'));
+        await page.click('#protect-btn');await page.waitForFunction(n=>window.__persistCalls>=n,before+2);
+        check(await page.evaluate(()=>window.__persistCalls)===before+2,mode+": each tap asks the browser again");
+      }
       await page.reload();await page.waitForSelector('#nav button');
       await addAccount(page,"Example Third","asset","300");
       check(await page.evaluate(()=>window.__persistCalls)===0,mode+": reload and another save do not repeat the request");

@@ -9,6 +9,9 @@ the next version with its date: MAJOR when it breaks habits or data, MINOR for n
 
 ## Unreleased
 
+### Improved
+- About has a button that asks the browser again to keep the app's data safe, and shows its answer.
+
 ### Fixed
 - On a phone where the app was first used in a browser tab, installing it now asks the browser again to keep its data safe.
 
