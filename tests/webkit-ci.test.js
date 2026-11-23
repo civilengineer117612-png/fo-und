@@ -16,7 +16,7 @@ test("Playwright is pinned to the same exact version in both browser jobs", () =
 test("e2e-webkit runs every script the e2e job runs, on WebKit, and never hides a failure", () => {
   const scripts = (yaml) => [...yaml.matchAll(/node e2e\/([\w-]+)\.mjs/g)].map((m) => m[1]);
   const wanted = scripts(checks).sort();
-  assert.deepEqual(wanted, ["amounts", "android", "backup-roundtrip", "buffer-line", "firstrun", "ledger-check", "logo-privacy", "network", "owed", "payslip-items", "pdf-scan", "photo-payslip", "preview", "reader-fixture", "run", "sheet-scroll", "spending-details", "swipe", "tap-safety", "trial-isolation", "two-windows", "ui-audit", "window-feel"]);
+  assert.deepEqual(wanted, ["amounts", "android", "backup-roundtrip", "backup-share", "buffer-line", "firstrun", "ledger-check", "logo-privacy", "network", "owed", "payslip-items", "pdf-scan", "photo-payslip", "preview", "reader-fixture", "run", "sheet-scroll", "spending-details", "swipe", "tap-safety", "trial-isolation", "two-windows", "ui-audit", "window-feel"]);
   assert.match(webkit, /^  e2e-webkit:$/m);
   assert.match(webkit, /^      ENGINE: webkit$/m);
   assert.match(webkit, /npx playwright install --with-deps webkit/);

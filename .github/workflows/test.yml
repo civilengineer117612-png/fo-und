@@ -70,6 +70,7 @@ jobs:
           node e2e/window-feel.mjs
           node e2e/preview.mjs
           node e2e/backup-roundtrip.mjs
+          node e2e/backup-share.mjs
           node e2e/sheet-scroll.mjs
           node e2e/run.mjs 2>&1 | tee e2e.log
       - name: Pass count
