@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { requestStorageProtection, storageProtected } from "../app/protection.js";
+import { requestStorageProtection, storageProtected, askStorageProtection } from "../app/protection.js";
 
 test("a granted request reports the browser's true result", async () => {
   assert.equal(await requestStorageProtection({claim:async()=>true,storage:{persist:async()=>true}}),true);
@@ -54,4 +54,20 @@ test("storage already protected asks nothing and uses no claim", async () => {
   let claims = 0, calls = 0;
   assert.equal(await requestStorageProtection({ claim: async () => { claims++; return true; }, storage: { persist: async () => { calls++; return true; }, persisted: async () => true }, installed: true }), true);
   assert.equal(claims + calls, 0);
+});
+
+// Owner, Nov 23: About's "Ask to protect it" asks at once on every tap, even after the one request on a save was used up and refused.
+test("the About button asks on every tap and reports only the browser's answer", async () => {
+  let calls = 0, answer = false, isProtected = false;
+  const storage = { persist: async () => { calls++; isProtected = answer; return answer; }, persisted: async () => isProtected };
+  assert.equal(await askStorageProtection(storage), false);
+  assert.equal(await askStorageProtection(storage), false);
+  assert.equal(calls, 2, "a refusal does not stop the next tap from asking");
+  answer = true;
+  assert.equal(await askStorageProtection(storage), true);
+  assert.equal(await askStorageProtection(storage), true);
+  assert.equal(calls, 3, "already protected: nothing more is asked");
+  assert.equal(await askStorageProtection({}), false, "no way to ask: never says yes");
+  assert.equal(await askStorageProtection({ persist: async () => "true", persisted: async () => false }), false, "only an explicit true");
+  assert.equal(await askStorageProtection({ persist: async () => { throw new Error("example denial"); }, persisted: async () => false }), false);
 });
