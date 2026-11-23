@@ -216,7 +216,8 @@ OVERHAUL (owner, Nov 12: Phase 1 report approved, rows A1 to A11; data loss firs
   5g stays one payslip flow); Android ready and L13, F5, pull to close (#372); versions and release notes (#373); the final report.
 - 1.0.0 RELEASED (Nov 22, unattended task): backups hold everything (#375); decisions 1, 2, 3, 8, the split leftovers and "other money in"
   (#376); less text on every screen, Trips as rows with a window and a picture (#377); the release (CHANGELOG: Unreleased became 1.0.0).
-  LOANS (Nov 23, for 1.1.0; data version 13): built in the PR after 1.0.0 (a loan account kind, payroll repayments lower it, interest at a count on the tap).
+- 1.1.0 RELEASED (Nov 24, on the owner's "release"): LOANS (#383, data version 13: a loan account kind, payroll repayments lower it, interest at a count
+  on the tap), name suggestions in Who owes you and the picker that no longer slides (#382), the backup share-sheet test (#381), "Ask to protect it" (#380).
   The owner's iPhone checks are in the final report (among them: in fo/und opened from the Home Screen, a box low in a window stays above
   the keyboard; on an Android phone: install from Chrome, Back closes a window, fingerprint unlock).
 - FINDING CLOSED (Nov 22): the sheet-scroll jump (212 to 151) was the script scrolling while the window was still sliding up; it now waits
