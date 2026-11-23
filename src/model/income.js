@@ -11,6 +11,7 @@ import { monthOf } from "./reports.js";
 import { stableOf, recurringLabels, RECURRENCE_WINDOW } from "./stablepay.js";
 import { storedItems, checkItems, linesFromItems, itemsOf, categoryOf, categoryName, FALLBACK, EARNING_CATEGORIES, DEDUCTION_CATEGORIES } from "./payslipitems.js";
 import { settle, correctionOf, EVIDENCE } from "./entryrule.js";
+import { loanPayLegs } from "./loans.js";
 
 export const EARNINGS = [["basic", "Basic salary"], ["rice", "Rice subsidy"], ["skills", "Skills allowance"], ["clothing", "Clothing allowance"],
   ["transport", "Transportation allowance"], ["overtime", "Overtime"], ["thirteenth", "13th month"], ["bonus", "Bonus"], ["other", "Other earnings"]];
@@ -143,6 +144,10 @@ export function planPayslip(state, input, now = new Date()) {
     ...(overtime > 0 ? [{ transaction_id: transaction.id, category_id: "cat-overtime", amount: -overtime }] : []),
     ...(input.deposit - overtime > 0 ? [{ transaction_id: transaction.id, category_id: "cat-salary", amount: -(input.deposit - overtime) }] : []),
   ];
+  // LOANS (data version 13): a deduction line linked to a loan lowers it, inside this same entry (so it is verified, a draft or cancelled with the payslip). The legs
+  // are the loan and "Paid to loans from pay" (kind "withheld": in no income or spending figure), so the deposit and every income figure stay exactly the same.
+  const lp = loanPayLegs(state, items ?? [], transaction.id);
+  state = lp.state; entries.push(...lp.legs);
   const result = checkTransactionSave(state, { transaction, entries });
   if (!result.ok) return { ok: false, violations: result.violations, state: undefined };
   return {

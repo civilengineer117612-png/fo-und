@@ -18,8 +18,8 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
 - **A share that will not be paid** becomes your spending on the day you say so, in the category the purchase was in.
 - **Money lent** (owner, Nov 22: a payment that is ALL someone else's) is owed to you in full and is not spending; given up, it is spending in Uncategorized.
 - **A cash advance** (owner, Nov 22) is borrowed money: a move from the card (what is owed goes up) to where the cash went. Never income, never spending; its fee is.
-- **A payroll loan repayment** (owner, Nov 22) is already deducted from the pay: only the deposit is money in, and the repayment is never spending. Lowering
-  a loan's balance needs a loan account, which the ledger does not have yet (after 1.0.0).
+- **A payroll loan repayment** (owner, Nov 22) is already deducted from the pay: only the deposit is money in, and the repayment is never spending. Since
+  data version 13 (owner, Nov 23) a repayment line linked to a loan also lowers that loan (principle 14).
 - **Income counts by its deposit date** everywhere, Trends included (owner, Nov 22, confirming the rule above).
 - **Money in that is not pay** (interest, cashback, other income) is shown on its own line in Budget, never added to Received (principle 10).
 
@@ -132,6 +132,17 @@ If a principle and a screen ever disagree, the principle wins and the screen is 
   oldest debt first). In the equation of principle 1 the account counts as something you have; on the screens it is shown apart and is in no "in your
   accounts" figure, no net worth, no picker and no count (the owner's decision: it is not money yet).
 - **Guarded by.** "OWED TO ME", `tests/owed.test.js`, `e2e/owed.mjs`; it is also a step of "TRIAL BALANCE", "EQUATION" and "CONSISTENCY".
+
+### 14. Loans
+- **Rule.** A loan is a debt to a lender. Borrowing is a transfer from the loan to where the money went (what is owed goes up), never income. Repaying is a
+  transfer into the loan (what is owed goes down), never spending. Interest is the only cost of a loan, and it is recognized when the lender's balance shows
+  it, on the owner's confirmation.
+- **In the app.** An account of its own class, "loan" (data version 13), so no credit card rule ever applies to it. A repayment you make is a move. A payroll
+  repayment line linked to the loan adds two legs inside the payslip's own entry: the loan goes down, against "Paid to loans from pay", a category of the
+  kind "withheld" that is in no income and no spending figure, so the deposit stays the money in and every income figure is unchanged; cancelling the payslip
+  cancels the repayment with it. At a count of the lender's balance, a higher figure is interest: ONE entry, verified by count, made only by the owner's
+  tap (the loan up, "Loan interest" up); a lower figure is a missing payment, never interest. Net worth counts loans; Cards' "free" figure does not.
+- **Guarded by.** "LOANS", `tests/loans.test.js`, `e2e/loans.mjs`.
 
 ## The six audit assertions
 | Assertion | In the app | Guarded by |

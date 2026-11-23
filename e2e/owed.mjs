@@ -59,7 +59,7 @@ const amountOf = (i) => page.inputValue(`#sheet [data-field="sh:${i}:amt"]`);
     ok(copy && copy.v === 11 && JSON.stringify(copy.state) === JSON.stringify(original.state), "before the update the app kept the version 11 ledger in " + name + ", and the copy reads back exactly as it was");
   }
   const led = await stored(page);
-  ok(led.v === 12 && M.LEDGER_VERSION === 12 && Array.isArray(led.state.people) && led.state.people.length === 0, "the ledger is now data version 12 with an empty list of people");
+  ok(led.v === 13 && M.LEDGER_VERSION === 13 && Array.isArray(led.state.people) && led.state.people.length === 0, "the ledger is now the current data version (12 added the empty list of people; 13, loans, adds nothing)");
   ok(Object.keys(original.state).every((k) => JSON.stringify(led.state[k]) === JSON.stringify(original.state[k])) && Object.keys(led.state).length === Object.keys(original.state).length + 1, "every record is the same: nothing but the new list was added");
   ok(!led.state.accounts.some((a) => a.role === "owed"), "the update makes no Owed to me account: it is made at the first split");
   ok(balance(led, "chk") === 5000000 - 45000 && spent(led).total === 45000, "the balance and this month's spending are what they were");

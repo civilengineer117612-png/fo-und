@@ -145,7 +145,7 @@ test("AUDIT: no code outside the shared rule writes a verified status (a creator
 
 test("AUDIT: every file that creates a transaction is on the list reviewed in Step 0, so a new creation path cannot be added without this test being updated", () => {
   const creators = fs.readdirSync(new URL("../src/model/", import.meta.url)).filter((f) => f.endsWith(".js") && /status: "draft"|settle\(/.test(read("../src/model/" + f))).sort();   // a file that builds a transaction literal
-  const reviewed = ["buffer.js", "checkin.js", "corrections.js", "drafts.js", "gaprepair.js", "goals.js", "income.js", "owed.js", "plan.js", "reconcile.js", "refunds.js", "schedules.js", "templates.js", "transfers.js"];
+  const reviewed = ["buffer.js", "checkin.js", "corrections.js", "drafts.js", "gaprepair.js", "goals.js", "income.js", "loans.js", "owed.js", "plan.js", "reconcile.js", "refunds.js", "schedules.js", "templates.js", "transfers.js"];
   assert.deepEqual(creators.filter((f) => !["entryrule.js", "inbox.js"].includes(f)), reviewed, "a file that makes transactions must be reviewed for P0-7 and added here");
 });
 
@@ -157,7 +157,7 @@ const v11 = () => { const l = M.emptyLedger(); const s = ledger();
     { transaction_id: "o3", account_id: "chk", amount: 700 }, { transaction_id: "o3", category_id: UL, amount: -700 }];
   return { ...l, rev: 4, saved_at: TS, state: s, settings: { foo: "bar" } }; };
 test("COMPATIBILITY: a ledger without verified_by loads, saves and backs up exactly as it is; the same with the field", async () => {
-  assert.equal(M.LEDGER_VERSION, 12, "P0-7 changed no data version (it was 11 then; 12 is A4's own step)");
+  assert.equal(M.LEDGER_VERSION, 13, "P0-7 changed no data version (it was 11 then; 12 is A4's own step, 13 the loans step)");
   const ledgerIn = v11(), text = JSON.stringify(ledgerIn), p = M.parseLedger(text);
   assert.ok(p.ok, p.error); assert.equal(p.older, undefined);
   assert.deepEqual(p.ledger, ledgerIn, "loads unchanged");
@@ -175,7 +175,7 @@ test("COMPATIBILITY: an older backup restores and upgrades with its entries unto
   assert.equal(opened.v, 10);
   const restored = M.restoreLedger(M.emptyLedger(), opened, NOW);
   const up = M.upgradeLedger(restored, { now: NOW }); assert.ok(up.ok, up.error);
-  assert.equal(up.ledger.v, 12);
+  assert.equal(up.ledger.v, 13);
   assert.deepEqual(up.ledger.state.transactions, cur.state.transactions, "every entry as it was");
   assert.deepEqual(up.ledger.state.entries, cur.state.entries);
 });

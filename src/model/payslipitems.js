@@ -63,7 +63,13 @@ export const rememberedCategory = (settings, employer, section, label) => {
 export function rememberChoices(settings, employer, items) {
   const add = {};
   for (const i of items) if (i.chosen === true && i.category && validCategory(i.section, i.category)) add[memoryKey(employer, i.section, i.label)] = i.category;
-  return Object.keys(add).length ? { ...settings, payslip_categories: { ...(settings?.payslip_categories ?? {}), ...add } } : settings;
+  // LOANS (data version 13): the loan a repayment line lowers is remembered the same way (setting `payslip_loans`), only when the owner chose it; "No loan" is remembered as "".
+  const loans = {};
+  for (const i of items) if (i.loan_chosen === true && i.section === "deduction") loans[memoryKey(employer, i.section, i.label)] = i.loan_id ?? "";
+  let out = settings;
+  if (Object.keys(add).length) out = { ...out, payslip_categories: { ...(out?.payslip_categories ?? {}), ...add } };
+  if (Object.keys(loans).length) out = { ...out, payslip_loans: { ...(out?.payslip_loans ?? {}), ...loans } };
+  return out;
 }
 
 // A line as the review form holds it: what the reader (or the owner) gave, plus the guesses. `via` says where its category came from (form only, never saved).
@@ -76,11 +82,13 @@ export function draftItem({ section, label, amount, hours, employer, settings })
   else if (section === "earning" && suggestBonus(label)) { item.category = "bonus"; item.via = "suggested"; }
   else { const strong = strongCategory(section, label); if (strong) { item.category = strong; item.via = "auto"; } }
   if (section === "earning" && suggestOvertime(label)) { item.overtime = true; item.via_overtime = "suggested"; }
+  const loan = section === "deduction" ? settings?.payslip_loans?.[memoryKey(employer, section, label)] : undefined;   // the loan this line lowered last time (an unknown or removed loan lowers nothing: loanPayLegs checks)
+  if (loan) item.loan_id = loan;
   return item;
 }
 
 // ---------- what is saved ----------
-const STORED = ["section", "label", "amount", "category", "overtime", "back_pay", "tax", "hours"];
+const STORED = ["section", "label", "amount", "category", "overtime", "back_pay", "tax", "hours", "loan_id"];
 // A line that already exists keeps its id when the payslip is changed (`item_id` on the draft), so the record of a category change still names the same line; a new line gets the next free one.
 export function storedItems(payslipId, drafts) {
   const mine = new RegExp("^" + payslipId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "-i(\\d+)$"), used = new Set();

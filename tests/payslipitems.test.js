@@ -264,7 +264,7 @@ test("data version 10 upgrades through 11 (to the current 12): an old ledger wit
   const before = v10WithPayslips(), snapshot = JSON.stringify(before);
   assert.equal(before.state.payslips.length, 1); assert.equal("payslipItems" in before.state, false, "the old backup has no such list");
   const r = upgradeLedger(before, { now: new Date("2026-10-30T00:00:00Z") });
-  assert.equal(r.ok, true, r.error); assert.equal(r.ledger.v, 12); assert.equal(JSON.stringify(before), snapshot, "the input is never changed");
+  assert.equal(r.ok, true, r.error); assert.equal(r.ledger.v, 13); assert.equal(JSON.stringify(before), snapshot, "the input is never changed");
   for (const k of V10) assert.deepEqual(r.ledger.state[k], before.state[k], k + " is the same");
   assert.deepEqual(r.ledger.state.payslipItems, []); assert.deepEqual(r.ledger.state.payslipItemChanges, []);
   assert.deepEqual(r.ledger.settings, before.settings);
@@ -283,6 +283,6 @@ test("SAFETY COPY: before the update the app keeps the old data, and the copy re
   assert.equal(back.v, 10); assert.equal(back.rev, 201);
   assert.deepEqual(back.state, before.state, "the copy reads back with every payslip and line");
   assert.equal(parseLedger(JSON.stringify(back)).ok, true);
-  assert.equal(upgradeLedger(back).ledger.v, 12, "and a restored copy upgrades again");
-  assert.equal(LEDGER_VERSION, 12);
+  assert.equal(upgradeLedger(back).ledger.v, 13, "and a restored copy upgrades again");
+  assert.equal(LEDGER_VERSION, 13);
 });

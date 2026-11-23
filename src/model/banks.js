@@ -37,7 +37,7 @@ export function planAccount(state, input) {
     if (!bank) return fail("UNKNOWN_BANK", "that bank is not in the list");
     const sub = (input.sub ?? "").trim();
     if (sub.length > 40) return fail("BAD_NAME", "keep the part of the bank to 40 characters or less");
-    name = sub ? bank.name + " · " + sub : input.kind === "liability" ? bank.name + " · Credit card" : bank.name;   // a bank can hold a savings account and a credit card side by side
+    name = sub ? bank.name + " · " + sub : input.kind === "liability" ? bank.name + " · Credit card" : input.kind === "loan" ? bank.name + " · Loan" : bank.name;   // a bank can hold a savings account and a credit card side by side
   } else {
     name = (input.name ?? "").trim();
     if (!name) return fail("BAD_NAME", "Give the account a name.");

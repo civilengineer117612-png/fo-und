@@ -458,3 +458,47 @@ test("DECISION 3: a payroll loan repayment is already deducted from the pay: it 
   const loans = M.incomeByCategory(r.state, "2026").deduction.find((c) => c.category === "loans");
   assert.deepEqual([loans.total, loans.items.map((i) => i.label)], [150000, ["SSS Salary Loan"]], "Income lists it with the deductions, under Loan repayments");
 });
+
+test("LOANS (owner, Nov 23; data version 13): borrowing and repaying are transfers, a payroll repayment lowers the loan inside the payslip's entry without changing income, interest is the only cost, and every step keeps the trial balance", () => {
+  let s = M.planAccount(ledger(), { id: "loan", name: "Loan", kind: "loan", opening: 1000000, date: "2026-10-01" }).state;   // 10,000.00 owed
+  const owedNow = (st) => M.loanOwed(st, st.accounts.find((a) => a.id === "loan"));
+  const income = (st) => JSON.stringify([M.incomeBySource(st, { from: FROM, to: TO }), M.incomeBreakdown(st, { from: FROM, to: TO }), M.monthPay(st, MONTH)]);
+  const spent = (st) => M.spendingByCategory(st, { month: MONTH }).total;
+  s = transfer(s, "2026-10-02", "loan", "chk", 200000); assertTrial(s, "borrowing");
+  assert.deepEqual([owedNow(s), balanceOf(s, "chk"), spent(s)], [1200000, 1200000, 0], "borrowed: the loan owes more, the account holds more, nothing is income or spending");
+  s = transfer(s, "2026-10-05", "chk", "loan", 100000); assertTrial(s, "repaying");
+  assert.deepEqual([owedNow(s), spent(s)], [1100000, 0], "repaid: a transfer, never spending");
+  const before = income(s);
+  const slip = M.planPayslip(s, { id: "psl", transaction_id: "tx-psl", employer: "Employer", period_from: "2026-10-01", period_to: "2026-10-15", pay_date: "2026-10-15", account_id: "chk",
+    printed_gross: 500000, printed_net: 450000, deposit: 450000, printed_deductions: 50000,
+    items: [{ section: "earning", label: "Basic Pay", amount: 500000, category: "salary" }, { section: "deduction", label: "Salary Loan", amount: 50000, category: "loans", loan_id: "loan" }] }, NOW);
+  assert.ok(slip.ok, JSON.stringify(slip.violations)); s = slip.state; assertTrial(s, "a payroll repayment");
+  assert.equal(owedNow(s), 1050000, "the payslip's repayment lowers the loan");
+  const plain = M.planPayslip(M.planAccount(ledger(), { id: "loan", name: "Loan", kind: "loan", opening: 1000000, date: "2026-10-01" }).state, { id: "psl", transaction_id: "tx-psl", employer: "Employer", period_from: "2026-10-01", period_to: "2026-10-15", pay_date: "2026-10-15", account_id: "chk",
+    printed_gross: 500000, printed_net: 450000, deposit: 450000, printed_deductions: 50000,
+    items: [{ section: "earning", label: "Basic Pay", amount: 500000, category: "salary" }, { section: "deduction", label: "Salary Loan", amount: 50000, category: "loans" }] }, NOW).state;
+  assert.equal(JSON.stringify([M.incomeBySource(s, { from: FROM, to: TO }), M.monthPay(s, MONTH)]), JSON.stringify([M.incomeBySource(plain, { from: FROM, to: TO }), M.monthPay(plain, MONTH)]), "income is the deposit, linked or not");
+  assert.notEqual(before, income(s), "(and the pay itself did arrive)");
+  assert.equal(spent(s), 0, "a payroll repayment is never spending");
+  const i = M.planLoanInterest(s, { id: "int1", loan_id: "loan", lender: 1060000, date: "2026-10-20" }, NOW); assert.ok(i.ok, JSON.stringify(i.violations)); s = i.state; assertTrial(s, "interest");
+  assert.deepEqual([owedNow(s), spent(s)], [1060000, 10000], "interest: the loan owes what the lender says, and the 100.00 is the only cost");
+  assert.equal(M.netWorthSeries(s, { today: "2026-10-31", months: 1 }).points.at(-1).owed, 1060000 + M.cardsSummary(s, { from: FROM, to: TO }).owe, "net worth counts the loan with the card");
+});
+
+test("CLOSING CHECK (LOANS): with a payroll loan repayment the month still closes: what you have minus what you owe = opening + income - spending + pay sent to loans, and \"Paid to loans from pay\" is neither income nor spending", () => {
+  let s = M.planAccount(ledger(), { id: "loan", name: "Loan", kind: "loan", opening: 1000000, date: "2026-10-01" }).state;
+  s = expense(s, "2026-10-03", "food", 25000, "chk");
+  const slip = M.planPayslip(s, { id: "psc", transaction_id: "tx-psc", employer: "Employer", period_from: "2026-10-01", period_to: "2026-10-15", pay_date: "2026-10-15", account_id: "chk",
+    printed_gross: 500000, printed_net: 450000, deposit: 450000, printed_deductions: 50000,
+    items: [{ section: "earning", label: "Basic Pay", amount: 500000, category: "salary" }, { section: "deduction", label: "Salary Loan", amount: 50000, category: "loans", loan_id: "loan" }] }, NOW);
+  assert.ok(slip.ok, JSON.stringify(slip.violations)); s = slip.state; assertTrial(s, "a payroll repayment");
+  const sign = (a) => (a.class === "asset" ? 1 : -1);
+  const nw = s.accounts.reduce((n, a) => n + sign(a) * M.naturalBalance(a, M.countedEntries(s)), 0), opening = s.accounts.reduce((n, a) => n + sign(a) * a.opening_balance, 0);
+  const kind = new Map(s.categories.map((c) => [c.id, c.kind])), byKind = (k) => s.entries.filter((e) => kind.get(e.category_id) === k).reduce((n, e) => n + e.amount, 0);
+  const income = -byKind("income"), spending = byKind("expense"), sentToLoans = -byKind("withheld");
+  assert.deepEqual([income, spending, sentToLoans], [450000, 25000, 50000], "income is the deposit, spending the purchase, pay sent to the loan the repayment");
+  assert.equal(nw, opening + income - spending + sentToLoans, "the month closes to the centavo");
+  assert.equal(s.categories.filter((c) => !["income", "expense", "withheld"].includes(c.kind)).length, 0, "every category is one of the three kinds");
+  assert.equal(M.spendingByCategory(s, { month: MONTH }).total, spending, "the spending figure holds no repayment");
+  assert.equal(M.monthPay(s, MONTH).received, 450000, "Budget's received pay is the deposit");
+});

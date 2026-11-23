@@ -59,7 +59,8 @@ let lockRec = null, lockActive = false, lockMode = null, lockHiddenAt = null, lo
 const S = () => ledger.state;
 // The reports read the ledger through the owner's payee names: an entry still in Unlogged shows under its payee's category; nothing stored changes.
 const SV = () => M.withPayeeBook(ledger.state, ledger.settings.payee_book);
-const activeAccounts = () => S().accounts.filter((a) => !a.archived && !M.isOwed(a));   // "Owed to me" (A4) holds no money: it is in no picker, no Setup list and no count
+const activeAccounts = () => S().accounts.filter((a) => !a.archived && !M.isOwed(a) && !M.isLoan(a));   // "Owed to me" (A4) holds no money: it is in no picker, no Setup list and no count. A loan (data version 13) is no money either: only Move money, Setup and Cards' Loans list add it
+const activeLoans = () => M.loansOf(S());
 const accountName = (id) => S().accounts.find((a) => a.id === id)?.name ?? "?";
 const categoryName = (id) => S().categories.find((c) => c.id === id)?.name ?? "?";
 // "Name \u00b7 Bucket" for a category: the bucket is read from the name (or chosen by hand), so there is nothing else to set.
@@ -1019,6 +1020,7 @@ function slipLineHtml(f, sh) {
     <label for="p-ia">Amount (₱)${REQ}</label><input id="p-ia" data-field="i:${it.k}:amt" inputmode="decimal" value="${esc(it.amt ?? "")}" autocomplete="off" placeholder="0.00">
     <label>Section</label><div class="chips">${[["earning", "Earnings"], ["deduction", "Deductions"], ["employer", "Employer share"]].map(([v, t]) => `<button class="chip" type="button" data-action="slip-section" data-id="${v}" aria-pressed="${it.section === v}">${t}</button>`).join("")}</div>
     <label>Category</label>${picker("slipcat", [["", cats]], it.category ?? "", "slip-cat", "Choose a category")}
+    ${it.section === "deduction" && it.category === "loans" && activeLoans().length ? `<label>Lowers</label>${picker("slipdloan", [["", [{ id: "", name: "No loan, only a deduction" }, ...activeLoans()]]], activeLoans().some((l) => l.id === it.loan_id) ? it.loan_id : "", "slip-loan", "Choose a loan")}` : ""}
     ${it.section === "earning" ? `<label>Overtime</label><div class="chips"><button class="chip" type="button" data-action="slip-ot" aria-pressed="${it.overtime === true}">${it.via_overtime === "suggested" ? "Overtime (suggested): count it" : "Count as overtime"}</button></div><p class="note small">Only a line you confirm here counts toward the 60/40 overtime draft.</p>` : ""}
     <label for="p-ih">Hours, if printed (optional)</label><input id="p-ih" data-field="i:${it.k}:hours" value="${esc(it.hours ?? "")}" autocomplete="off">
     ${notes.length ? `<p class="note small">${esc(notes.join(" · "))}</p>` : ""}
@@ -1589,7 +1591,7 @@ async function dropOldPlaceholders() {
 }
 
 const bankPictureOf = (bankId) => M.bankPicture(S().accounts, bankId);
-const accountPreview = (f) => { const b = M.bankById(f.bank), sub = (f.sub ?? "").trim(); return sub ? b.name + " \u00b7 " + sub : f.kind === "liability" ? b.name + " \u00b7 Credit card" : b.name; };
+const accountPreview = (f) => { const b = M.bankById(f.bank), sub = (f.sub ?? "").trim(); return sub ? b.name + " \u00b7 " + sub : f.kind === "liability" ? b.name + " \u00b7 Credit card" : f.kind === "loan" ? b.name + " \u00b7 Loan" : b.name; };
 
 // ---------- Help: how the app works, in a minute ----------
 // The words live in src/model/help.js (kept true by a test that wants a topic for every screen in the menu). The notes come first, word for word;
@@ -1669,7 +1671,7 @@ function viewSetup() {
   const reserveExists = S().accounts.some((a) => a.reserve_for);
   const hosts = activeAccounts().filter((a) => a.class === "asset" && !a.reserve_for);
   const arrA = ui.sortArr === "acct";
-  const rows = orderedAccts(activeAccounts()).map((a) => `<div class="row sortrow acctrow" data-sort="acct" data-id="${esc(a.id)}"><button class="acctopen" data-action="acct-more" data-id="${esc(a.id)}" aria-label="${esc(a.name)}, ${esc(pesoW(M.naturalBalance(a, M.countedEntries(S()))))}. Tap to change it"><span class="who">${iconOf(a, 44)}<span>${esc(a.name)}<small>${a.class === "asset" ? (M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet") : "Credit card"}${a.reserve_for ? " \u00b7 covers " + esc(accountName(a.reserve_for)) : ""}${a.bank && !a.name.toLowerCase().startsWith(M.bankById(a.bank).name.toLowerCase()) ? " \u00b7 linked to " + esc(M.bankById(a.bank).name) : ""}${a.last4 ? " \u00b7 \u00b7\u00b7" + esc(a.last4) : ""}</small></span></span>
+  const rows = [...orderedAccts(activeAccounts()), ...orderedAccts(activeLoans())].map((a) => `<div class="row sortrow acctrow" data-sort="acct" data-id="${esc(a.id)}"><button class="acctopen" data-action="acct-more" data-id="${esc(a.id)}" aria-label="${esc(a.name)}, ${esc(pesoW(M.naturalBalance(a, M.countedEntries(S()))))}. Tap to change it"><span class="who">${iconOf(a, 44)}<span>${esc(a.name)}<small>${a.class === "asset" ? (M.isPocket(a) ? "Savings pocket" : isCash(a) ? "Cash" : "Bank or wallet") : M.isLoan(a) ? "Loan" : "Credit card"}${a.reserve_for ? " \u00b7 covers " + esc(accountName(a.reserve_for)) : ""}${a.bank && !a.name.toLowerCase().startsWith(M.bankById(a.bank).name.toLowerCase()) ? " \u00b7 linked to " + esc(M.bankById(a.bank).name) : ""}${a.last4 ? " \u00b7 \u00b7\u00b7" + esc(a.last4) : ""}</small></span></span>
       <span class="amt">${peso(M.naturalBalance(a, M.countedEntries(S())))}${(() => { const cv = reserveCovers().find((x) => x.reserve_id === a.id); return cv ? `<span class="coverwrap">${coverBar(cv.share, coverLabel(cv))}</span>` : ""; })()}</span>${CHEV}</button></div>`).join("");
   const hiddenAccts = S().accounts.filter((a) => a.archived);
   const hiddenHtml = hiddenAccts.length ? `<h2>Hidden accounts</h2><p class="note">Their entries and history stay. They are left out of pickers and totals.</p>${hiddenAccts.map((a) => `<div class="row"><div class="who">${iconOf(a, 28)}<div>${esc(a.name)}</div></div><div class="amt"><button class="act" data-action="show-account" data-id="${esc(a.id)}">Show again</button></div></div>`).join("")}` : "";
@@ -1683,9 +1685,9 @@ function viewSetup() {
     ${f.bank ? `<label for="a-sub">Which part of ${esc(M.bankById(f.bank).name)}? (optional)</label><input id="a-sub" data-field="sub" value="${esc(f.sub)}" placeholder="e.g. Emergency Fund, Savings" autocomplete="off" enterkeyhint="next">
       <p class="note" id="a-preview">Saved as: ${esc(accountPreview(f))}</p>`
       : `<label for="a-name">Or type a name</label><input id="a-name" data-field="name" value="${esc(f.name)}" autocomplete="off" enterkeyhint="next">`}
-    <label for="a-kind">Kind of account</label><select id="a-kind" data-field="kind"><option value="asset"${f.kind === "asset" ? " selected" : ""}>Bank, wallet or cash (money I have)</option><option value="liability"${f.kind === "liability" ? " selected" : ""}>Credit card (money I owe)</option></select>
+    <label for="a-kind">Kind of account</label><select id="a-kind" data-field="kind"><option value="asset"${f.kind === "asset" ? " selected" : ""}>Bank, wallet or cash (money I have)</option><option value="liability"${f.kind === "liability" ? " selected" : ""}>Credit card (money I owe)</option><option value="loan"${f.kind === "loan" ? " selected" : ""}>Loan (money I owe a lender)</option></select>
     <label for="a-open">${f.kind === "asset" ? "How much is in it today" : "How much you owe on it today"} (₱)</label><input id="a-open" data-field="opening" inputmode="decimal" value="${esc(f.opening)}" placeholder="0.00" autocomplete="off">
-    <p class="note" id="a-open-note">Spending logged with an earlier date does not change this amount. From today on, it does.</p>
+    <p class="note" id="a-open-note">${f.kind === "loan" ? "Payments with an earlier date do not change this amount. From today on, they do." : "Spending logged with an earlier date does not change this amount. From today on, it does."}</p>
     ${f.kind === "asset" ? `<div class="row pocketrow"><div><b>Savings pocket</b><small>Kept out of \u201CPaid from\u201D. Still counted in what you have.</small></div><div><button class="chip" id="a-pocket" data-action="toggle-pocket-form" aria-pressed="${f.pocket ? "true" : "false"}">${f.pocket ? "On" : "Off"}</button></div></div>` : ""}
     ${f.kind === "asset" && cards.length ? `<label for="a-covers">This account is a reserve for a card (optional)</label><select id="a-covers" data-field="covers"><option value="">No</option>${cards.map((c) => `<option value="${esc(c.id)}"${f.covers === c.id ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</select>` : ""}
     ${ui.setupError ? `<p id="a-error" role="alert"><b>${esc(ui.setupError)}</b></p>` : ""}
@@ -2014,11 +2016,15 @@ function viewCards() {
   // Owed to me (A4): one row per person who owes you, apart from the accounts. It is not money yet, so it is not in the figure at the top.
   const people = M.owedSummary(S()).people;
   const owedView = people.length ? `<h2>Owed to me</h2>${barCard(people.map((p) => ({ name: letterTile(p.name) + esc(p.name), fig: amt((p.amount < 0 ? "-" : "") + peso(Math.abs(p.amount))), action: "open-person", id: p.person_id })))}` : "";
+  // LOANS (owner, Nov 23; data version 13): their own list, named "Loans", the amount owed on each; never mixed with the credit cards. Hidden by the eye like every amount.
+  const loanRows = M.loansSummary(S()).rows;
+  const loansView = loanRows.length ? `<h2>Loans</h2>${barCard(loanRows.map((l) => ({ name: iconOf(acct(l.account_id), 28) + esc(l.name), sub: l.from_pay > 0 ? "Lowered from your pay" : "", fig: amt(`${peso(l.owed)}<span class="sr"> you owe</span>`), action: "open-loan", id: l.account_id })))}` : "";
   const cardView = `<div class="gridcards">${seq.slice(0, 6).map(gridCard).join("")}</div>`;
   return `<h1>Cards</h1>${periodStepper(p)}
     ${netCard}${setAside}
     <h2>Accounts</h2>
     ${ui.cardsList ? listView : cardView}
+    ${loansView}
     ${owedView}
     <p class="seeallrow">${ui.cardsList || seq.length > 6 ? `<button class="seeall" data-action="cards-list">${ui.cardsList ? "Show fewer accounts" : "See all accounts"} ${CHEV}</button>` : ""}<button class="seeall" data-action="cards-more">More</button></p>`;
 }
@@ -2792,8 +2798,8 @@ function accountPicker(items, selectedId, action = "pick-acct", key = "acct", pl
   // "Last used" counts verified entries only, as it does for categories: a draft from a wrong scan never leads the list
   const ids = new Set(items.map((a) => a.id)), verified = new Set(S().transactions.filter((t) => t.status === "verified").map((t) => t.id));
   const lastAcct = [...S().entries].reverse().find((e) => e.account_id && ids.has(e.account_id) && verified.has(e.transaction_id))?.account_id, last = items.filter((a) => a.id === lastAcct);
-  const rest = items.filter((a) => a.id !== lastAcct), cards = orderedAccts(rest.filter((a) => a.class === "liability")), plain = orderedAccts(rest.filter((a) => a.class !== "liability"));
-  return picker(key, [["Last used", last], ["Accounts", plain], ["Cards", cards]], selectedId, action, placeholder);
+  const rest = items.filter((a) => a.id !== lastAcct), cards = orderedAccts(rest.filter((a) => a.class === "liability")), loans = orderedAccts(rest.filter(M.isLoan)), plain = orderedAccts(rest.filter((a) => a.class !== "liability" && !M.isLoan(a)));
+  return picker(key, [["Last used", last], ["Accounts", plain], ["Cards", cards], ["Loans", loans]], selectedId, action, placeholder);
 }
 // What the paper is: A to Z, "Something else" last. The face shows what the app read; "Choose" while it has not decided (and Save stays held).
 const kindPicker = (selectedId) => { const all = [...M.KINDS, ...M.MOVE_KINDS].map((k) => ({ id: k.id, name: k.label })), other = all.filter((k) => k.id === "other"); return picker("kind", [["", [...byName(all.filter((k) => k.id !== "other")), ...other]]], selectedId, "pick-kind", "Choose"); };
@@ -3004,8 +3010,8 @@ function renderSheet() {
   } else if (sh.type === "move") {
     body = `<h3>Move money</h3>
       <label for="f-amount">Amount (\u20B1)</label><input id="f-amount" data-field="amount" inputmode="decimal" value="${esc(ui.form.amount ?? "")}" autocomplete="off">
-      <label>From</label>${accountPicker(accountsFor(null, true), ui.form.from_id, "pick-from", "from", "Choose an account")}
-      <label>To</label>${accountPicker(accountsFor(null, true), ui.form.to_id, "pick-to", "to", "Choose an account")}
+      <label>From</label>${accountPicker([...accountsFor(null, true), ...activeLoans()], ui.form.from_id, "pick-from", "from", "Choose an account")}
+      <label>To</label>${accountPicker([...accountsFor(null, true), ...activeLoans()], ui.form.to_id, "pick-to", "to", "Choose an account")}
       <label for="f-fee">Fee (\u20B1, optional)</label><input id="f-fee" data-field="fee" inputmode="decimal" value="${esc(ui.form.fee ?? "")}" autocomplete="off">
       ${REQNOTE}
       <p class="note" id="scan-why" role="status"></p>
@@ -3608,7 +3614,7 @@ function renderSheet() {
     if (!r) { body = `<p class="note">This account is gone.</p>`; }
     else {
       const newest = [...r.rows].reverse(), more = newest.length > (sh.limit ?? 40), list = newest.slice(0, sh.limit ?? 40), onStm = M.onStatementIds(S());
-      body = `<h3 style="margin:0">${esc(a.name)}</h3><p class="note" style="margin:2px 0 0">${card ? "You owe now" : "Balance now"}</p>
+      body = `<h3 style="margin:0">${esc(a.name)}</h3><p class="note" style="margin:2px 0 0">${card || M.isLoan(a) ? "You owe now" : "Balance now"}</p>
         <div class="hero" style="margin:0 0 6px">${shown ? peso(r.closing) : `<span aria-label="Amount hidden">${DOTS}</span>`}</div>
         ${shown ? "" : `<p class="center"><button class="act" data-action="cards-eye">Show amounts</button></p>`}
         <div class="regl">${list.length ? list.map((x) => { const d = describe(x.transaction); return `<div class="row"><div>${esc(d.title)}<small>${esc(listDate(x.transaction.date))}${x.transaction.status === "draft" ? " · draft" : ""}${x.pending ? " · pending" : ""}${onStm.has(x.transaction.id) ? " · on statement" : ""}</small></div><div class="amt">${x.change < 0 ? "-" : "+"}${shown ? peso(Math.abs(x.change)) : DOTS}<small>${m(x.balance)}</small></div></div>`; }).join("") : `<p class="note">Nothing on this account yet.</p>`}
@@ -3626,6 +3632,17 @@ function renderSheet() {
       ${REQNOTE}<p class="note small" id="person-why" role="status" style="margin:0 0 6px"></p><p class="note small" style="margin:0 0 6px">A move into your account, not income. It waits in Verify.</p>
       <p style="margin:6px 0 8px"><button class="primary" id="f-save" data-action="person-paid" style="width:100%" disabled>Paid me back</button></p>
       <p style="margin:0 0 8px"><button data-action="person-unpaid" style="width:100%">${ui.form.confirmUnpaid ? "Tap again: " + (shown ? peso(owes) : "this") + " becomes your spending" : "Will not pay"}</button></p>` : `<p class="note">Nothing to pay back.</p>`}`;
+  } else if (sh.type === "loan") {
+    // One loan (owner, Nov 23): what you owe, ONE filled "Pay this loan" (a move from your account, never spending), the count of the lender's balance (a
+    // higher figure is interest, booked only on the tap; a lower one is a payment to log), money received from it, and its history. Amounts follow the Cards eye.
+    const loan = S().accounts.find((x) => x.id === sh.id), shown = !!ui.cardsShown, DOTS = "\u20b1\u2022\u2022\u2022\u2022\u2022";
+    const owed = loan ? M.loanOwed(S(), loan) : 0, fromPay = M.paidFromPay(S(), sh.id);
+    body = `<h3>${esc(loan?.name ?? "")}</h3><p class="note" style="margin:0">You owe</p><div class="hero" style="margin:0 0 4px">${shown ? peso(owed) : `<span aria-label="Amount hidden">${DOTS}</span>`}</div>
+      ${fromPay > 0 ? `<p class="note small" style="margin:0 0 8px">${shown ? peso(fromPay) : DOTS} lowered from your pay</p>` : ""}
+      <p style="margin:6px 0 8px"><button class="primary" data-action="loan-pay" data-id="${esc(sh.id)}" style="width:100%">Pay this loan</button></p>
+      <label for="f-lender">The lender's balance (\u20b1)</label><input id="f-lender" data-field="lender" inputmode="decimal" autocomplete="off" value="${esc(ui.form.lender ?? "")}">
+      <div id="loan-count" role="status">${loanCountHtml()}</div>
+      <div class="card catcard">${barRow({ name: "Money received from this loan", fig: CHEV, action: "loan-received", id: sh.id })}${barRow({ name: "History", fig: CHEV, action: "open-register", id: sh.id })}</div>`;
   } else if (sh.type === "cardpay") {
     const card = S().accounts.find((x) => x.id === sh.id), shown = !!ui.cardsShown, DOTS = "₱•••••", st = M.cardStatement(S(), sh.id), due = M.nextDue(card?.due_day, today());
     const [pf, pt] = periodBounds(period()), owe = M.accountsOverview(S(), { from: pf, to: pt }).cards.find((c) => c.account_id === sh.id)?.owe ?? 0;
@@ -3707,7 +3724,7 @@ function renderSheet() {
       ${shown ? "" : `<p class="center"><button class="act" data-action="nw-show">Show amounts</button></p>`}
       <div class="seg" role="group" aria-label="How far back">${[["6", "6M"], ["12", "1Y"], ["all", "All"]].map(([v, t]) => `<button data-action="nw-range" data-id="${v}" aria-pressed="${range === v}">${t}</button>`).join("")}</div>
       ${pts.length < 2 ? `<p class="note">Not enough history yet: it fills in as months pass.</p>` : chart}
-      ${pts.length ? `<table class="tbl"><thead><tr><th>Month</th><th>You have</th><th>Cards owed</th><th>Net</th></tr></thead><tbody>${[...pts].reverse().map((p, i) => `<tr><td>${esc(i === 0 ? "Today" : mlabel(p.date))}</td><td>${fig(p.assets)}</td><td>${fig(p.owed)}</td><td>${fig(p.net)}</td></tr>`).join("")}</tbody></table>` : ""}`;
+      ${pts.length ? `<table class="tbl"><thead><tr><th>Month</th><th>You have</th><th>You owe</th><th>Net</th></tr></thead><tbody>${[...pts].reverse().map((p, i) => `<tr><td>${esc(i === 0 ? "Today" : mlabel(p.date))}</td><td>${fig(p.assets)}</td><td>${fig(p.owed)}</td><td>${fig(p.net)}</td></tr>`).join("")}</tbody></table>` : ""}`;
   } else if (sh.type === "csv") {
     const f = ui.form, range = f.range ?? "year", { from, to } = csvRange(range), n = M.entriesCsv(S(), { from, to, drafts: f.drafts === true }).rows;
     body = `<h3>Export entries</h3>
@@ -3951,7 +3968,18 @@ document.addEventListener("pointerup", fingerUp, true); document.addEventListene
 // it redraws ON PURPOSE while the finger is down, and its click is cancelled anyway, so it is not held back.
 const holdingTap = () => fingerDown && !suppressClick;
 const afterTap = (job) => { if (!fingerDown) { job(); return; } afterTapJobs.push(job); setTimeout(() => { if (afterTapJobs.includes(job)) { fingerDown = false; runAfterTap(); } }, 1500); };
+// The loan window's count, written in place while the lender's balance is typed (never a redraw: the box has the keyboard).
+function loanCountHtml() {
+  const f = ui.form, a = M.parsePesos(f.lender ?? "");
+  if (!(f.lender ?? "").trim() || !a.ok) return "";
+  const c = M.loanCount(S(), ui.sheet.id, a.centavos);
+  if (!c.ok) return "";
+  if (c.kind === "match") return `<p class="note" style="margin:8px 0">${TICK} Matches your ledger.</p>`;
+  if (c.kind === "interest") return `<p class="note" style="margin:8px 0 6px">${peso(c.amount)} more: interest.</p><p style="margin:0 0 8px"><button data-action="loan-interest" style="width:100%">Book ${peso(c.amount)} as interest</button></p>`;
+  return `<p class="note" style="margin:8px 0 6px">${peso(c.amount)} less: a payment is not logged yet.</p><p style="margin:0 0 8px"><button data-action="loan-missing" style="width:100%">Log the ${peso(c.amount)} payment</button></p>`;
+}
 function refreshSave() {
+  if (ui.sheet?.type === "loan") { const el = $("loan-count"); if (el) setHtml(el, loanCountHtml()); return; }
   const btn = $("f-save");
   if (!btn) return;
   const type = ui.sheet?.type, f = ui.form;
@@ -4745,6 +4773,18 @@ async function onClick(el) {
       if (await commit(r.state, { ...ledger.settings, last_account_id: from })) showToast(peso(a.centavos) + " paid to " + card.name + ". Verify it to count it.");
       break;
     }
+    case "open-loan": ui.sheet = { type: "loan", id }; ui.form = {}; renderSheet(); break;
+    case "loan-pay": ui.sheet = { type: "move" }; ui.form = { amount: "", to_id: id }; renderSheet(); break;   // a move from your account into the loan: never spending
+    case "loan-received": ui.sheet = { type: "move" }; ui.form = { amount: "", from_id: id }; renderSheet(); break;   // money received from the loan: never income
+    case "loan-missing": { const c = M.loanCount(S(), ui.sheet.id, M.parsePesos(ui.form.lender ?? "").centavos); const loanId = ui.sheet.id; ui.sheet = { type: "move" }; ui.form = { amount: c.ok ? (c.amount / 100).toFixed(2) : "", to_id: loanId }; renderSheet(); break; }
+    case "loan-interest": {   // the owner's tap: ONE entry, verified by count (the loan owes the lender's figure; the difference is "Loan interest")
+      const a = M.parsePesos(ui.form.lender ?? ""), loanId = ui.sheet.id;
+      const p = a.ok ? M.planLoanInterest(S(), { id: newId("tx"), loan_id: loanId, lender: a.centavos, date: today() }, new Date()) : null;
+      if (!p?.ok) { showToast("Could not save: " + (p?.violations?.[0]?.message ?? "type the lender's balance")); break; }
+      ui.sheet = null; renderSheet();
+      if (await commit(p.state)) showToast("Booked " + peso(p.amount) + " as interest.");
+      break;
+    }
     case "open-person": ui.sheet = { type: "person", id }; ui.form = { amount: ui.cardsShown && M.owedBy(S(), id) > 0 ? shareAmt(M.owedBy(S(), id)) : "", to_id: null }; renderSheet(); break;
     case "person-paid": {   // they paid you back: ONE draft move into the account that received it (never income)
       const a = M.parsePesos(ui.form.amount ?? ""), who = M.personName(S(), ui.sheet.id), to = ui.form.to_id;
@@ -5134,7 +5174,7 @@ async function onClick(el) {
     case "open-move": ui.sheet = { type: "move" }; ui.form = { amount: "", from_id: ledger.settings.last_account_id ?? null, to_id: null, fee: "" }; renderSheet(); break;
     case "save-move": {
       const f = ui.form, a = M.parsePesos(f.amount), fee = (f.fee ?? "").trim() ? M.parsePesos(f.fee) : { ok: true, centavos: 0 };
-      const p = M.planTransfer(S(), { transaction_id: newId("tx"), date: logDay(), from_account_id: f.from_id, to_account_id: f.to_id, amount: a.centavos, fee: fee.centavos, payee: "Transfer", source: "manual" }, new Date());
+      const p = M.planTransfer(S(), { transaction_id: newId("tx"), date: logDay(), from_account_id: f.from_id, to_account_id: f.to_id, amount: a.centavos, fee: fee.centavos, payee: M.isLoan(S().accounts.find((x) => x.id === f.to_id)) ? "Loan payment" : M.isLoan(S().accounts.find((x) => x.id === f.from_id)) ? "Loan received" : "Transfer", source: "manual" }, new Date());
       if (!p.ok) { showToast("Could not save: " + p.violations[0].message); break; }
       const over = M.overdrawOf(S(), { account_id: f.from_id, amount: a.centavos + fee.centavos });
       if (over && !(await askOverdraw(over, "move"))) break;   // the move window stays open
@@ -5210,6 +5250,7 @@ async function onClick(el) {
       renderSheet(); break;
     }
     case "slip-cat": { const it = slipItem(ui.form, ui.sheet.line); if (!it) break; if (id) { it.category = id; it.chosen = true; it.via = "owner"; } else { delete it.category; delete it.chosen; delete it.via; } ui.sheet.pick = null; renderSheet(); break; }
+    case "slip-loan": { const it = slipItem(ui.form, ui.sheet.line); if (!it) break; if (id) it.loan_id = id; else delete it.loan_id; it.loan_chosen = true; ui.sheet.pick = null; renderSheet(); break; }   // the loan this repayment lowers; remembered for this employer and label on Save
     case "slip-ot": { const it = slipItem(ui.form, ui.sheet.line); if (!it) break; if (it.overtime) delete it.overtime; else it.overtime = true; delete it.via_overtime; renderSheet(); break; }
     case "slip-rest": {   // the same category for every earnings line of THIS payslip that has none
       for (const it of ui.form.items) if (it.section === "earning" && !it.category) { it.category = id; it.chosen = true; it.via = "owner"; }

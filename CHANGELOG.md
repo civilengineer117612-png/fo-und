@@ -9,6 +9,9 @@ the next version with its date: MAJOR when it breaks habits or data, MINOR for n
 
 ## Unreleased
 
+### New
+- Loans: add one in Setup, see what you owe under Cards, pay it from an account, and let a payslip's repayment line lower it.
+
 ### Improved
 - Splitting a bill: tapping a name box shows the people you split with before, and typing narrows them.
 - About has a button that asks the browser again to keep the app's data safe, and shows its answer.

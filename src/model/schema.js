@@ -17,7 +17,7 @@ const optional = (spec) => ({ ...spec, optional: true });
 export const SCHEMAS = {
   Account: {
     id, name,
-    class: oneOf("asset", "liability"),
+    class: oneOf("asset", "liability", "loan"),   // ADDED (data version 13): "loan" is money owed to a lender (src/model/loans.js); a "liability" is always a credit card, so no card rule ever touches a loan
     role: text, hidden_by_default: bool, archived: bool,
     opening_balance: centavos,   // natural sign: a liability's owed amount is positive
     opening_date: date,
@@ -64,7 +64,7 @@ export const SCHEMAS = {
   },
   // ADDED (data version 12): someone who owes the owner part of a payment. Only a name, kept on this phone; a rename keeps the id.
   Person: { id, name },
-  Category: { id, name, kind: oneOf("income", "expense"),
+  Category: { id, name, kind: oneOf("income", "expense", "withheld"),   // ADDED (data version 13): "withheld" is pay the employer sent to a loan (src/model/loans.js); it is in no income and no spending figure
     role: optional(oneOf("food", "essentials", "subscription", "rent", "transport", "health", "utilities", "debt", "shopping", "fun", "dining", "invest", "family", "bank_fees", "interest_fees", "other")) },   // ADDED: what the category is FOR (the scanner guesses by role, so renaming cannot break a guess)
   CategoryMap: { from: id, to: id, effective_from: date },
   // BudgetRule / SavingsRule / AllocationRule share one shape, told apart by `kind`.
@@ -124,7 +124,8 @@ export const SCHEMAS = {
   PayslipLine: { payslip_id: id, side: oneOf("earning", "deduction"), kind: oneOf("basic", "rice", "skills", "clothing", "transport", "overtime", "thirteenth", "bonus", "tax", "sss", "gsis", "philhealth", "pagibig", "absences", "lates", "loan", "other"), amount: centavos, earned_month: optional({ type: "month" }) },
   // ADDED (data version 11): EVERY line printed on a payslip, as printed. The section decides the direction (an "employer" line is shown and never reduces net); a 0.00 line is kept.
   PayslipItem: { id, payslip_id: id, section: oneOf("earning", "deduction", "employer"), label: name, amount: centavos, position: count,
-    category: optional(text), overtime: optional(bool), back_pay: optional(bool), tax: optional(oneOf("taxable", "non_taxable")), hours: optional(text) },
+    category: optional(text), overtime: optional(bool), back_pay: optional(bool), tax: optional(oneOf("taxable", "non_taxable")), hours: optional(text),
+    loan_id: optional(id) },   // ADDED (data version 13): a loan repayment line linked to the loan it lowers (src/model/loans.js)
   // A past line's category changed by the owner, one line at a time: this is the visible record. It never touches an amount, an entry or a transfer.
   PayslipItemChange: { id, item_id: id, payslip_id: id, from: text, to: text, changed_on: date },
   ForeignAmount: { transaction_id: id, currency: name, foreign_amount: centavos, rate: { type: "rate" } },

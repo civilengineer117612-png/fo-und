@@ -249,11 +249,11 @@ function v11() {   // a hand-written version 11 ledger: no `people` list, no per
       { transaction_id: "d", account_id: "card", amount: 30000, card_state: "posted" }, { transaction_id: "d", account_id: "chk", amount: -30000 },
       { transaction_id: "e", category_id: "food", amount: 18500 }, { transaction_id: "e", account_id: "chk", amount: -18500 }] } };
 }
-test("data version 11 upgrades to 12: one empty list is added, every record and every figure is the same, and no account is made", () => {
+test("data version 11 upgrades to 12 (and on to the current 13, which adds nothing): one empty list is added, every record and every figure is the same, and no account is made", () => {
   const before = v11(), snapshot = JSON.stringify(before);
   assert.equal(M.parseLedger(snapshot).older, true, "an older ledger");
   const r = M.upgradeLedger(before, { now: NOW });
-  assert.equal(r.ok, true, r.error); assert.equal(r.steps, 1); assert.equal(r.ledger.v, 12); assert.equal(M.LEDGER_VERSION, 12);
+  assert.equal(r.ok, true, r.error); assert.equal(r.steps, 2); assert.equal(r.ledger.v, 13); assert.equal(M.LEDGER_VERSION, 13);
   assert.equal(JSON.stringify(before), snapshot, "the input is never changed");
   for (const k of Object.keys(before.state)) assert.deepEqual(r.ledger.state[k], before.state[k], k + " is the same");
   assert.deepEqual(r.ledger.state.people, []);
@@ -276,7 +276,7 @@ test("SAFETY COPY: before the update to version 12 the app keeps the version 11 
   assert.deepEqual(back.state, before.state, "the copy reads back with every record");
   assert.equal("people" in back.state, false, "and is still version 11 data");
   assert.equal(M.parseLedger(JSON.stringify(back)).ok, true);
-  assert.equal(M.upgradeLedger(back).ledger.v, 12, "a restored copy upgrades again");
+  assert.equal(M.upgradeLedger(back).ledger.v, 13, "a restored copy upgrades again (to the current version)");
 });
 test("a version 11 backup file opens, restores, upgrades, and a split made afterwards backs up and opens again", async () => {
   const file = await M.encryptLedgerBackup(v11(), "a long passphrase for tests"), opened = await M.decryptLedgerBackup(file, "a long passphrase for tests");
