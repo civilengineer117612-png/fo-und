@@ -104,6 +104,19 @@ const pullDown = async (page, sel, dy, { steps = 12, ms = 16 } = {}) => {
   ok(await page.evaluate(() => document.querySelector("#sheet > .sheet").style.bottom === ""), "when the keyboard closes the window goes back to the bottom");
   await ctx.close(); }
 
+// ---- 4. a dropdown list never slides sideways (owner's photo, Nov 23: the Category list moved sideways under his finger). A pressed row shrinks and
+// keeps an invisible 8 px edge (ONE PRESS), which made the list 2 px wider than its frame, so a sideways drag scrolled it. It scrolls up and down only.
+{ const { ctx, page } = await phone();
+  await openAdd(page);
+  await page.click('#sheet .pickrow[data-key="cat"]'); await page.waitForTimeout(300);
+  const list = '#sheet .picklist:not([hidden])';
+  ok(await page.evaluate((sel) => { const c = getComputedStyle(document.querySelector(sel)); return c.overflowX === "hidden" && c.touchAction === "pan-y"; }, list), "the open list scrolls only up and down (overflow-x hidden, touch-action pan-y)");
+  const el = await page.$(list), b = await page.locator(list + " .pickitem").first().boundingBox();
+  await page.mouse.move(b.x + 20, b.y + b.height / 2); await page.mouse.down(); await page.waitForTimeout(150);
+  await page.mouse.wheel(60, 0); await page.waitForTimeout(300);
+  ok(await el.evaluate((l) => l.scrollLeft) === 0, "with a row pressed, a sideways scroll leaves the list where it was");
+  await page.mouse.up(); await ctx.close(); }
+
 ok(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await browser.close();
 console.log(`window-feel: ${passed} checks passed`);
