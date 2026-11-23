@@ -134,5 +134,6 @@ export { PIN_LENGTH, AWAY_MS, FREE_TRIES, FIRST_WAIT, LONGEST_WAIT, validPin, lo
 export { KNOWN_WORDS, maskText, maskedLayout, layoutReport } from "./layoutreport.js";
 export { SECTIONS_UNCLEAR, matchHeading, unreadableHeading, allowedDifference, HEADING_VOCAB, TABLE_VOCAB } from "./headings.js";
 export { EVIDENCE, correctionOf, isEvidence, settle } from "./entryrule.js";
+export { LOAN_PAY_CATEGORY_ID, LOAN_PAY_NAME, LOAN_INTEREST_CATEGORY_ID, LOAN_INTEREST_NAME, isLoan, loansOf, loanOwed, ensureLoanPay, ensureLoanInterest, loanPayLegs, paidFromPay, loanCount, planLoanInterest, loansSummary } from "./loans.js";
 export { OWED_ROLE, OWED_NAME, OWED_OPENING_DATE, isOwed, holdsMoney, owedAccount, personKey, personName, planShares, shareEntries, planSharedExpense, owedPieces, owedSummary, owedBy, personHistory, planPayBack, planNotPaid, owedKind } from "./owed.js";
 export { checkOwed } from "./invariants.js";

@@ -10,7 +10,7 @@ import { phTimestamp } from "./util.js";
 
 // Version 2 is the first with named migrations. To change the data's shape: raise this number, add the step from the old number to MIGRATIONS,
 // add a backup fixture of the old version to tests/migrate.test.js, and add the new collection to COLLECTION_NAMES.
-export const LEDGER_VERSION = 12;
+export const LEDGER_VERSION = 13;
 export const COLLECTION_NAMES = ["accounts", "goals", "envelopes", "transactions", "entries", "categories", "categoryMaps", "rules",
   "templates", "presets", "payeeRules", "subscriptions", "checkIns", "attachments", "tags", "foreignAmounts", "surveyResponses", "payslips", "payslipLines", "payslipRevisions", "payslipItems", "payslipItemChanges", "schedules", "scheduleChanges", "statementRecords", "statementLines", "statementAccepts", "people"];
 
@@ -71,6 +71,10 @@ export const MIGRATIONS = {
   // 11 to 12: Split and "Owed to me" (src/model/owed.js). One new list, `people` (who owes the owner part of a payment), empty; a line of an entry may name its
   // person (`person_id`). The "Owed to me" account is NOT made here: it is made at the first split. Nothing existing is touched, so every total is the same.
   11: (ledger) => ({ ...ledger, state: { ...ledger.state, people: ledger.state.people ?? [] } }),
+  // 12 to 13: loans (src/model/loans.js, owner Nov 23). An account may be of the new class "loan", a category of the new kind "withheld" (pay sent to a loan), and a
+  // payslip line may name its loan (`loan_id`). Nothing existing has these, so nothing is changed and every total is the same; the version number only stops an older
+  // app from reading data it does not understand. The app keeps its own pre-upgrade copy first, as for every step.
+  12: (ledger) => ({ ...ledger }),
 };
 
 const clone = (x) => JSON.parse(JSON.stringify(x));
