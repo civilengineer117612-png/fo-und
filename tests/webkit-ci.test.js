@@ -58,7 +58,10 @@ test("every script gets its browser from engine.mjs, and a skip names the missin
   assert.match(read("e2e/pdf-scan.mjs"), /skipped\('Copy layout report \(the clipboard text\)', 'permission to read the clipboard'\)/);
   // the only tool-based skips in all of e2e: nothing else may be skipped on one engine
   const skips = readdirSync(new URL("../e2e/", import.meta.url)).filter((n) => n.endsWith(".mjs")).flatMap((n) => [...read("e2e/" + n).matchAll(/\bskipped\(/g)]);
-  assert.equal(skips.length, 3, "engine.mjs defines it; run.mjs and pdf-scan.mjs use it once each");
+  // Nov 23: Playwright's mobile WebKit has no mouse wheel; only window-feel's sideways-scroll step skips, its style check runs on both engines
+  assert.match(engine, /mouseWheel: ENGINE === "chromium"/);
+  assert.match(read("e2e/window-feel.mjs"), /skipped\("a sideways scroll with a row pressed", "mouse wheel"\)/);
+  assert.equal(skips.length, 4, "engine.mjs defines it; run.mjs, pdf-scan.mjs and window-feel.mjs use it once each");
 });
 
 test("on WebKit the network fake cannot reach a service worker, so only the Offline section keeps one", () => {

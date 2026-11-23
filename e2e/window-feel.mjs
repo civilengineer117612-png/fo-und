@@ -3,7 +3,7 @@
 // keyboard is open, the window sits on it and the box being typed in stays in view. A test browser has no keyboard, so the phone's visible area
 // (visualViewport) is played by a stand-in that shrinks the way it does when a keyboard opens; the owner repeats this on the iPhone itself.
 import assert from "node:assert/strict";
-import { launchBrowser } from "./engine.mjs";
+import { launchBrowser, TOOLS, skipped } from "./engine.mjs";
 import { emptyLedger, CHANGES, SCREEN_NAMES, validateState } from "../src/model/index.js";
 const browser = await launchBrowser();
 const base = process.env.BASE ?? "http://127.0.0.1:8124/app/index.html";
@@ -111,11 +111,15 @@ const pullDown = async (page, sel, dy, { steps = 12, ms = 16 } = {}) => {
   await page.click('#sheet .pickrow[data-key="cat"]'); await page.waitForTimeout(300);
   const list = '#sheet .picklist:not([hidden])';
   ok(await page.evaluate((sel) => { const c = getComputedStyle(document.querySelector(sel)); return c.overflowX === "hidden" && c.touchAction === "pan-y"; }, list), "the open list scrolls only up and down (overflow-x hidden, touch-action pan-y)");
-  const el = await page.$(list), b = await page.locator(list + " .pickitem").first().boundingBox();
-  await page.mouse.move(b.x + 20, b.y + b.height / 2); await page.mouse.down(); await page.waitForTimeout(150);
-  await page.mouse.wheel(60, 0); await page.waitForTimeout(300);
-  ok(await el.evaluate((l) => l.scrollLeft) === 0, "with a row pressed, a sideways scroll leaves the list where it was");
-  await page.mouse.up(); await ctx.close(); }
+  if (!TOOLS.mouseWheel) skipped("a sideways scroll with a row pressed", "mouse wheel");
+  else {
+    const el = await page.$(list), b = await page.locator(list + " .pickitem").first().boundingBox();
+    await page.mouse.move(b.x + 20, b.y + b.height / 2); await page.mouse.down(); await page.waitForTimeout(150);
+    await page.mouse.wheel(60, 0); await page.waitForTimeout(300);
+    ok(await el.evaluate((l) => l.scrollLeft) === 0, "with a row pressed, a sideways scroll leaves the list where it was");
+    await page.mouse.up();
+  }
+  await ctx.close(); }
 
 ok(errors.length === 0, "no script errors" + (errors.length ? " -> " + errors[0] : ""));
 await browser.close();
