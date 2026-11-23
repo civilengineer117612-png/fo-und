@@ -87,7 +87,7 @@ ok((await page.locator('#sheet .pickrow[data-key="from"]').innerText()).includes
 await closeSheet();
 
 // ---- 6. A loan is never under Paid from
-await go("Log"); await page.click('[data-action="open-other"]'); await page.waitForSelector("#sheet #f-amount");
+await page.click('#nav button:has-text("Log")'); await page.click('[data-action="open-other"]'); await page.waitForSelector("#sheet #f-amount");
 const paidFrom = await page.evaluate(() => [...document.querySelectorAll('#sheet .pickrow[data-key="acct"] + .picklist .pickitem')].map((b) => b.innerText.trim()));
 ok(paidFrom.length > 0 && !paidFrom.some((n) => /Loan/.test(n)), "Paid from lists no loan (" + paidFrom.join(", ") + ")");
 await closeSheet();
