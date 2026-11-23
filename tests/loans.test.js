@@ -172,3 +172,15 @@ test("the loan a repayment line lowers is remembered per employer and label, onl
   assert.equal(M.draftItem({ section: "deduction", label: "SSS Salary Loan", amount: 120000, employer: "Sample Employer Inc", settings: st }).loan_id, "loan", "the next payslip's line starts linked");
   assert.equal(M.draftItem({ section: "deduction", label: "Company Loan", amount: 120000, employer: "Sample Employer Inc", settings: st }).loan_id, undefined);
 });
+
+test("BACKUP: the loan a repayment line lowers (\"Lowers\", remembered per employer and label) is in the one-file backup and comes back with the restore", async () => {
+  const pass = "invented pass phrase for loans";
+  const settings = M.rememberChoices({ foo: "bar" }, "Sample Employer Inc", [{ section: "deduction", label: "SSS Salary Loan", category: "loans", loan_id: "loan", loan_chosen: true }]);
+  const l = { ...M.emptyLedger(), rev: 4, saved_at: "2026-11-23T08:00:00.000+08:00", state: ledger(), settings };
+  const text = JSON.stringify(l), file = Object.assign(await M.sealBackupPart({ passphrase: pass, iterations: 100000, savedAt: "2026-11-23", ledger: text, items: [], id: M.newBackupId(), part: 1, parts: 1 }), { name: "x.json" });
+  const set = await M.openBackupSet([file], pass);
+  assert.deepEqual(set.ledger.settings.payslip_loans, settings.payslip_loans, "the memory is in the file");
+  const back = M.restoreLedger(M.emptyLedger(), set.ledger, NOW);
+  assert.deepEqual(back.settings.payslip_loans, { [M.memoryKey("Sample Employer Inc", "deduction", "SSS Salary Loan")]: "loan" }, "and comes back with the restore");
+  assert.equal(M.draftItem({ section: "deduction", label: "SSS Salary Loan", amount: 120000, employer: "Sample Employer Inc", settings: back.settings }).loan_id, "loan", "the next payslip's line starts linked after the restore");
+});
