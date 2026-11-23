@@ -1742,7 +1742,7 @@ function viewSetup() {
     <p><button class="act sm" data-action="open-versions">See all versions</button></p>
     ${ui.ledgerBytes ? `<p class="note" id="about-size">Your ledger: ${esc(M.formatBytes(ui.ledgerBytes))}. ${ui.mirror === false ? "The spare copy is full. The main copy is safe." : "Saved twice: a main copy and a spare."}</p>` : ""}
     <p class="note" id="about-protection">Storage protected: no</p>
-    <p><button class="act sm" data-action="protect-now" id="protect-btn" hidden>Ask to protect it</button></p>
+    <p id="protect-row" hidden><button class="act sm" data-action="protect-now" id="protect-btn">Ask to protect it</button></p>
     <p class="note" id="about-repeats">${esc(M.repeatsLine(S()))}</p>
     <p class="note" id="about-ledgercheck">${esc(M.ledgerCheckLine(S()))}</p>
     <h2>Photo reader and space</h2>
@@ -2677,7 +2677,7 @@ const emptyMoney = () => `<p class="note">Nothing verified for this month yet. V
 async function refreshAbout() {
   const protectedNow = await storageProtected(), protection = document.getElementById("about-protection");
   if (protection) protection.textContent = "Storage protected: " + (protectedNow ? "yes" : "no");
-  const pb = document.getElementById("protect-btn"); if (pb) pb.hidden = protectedNow || typeof navigator.storage?.persist !== "function";   // the owner's ask button (Nov 23)
+  const pb = document.getElementById("protect-row"); if (pb) pb.hidden = protectedNow || typeof navigator.storage?.persist !== "function";   // the owner's ask button (Nov 23)
   const reader = document.getElementById("about-reader"); if (!reader) return;
   const { readerStored, READER_FILES } = await import("./paddle.js");
   const st = M.readerStatus(await readerStored(), READER_FILES.length), el = document.getElementById("about-reader");
@@ -5556,7 +5556,7 @@ async function onClick(el) {
     case "shrink-now": { const b = el; b.disabled = true; await shrinkOldPictures({ manual: true }); break; }
     case "protect-now": {   // About: ask the browser now, every tap, and show its own answer (owner, Nov 23)
       const ok = await askStorageProtection();
-      const line = document.getElementById("about-protection"), b = document.getElementById("protect-btn");
+      const line = document.getElementById("about-protection"), b = document.getElementById("protect-row");
       if (line) line.textContent = ok ? "Storage protected: yes" : PROTECT_REFUSED;
       if (b) b.hidden = ok;
       break;
