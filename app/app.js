@@ -1935,11 +1935,22 @@ function shareBlock(f) {
   const st = f.share ? shareState(f) : null, rows = f.shares ?? [], known = [...(S().people ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   return `<div class="row pocketrow sharetoggle"><div><b>Split with others</b><small>Only your share is spending</small></div><div><button class="chip" data-action="toggle-share" aria-pressed="${f.share === true}">${f.share ? "On" : "Off"}</button></div></div>
     ${f.share ? `<label id="share-label">Who owes you</label>
-      ${rows.map((r, i) => `<div class="owerow"><input data-field="sh:${i}:name" value="${esc(r.name ?? "")}" aria-label="Name of person ${i + 1}" placeholder="Name" autocomplete="off" autocapitalize="words" list="share-people"><input data-field="sh:${i}:amt" inputmode="decimal" value="${esc(r.typed ? r.amt ?? "" : st.amounts[i] != null && st.total > 0 ? shareAmt(st.amounts[i]) : "")}" aria-label="What person ${i + 1} owes" placeholder="0.00" autocomplete="off"></div>`).join("")}
-      <datalist id="share-people">${known.map((p) => `<option value="${esc(p.name)}"></option>`).join("")}</datalist>
+      ${rows.map((r, i) => `<div class="owerow"><input data-field="sh:${i}:name" value="${esc(r.name ?? "")}" aria-label="Name of person ${i + 1}" placeholder="Name" autocomplete="off" autocapitalize="words"><input data-field="sh:${i}:amt" inputmode="decimal" value="${esc(r.typed ? r.amt ?? "" : st.amounts[i] != null && st.total > 0 ? shareAmt(st.amounts[i]) : "")}" aria-label="What person ${i + 1} owes" placeholder="0.00" autocomplete="off"></div><div class="picklist ppl" id="ppl-${i}" role="listbox" aria-label="People you split with before" hidden></div>`).join("")}
       <p style="margin:0"><button class="act" data-action="share-add">Add a person</button></p>
       <div class="sharerow"><span>Your share</span><b id="share-yours"></b></div><p class="note" id="share-why" role="status"></p>` : ""}`;
 }
+// NAME SUGGESTIONS (owner, Nov 23): tapping a name box shows the people you split with before, narrowed as you type; a tap fills the name.
+// Only the list under that box changes (its inside and hidden), never the row the finger is on; a name already in another row is not offered.
+function peopleSuggestions(i) {
+  const box = document.getElementById("ppl-" + i), f = ui.form;
+  if (!box || !f?.shares) return;
+  const typed = M.personKey(f.shares[i]?.name ?? ""), taken = new Set(f.shares.filter((_, j) => j !== Number(i)).map((r) => M.personKey(r.name ?? "")).filter(Boolean));
+  const names = [...(S().people ?? [])].map((p) => p.name).filter((n) => !taken.has(M.personKey(n)) && M.personKey(n) !== typed && (!typed || M.personKey(n).includes(typed)))
+    .sort((a, b) => a.localeCompare(b)).slice(0, 5);
+  setHtml(box, names.map((n) => `<button class="chip pickitem" type="button" role="option" data-action="share-pick" data-row="${i}" data-name="${esc(n)}">${esc(n)}</button>`).join(""));
+  box.hidden = names.length === 0;
+}
+function hidePeople() { for (const b of document.querySelectorAll("#sheet .ppl")) b.hidden = true; }
 // The live part of the block, written in place (never a redraw: a box may be under a finger or have the keyboard): a person's equal part, your share, what is missing.
 function refreshShare(f) {
   if (!f.share) return { ok: true };
@@ -5157,6 +5168,11 @@ async function onClick(el) {
     case "pick-cat": if (ui.sheet) ui.sheet.pick = null; form.category_id = id; if (form.split_cat === id) form.split_cat = null; renderSheet(); break;
     case "toggle-split": form.split = !form.split; if (form.split) form.share = false; renderSheet(); break;   // one kind of split at a time: two categories, or with other people
     case "toggle-share": form.share = !form.share; if (form.share) { form.split = false; if (!form.shares?.length) form.shares = [{ name: "", amt: "", typed: false }]; } renderSheet(); break;
+    case "share-pick": {   // a suggested name: it fills the box, the list closes and the amount box is next
+      const i = Number(el.dataset.row), row = form.shares?.[i]; if (!row) break;
+      row.name = el.dataset.name; const box = document.querySelector(`#sheet [data-field="sh:${i}:name"]`); if (box) box.value = row.name;
+      hidePeople(); refreshSave(); document.querySelector(`#sheet [data-field="sh:${i}:amt"]`)?.focus(); break;
+    }
     case "share-add": form.shares = [...(form.shares ?? []), { name: "", amt: "", typed: false }]; renderSheet(); { const el = document.querySelector(`#sheet [data-field="sh:${form.shares.length - 1}:name"]`); if (el) el.focus(); } break;
     case "pick-split": if (ui.sheet) ui.sheet.pick = null; form.split_cat = id; renderSheet(); break;
     case "open-voice": ui.sheet = { type: "voice" }; ui.form = { spoken: "", lang: firstLanguage() }; renderSheet(); break;
@@ -6148,7 +6164,7 @@ document.addEventListener("input", (e) => {
   }
   if (ui.sheet && field.startsWith("sh:") && ui.form.shares) {   // a person's row of Split with others: sh:<row>:<name|amt>
     const [, i, prop] = field.split(":"), row = ui.form.shares[Number(i)];
-    if (row) { row[prop] = e.target.value; if (prop === "amt") row.typed = e.target.value.trim() !== ""; refreshSave(); }
+    if (row) { row[prop] = e.target.value; if (prop === "amt") row.typed = e.target.value.trim() !== ""; refreshSave(); if (prop === "name") peopleSuggestions(i); }
     return;
   }
   if (ui.sheet) { ui.form[field] = e.target.value; if (field.startsWith("y_") && ui.form.used) delete ui.form.used[field.slice(2)]; refreshSave(); }
@@ -6356,6 +6372,8 @@ function keepAboveKeyboard() {
 }
 window.visualViewport?.addEventListener("resize", keepAboveKeyboard);
 window.visualViewport?.addEventListener("scroll", keepAboveKeyboard);
+document.addEventListener("focusin", (e) => { const nf = /^sh:(\d+):name$/.exec(e.target.dataset?.field ?? ""); if (nf) { hidePeople(); peopleSuggestions(nf[1]); } else if (e.target.closest?.("#sheet") && !e.target.closest(".ppl")) hidePeople(); });
+document.addEventListener("pointerdown", (e) => { if (e.target.closest?.("#sheet .ppl")) e.preventDefault(); else if (!e.target.closest?.("#sheet .owerow")) hidePeople(); });   // a tap on a suggestion keeps the box's focus, so the list stays put under the finger
 document.addEventListener("focusin", (e) => { if (e.target.closest?.("#sheet")) { setTimeout(keepAboveKeyboard, 50); setTimeout(keepAboveKeyboard, 350); } });
 // L13 BACK CLOSES THE OPEN WINDOW (owner, Nov 21, before any Android user): on Android the Back button or gesture goes back in the browser's
 // history, and an installed app with nothing behind it simply CLOSES, losing what was open. So while a layer is open (a window, the menu,

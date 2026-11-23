@@ -318,7 +318,7 @@
   .pick { margin: 6px 0 14px; }
   button.pickrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 14px; text-align: left; font-size: 17px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; }
   .pickface { display: inline-flex; align-items: center; gap: 10px; min-width: 0; } .pickface .ph { color: var(--muted); } button.pickrow svg { color: var(--muted); flex: none; }
-  .picklist { margin-top: 6px; max-height: 330px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); } .picklist[hidden] { display: none; }
+  .picklist { margin-top: 6px; max-height: 330px; overflow: hidden auto; touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); } .picklist[hidden] { display: none; }
   .regl .row .amt small { display: block; color: var(--muted); font-weight: 400; }
   input.entrysearch { margin: 4px 0 10px; }
   .symrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 4px; } button.symtile { display: flex; align-items: center; justify-content: center; height: 52px; padding: 0; color: var(--accent); } .ico svg { color: var(--accent); } .gname .mono, .gpic .mono { color: var(--accent); }   /* the goal pictures, and a goal's first letter, wear the app's green (accounts keep the grey letter) */ button.symtile[aria-pressed="true"] { border-color: var(--accent); border-width: 2px; }
@@ -339,6 +339,7 @@
   .row.pocketrow { align-items: center; }
   /* Split with others and Owed to me (A4): a person's row (name, what they owe), your share, and what one person's debt is made of */
   .row.sharetoggle { margin-top: 14px; }
+  .ppl { margin: -2px 0 10px; } .ppl[hidden] { display: none; }
   .owerow { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 8px; margin-bottom: 8px; } .owerow input { margin: 0; } .owerow input + input { text-align: right; font-variant-numeric: tabular-nums; }
   .sharerow { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 0 2px; border-top: 1px solid var(--line); margin-top: 12px; font-size: 16px; } .sharerow span { color: var(--muted); } .sharerow b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
   /* Correct this entry (A3): what it was, and what changes once the corrected entry is verified */

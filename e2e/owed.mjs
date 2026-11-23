@@ -174,7 +174,15 @@ ok((await text("#sheet h3")) === "Check what I heard" && await page.locator('#sh
 await page.click('#sheet [data-action="toggle-split"]'); await page.waitForSelector("#sheet #f-split");
 await page.click('#sheet [data-action="toggle-share"]'); await page.waitForSelector("#sheet .owerow");
 ok(await page.locator("#sheet #f-split").count() === 0 && (await text('#sheet [data-action="toggle-split"]')) === "Split receipt", "turning Split with others on closes Split receipt: one kind of split at a time");
-await page.fill('#sheet [data-field="sh:0:name"]', "Ana");
+// NAME SUGGESTIONS (owner, Nov 23): a tap on the name box shows the people split with before; typing narrows them; a tap fills the name
+const suggested = () => page.evaluate(() => { const b = document.getElementById("ppl-0"); return b && !b.hidden ? [...b.querySelectorAll("button")].map((x) => x.textContent) : []; });
+ok((await suggested()).length === 0, "before the name box is tapped, no suggestions show");
+await page.click('#sheet [data-field="sh:0:name"]'); await page.waitForTimeout(150);
+ok(JSON.stringify(await suggested()) === JSON.stringify(["Ana", "Ben"]), "a tap on the name box shows the people split with before, A to Z (" + (await suggested()).join(", ") + ")");
+await page.keyboard.type("a"); await page.waitForTimeout(150);
+ok(JSON.stringify(await suggested()) === JSON.stringify(["Ana"]), "typing narrows them (\"a\": Ana)");
+await page.click('#ppl-0 button:has-text("Ana")'); await page.waitForTimeout(150);
+ok((await page.inputValue('#sheet [data-field="sh:0:name"]')) === "Ana" && await page.evaluate(() => document.activeElement?.dataset.field) === "sh:0:amt" && (await suggested()).length === 0, "a tap fills the name, closes the list and moves to the amount");
 if (await page.locator('#sheet [data-action="pick-toggle"][data-key="cat"] .ph').count()) await pick("cat", "Fun");
 await pick("acct", "Cash");
 ok((await amountOf(0)) === "300.00" && (await text("#share-yours")) === "₱300.00", "600.00 with Ana: 300.00 each");

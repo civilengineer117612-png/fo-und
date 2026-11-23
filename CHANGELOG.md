@@ -10,9 +10,11 @@ the next version with its date: MAJOR when it breaks habits or data, MINOR for n
 ## Unreleased
 
 ### Improved
+- Splitting a bill: tapping a name box shows the people you split with before, and typing narrows them.
 - About has a button that asks the browser again to keep the app's data safe, and shows its answer.
 
 ### Fixed
+- A dropdown list no longer slides sideways under your finger.
 - On a phone where the app was first used in a browser tab, installing it now asks the browser again to keep its data safe.
 
 ## 1.0.0 (2026-11-22)
