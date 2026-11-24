@@ -10,12 +10,13 @@ const pages = read(".github/workflows/pages.yml"), checks = read(".github/workfl
 // Extract only job-level blocks; assertions inspect the committed workflow, not a
 // separate policy implementation that could disagree with what GitHub executes.
 const job = (yaml, id) => yaml.match(new RegExp(`^  ${id}:\\n([\\s\\S]*?)(?=^  [\\w-]+:|$(?![\\s\\S]))`, "m"))?.[1] ?? "";
-const deploy = job(pages, "deploy"), gate = job(pages, "checks");
+const deploy = job(pages, "deploy"), build = job(pages, "build"), gate = job(pages, "checks");   // build uploads, deploy publishes (two jobs since Nov 24)
 
 test("Pages cannot publish until the reusable checks job succeeds", () => {
-  assert.match(deploy, /^    needs: checks$/m);
+  assert.match(build, /^    needs: checks$/m, "the site is built only after the checks pass");
+  assert.match(deploy, /^    needs: build$/m, "and published only after the build, so only after the checks");
   assert.match(gate, /^    uses: \.\/\.github\/workflows\/test\.yml$/m);
-  assert.doesNotMatch(deploy + gate, /^    (?:if|continue-on-error):/m, "no failure/skip bypass at the job boundary");
+  assert.doesNotMatch(deploy + build + gate, /^    (?:if|continue-on-error):/m, "no failure/skip bypass at the job boundary");
   assert.match(checks, /^  workflow_call:$/m);
 });
 
@@ -30,11 +31,18 @@ test("push and manual releases check out the triggering commit for both checks a
   assert.match(pages, /^  push:\n    branches: \[main\]\n  workflow_dispatch:/m);
   assert.match(checks, /^  push:\n    branches: \[main\]\n  pull_request:\n  workflow_call:/m, "one run per commit: a branch push alone does not run; a pull request runs on pull_request, main on push");
   assert.match(webkit, /^on:\n  push:\n    branches: \[main\]\n  pull_request:\n\n/m, "WebKit runs once per commit the same way");
-  for (const section of [job(checks, "test"), job(checks, "e2e"), deploy]) {
+  for (const section of [job(checks, "test"), job(checks, "e2e"), build]) {
     assert.match(section, /uses: actions\/checkout@v4/);
     assert.doesNotMatch(section, /^\s+ref:|git (?:pull|switch|checkout)|workflow_run|head_sha/m, "default checkout stays on this invocation's commit");
   }
   assert.doesNotMatch(gate, /@|^    with:/m, "the local reusable workflow comes from the caller's commit");
+});
+
+test("publishing tries at most twice, the second only after the first failed and a short wait (Nov 24: GitHub listed the upload a moment late)", () => {
+  assert.doesNotMatch(deploy, /checkout|upload-pages-artifact|Stage only/, "the deploy job only publishes what the build job uploaded");
+  assert.equal((deploy.match(/uses: actions\/deploy-pages@v4/g) ?? []).length, 2, "two tries, never a loop");
+  assert.match(deploy, /- id: deployment\n        uses: actions\/deploy-pages@v4\n        continue-on-error: true\n      # [^\n]*\n      - if: steps\.deployment\.outcome == 'failure'\n        run: sleep 30\n      - id: deployment2\n        if: steps\.deployment\.outcome == 'failure'\n        uses: actions\/deploy-pages@v4\n/);
+  assert.doesNotMatch(deploy, /deployment2\n(?:.*\n)*?.*continue-on-error/, "the second try's failure fails the run");
 });
 
 const stamp = "0123456789abcdef0123456789abcdef01234567";
@@ -53,7 +61,7 @@ function stageExample() {
     for (const [path, body] of Object.entries(inputs)) {
       mkdirSync(join(dir, path, ".."), { recursive: true }); writeFileSync(join(dir, path), body);
     }
-    const script = deploy.match(/      - name: Stage only the site files\n        run: \|\n([\s\S]*?)(?=^      -)/m)?.[1];
+    const script = build.match(/      - name: Stage only the site files\n        run: \|\n([\s\S]*?)(?=^      -)/m)?.[1];
     assert.ok(script, "the existing staging step remains available");
     execFileSync(process.platform === "win32" ? "C:/Program Files/Git/bin/bash.exe" : "bash", ["-e", "-o", "pipefail", "-c", script.replace(/^          /gm, "")], { cwd: dir, env: { ...process.env, GITHUB_SHA: stamp } });
     const output = {};
