@@ -228,6 +228,14 @@ P2 (wait for "next"): voice entry disclosure in Help and the first-run notice; l
 contradictions in CLAUDE.md; Android block decision; custom domain plan; Trips year grouping and period picker; ratchet screen;
 splitting `app/app.js`.
 
+P2-16 Interest net of tax (PARKED, owner, Nov 24)
+- Build ONLY when a real statement prints withholding tax on interest as its OWN transaction line (today such a line lands as "unsure").
+- Checked Nov 24: MariBank credits interest already net; the tax appears only in the "Interest & Tax Details" table, which the reader
+  ignores (`isOtherTable` in src/model/statement.js). No change needed for MariBank.
+- Not yet checked: GoTyme (the owner checks it on the first GoTyme import).
+- Rule when built (owner, Nov 24): the same as payslips. Income = interest minus tax withheld; the tax line is kept as "Tax withheld" under
+  the interest, never spending, never unsure; balance unchanged; read by the line's words, never by a figure; card statements unaffected.
+
 Open decisions: none. Decisions 1 to 9 were made on Nov 22 (CLAUDE.md, DECISIONS OF NOV 22).
 
 App link (use this one in every report): https://civilengineer117612-png.github.io/fo-und/app/ (the site root forwards there; tests/app.test.js).
