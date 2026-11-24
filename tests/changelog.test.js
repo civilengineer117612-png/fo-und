@@ -60,7 +60,10 @@ test("What's new: every version missed, newest first; once seen, nothing; an old
   assert.deepEqual(missedReleases(log, "0.0.0").map((r) => r.version), ["1.1.0", "1.0.0"], "several missed: all of them, newest first");
   assert.deepEqual(missedReleases(log, undefined).map((r) => r.version), ["1.1.0", "1.0.0"], "a phone in use before versions began");
   assert.deepEqual(missedReleases(log, "1.1.0"), [], "shown once: the version seen is the newest");
-  assert.deepEqual(missedReleases(parseChangelog(LOG), undefined).map((r) => r.version), ["1.0.0"], "the owner's phone, in use before versions began, sees 1.0.0 once");
+  // RELEASED (owner, Nov 24): 1.1.0 (Loans). A phone that saw 1.0.0 sees only 1.1.0, once; a phone in use before versions began sees both.
+  assert.deepEqual(missedReleases(parseChangelog(LOG), "1.0.0").map((r) => r.version), ["1.1.0"], "the owner's phone, on 1.0.0, sees 1.1.0 once");
+  assert.deepEqual(missedReleases(parseChangelog(LOG), "1.1.0"), [], "and nothing after that");
+  assert.deepEqual(missedReleases(parseChangelog(LOG), undefined).map((r) => r.version), ["1.1.0", "1.0.0"], "a phone in use before versions began sees both, newest first");
   assert.deepEqual(missedReleases(parseChangelog("# Changelog\n\n## Unreleased\n\n### New\n- A thing.\n"), undefined), [], "no version released yet: no pop-up");
 });
 test("a new phone gets the first-run setup, never What's new: it starts having seen the current version", () => {
@@ -74,7 +77,7 @@ test("a new phone gets the first-run setup, never What's new: it starts having s
 test("About this app tells builds apart: the version and the build date between releases", () => {
   const log = parseChangelog(sample());
   assert.equal(versionLine(log, { built: "Nov 21, 2026", build: "abc1234", dev: false }), "Version 1.1.0 · build of Nov 21, 2026 (abc1234)");
-  assert.equal(versionLine(parseChangelog(LOG), { built: "Nov 22, 2026", build: "abc1234", dev: false }), "Version 1.0.0 · build of Nov 22, 2026 (abc1234)");
+  assert.equal(versionLine(parseChangelog(LOG), { built: "Nov 22, 2026", build: "abc1234", dev: false }), "Version 1.1.0 · build of Nov 22, 2026 (abc1234)", "About reads the released version, 1.1.0");
   assert.equal(versionLine(parseChangelog("# Changelog\n\n## Unreleased\n\n### New\n- A thing.\n"), { built: "Nov 21, 2026", build: "abc1234", dev: false }), "Not released yet (the first version is 1.0.0) · build of Nov 21, 2026 (abc1234)");
   assert.match(versionLine(log, { dev: true }), /development copy/);
 });

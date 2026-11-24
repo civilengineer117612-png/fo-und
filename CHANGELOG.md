@@ -9,6 +9,8 @@ the next version with its date: MAJOR when it breaks habits or data, MINOR for n
 
 ## Unreleased
 
+## 1.1.0 (2026-11-24)
+
 ### New
 - Loans: add one in Setup, see what you owe under Cards, pay it from an account, and let a payslip's repayment line lower it.
 
