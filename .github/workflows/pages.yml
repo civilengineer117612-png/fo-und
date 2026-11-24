@@ -20,12 +20,12 @@ jobs:
       contents: read
     uses: ./.github/workflows/test.yml
 
-  deploy:
+  # BUILD, then DEPLOY in its own job (Nov 24): uploading and publishing in ONE job failed three times on the 1.1.0 release: the publish step asked
+  # for the upload one second after it finished and GitHub's list of uploads did not show it yet ("No artifacts named github-pages"; the upload
+  # was there when listed afterwards). A separate job starts only after the upload job has finished, which is GitHub's own layout for Pages.
+  build:
     needs: checks
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - name: Stage only the site files
@@ -46,5 +46,20 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment2.outputs.page_url }}
+    steps:
       - id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+      # One more try after a short wait, only when the first could not find the upload (never a loop).
+      - if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+      - id: deployment2
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4
